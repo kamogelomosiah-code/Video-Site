@@ -150,6 +150,14 @@ export const api = {
 
     importBulk: (items: MediaItem[]) => request<{ success: boolean; count: number }>('/api/media/bulk', { method: 'POST', body: JSON.stringify(items) }),
 
+    bulkCreate: (items: any[]) => request<{ success: boolean; created: number; errors: any[]; items: any[] }>('/api/media/bulk-create', { method: 'POST', body: JSON.stringify({ items }) }),
+
+    bulkUpdate: (ids: string[], updates: any) => request<{ success: boolean; updated: number }>('/api/media/bulk-update', { method: 'POST', body: JSON.stringify({ ids, updates }) }),
+
+    bulkDelete: (ids: string[]) => request<{ success: boolean; deleted: number }>('/api/media/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) }),
+
+    batchUpload: (formData: FormData) => request<{ success: boolean; results: any[] }>('/api/upload/batch', { method: 'POST', body: formData }),
+
     rate: (mediaId: string, _userId: string, isLike: boolean): Promise<{ likes: number; dislikes: number }> =>
       request(`/api/media/${mediaId}/rate`, {
         method: 'POST',
@@ -181,6 +189,10 @@ export const api = {
         method: 'DELETE',
       }),
 
+    bulkUpdate: (ids: string[], updates: any) => request<{ success: boolean; updated: number }>('/api/users/bulk-update', { method: 'POST', body: JSON.stringify({ ids, updates }) }),
+
+    bulkDelete: (ids: string[]) => request<{ success: boolean; deleted: number }>('/api/users/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) }),
+
     subscribe: async (_userId: string, creatorId: string): Promise<User> => {
       const data = await request<{ user: User }>(`/api/users/${creatorId}/subscribe`, {
         method: 'POST',
@@ -209,6 +221,10 @@ export const api = {
       request<{ success: boolean }>(`/api/talentProfiles/${id}`, {
         method: 'DELETE',
       }),
+
+    bulkUpdate: (ids: string[], updates: any) => request<{ success: boolean; updated: number }>('/api/talentProfiles/bulk-update', { method: 'POST', body: JSON.stringify({ ids, updates }) }),
+
+    bulkDelete: (ids: string[]) => request<{ success: boolean; deleted: number }>('/api/talentProfiles/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) }),
   },
 
   notifications: {

@@ -1,19 +1,10 @@
-/**
- * AdminDashboard.tsx
- * 
- * This is the main administration panel for the application.
- * It provides a unified interface to manage Media, Users, Site Settings,
- * Data Imports/Exports, and System Activity Logs.
- * 
- * The layout is fully responsive, featuring a collapsible dropdown menu on mobile
- * and a persistent sidebar on desktop displays.
- */
-
 import React, { useState, useEffect } from 'react';
 import { User, MediaItem, UserRole, TalentProfile, ActivityLog } from '../types';
 import { api } from '../services/api';
-import { ShieldCheck, Video, Users, PlusCircle, Edit, Trash2, X, Save, Settings, Star, MapPin, UploadCloud, Menu, ChevronDown, Wand2, Database as DatabaseIcon, RefreshCw } from 'lucide-react';
-import AdminBulkImport from './AdminUpload';
+import { ShieldCheck, Video, Users, PlusCircle, Edit, Trash2, X, Save, Settings, Star, MapPin, UploadCloud, Menu, ChevronDown, Wand2, Database as DatabaseIcon, RefreshCw, Upload, FileJson, Briefcase, Activity, Server } from 'lucide-react';
+import AdminBulkUpload from '../components/AdminBulkUpload';
+import AdminBulkImport from '../components/AdminBulkImport';
+import { BulkActionBar, BulkEditModal } from '../components/AdminBulkActions';
 import { CMPSandbox } from '../components/CMPBanner';
 
 interface AdminDashboardProps {
@@ -24,8 +15,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   // --- State Management ---
   
   // Navigation state
-  const [activeTab, setActiveTab] = useState<'media' | 'users' | 'settings' | 'import' | 'logs' | 'system'>('media');
+  const [activeTab, setActiveTab] = useState<'media' | 'users' | 'talent' | 'bulk-upload' | 'settings' | 'import-export' | 'activity' | 'system'>('media');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  // Selection states
+  const [selectedMedia, setSelectedMedia] = useState<Set<string>>(new Set());
+  const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
+  const [selectedTalent, setSelectedTalent] = useState<Set<string>>(new Set());
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkEntity, setBulkEntity] = useState<'media' | 'users' | 'talent'>('media');
   
   // Data state
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -64,7 +62,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
         setMedia(m);
         setUsers(u);
         setTalent(t);
-        setSiteSettings(s);
+        setSiteSettings(s || {});
         setActivityLogs(l);
     } catch(e) {
         console.error("Error loading admin data:", e);
@@ -144,8 +142,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
 
   // --- Site Settings Helpers ---
 
-  const handleSettingsChange = (e: React.ChangeEvent<HTMLSelectElement>) => { 
-      setSiteSettings(prev => ({ ...prev, [e.target.name]: e.target.value })); 
+  const handleSettingsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => { 
+      const { name, value, type } = e.target;
+      const val = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
+      setSiteSettings((prev: any) => ({ ...prev, [name]: val })); 
   };
   
   const saveSettings = async () => { 
@@ -160,7 +160,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
       switch(activeTab) {
           case 'media': return media.filter(m => m.title.toLowerCase().includes(term));
           case 'users': return users.filter(u => u.name.toLowerCase().includes(term) || u.email?.toLowerCase().includes(term));
-          case 'settings': return talent.filter(t => t.name.toLowerCase().includes(term));
+          case 'talent': return talent.filter(t => t.name.toLowerCase().includes(term));
           default: return [];
       }
   };
@@ -170,10 +170,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const navItems = [
       { id: 'media', label: 'Media Library', icon: Video },
       { id: 'users', label: 'Users', icon: Users },
+      { id: 'bulk-upload', label: 'Bulk Upload', icon: Upload },
+      { id: 'talent', label: 'Talent', icon: Briefcase },
       { id: 'settings', label: 'Site Settings', icon: Settings },
-      { id: 'import', label: 'Import/Export', icon: UploadCloud },
-      { id: 'logs', label: 'Activity Log', icon: ShieldCheck },
-      { id: 'system', label: 'System Status', icon: DatabaseIcon }
+      { id: 'import-export', label: 'Import/Export', icon: FileJson },
+      { id: 'activity', label: 'Activity Log', icon: Activity },
+      { id: 'system', label: 'System Status', icon: Server },
   ];
 
   if (isLoading && media.length === 0) return <div className="p-8 text-center text-zinc-500 font-medium">Loading administrative data...</div>;
@@ -182,7 +184,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
     <div className="flex flex-col md:flex-row gap-6 lg:gap-8 pb-10">
       
       {/* --- Mobile Navigation Menu --- */}
-      {/* Uses a collapsible dropdown instead of a wide scrolling bar for better mobile UX */}
       <div className="md:hidden relative z-20">
           <div className="flex items-center justify-between mb-4">
               <h1 className="text-xl font-bold text-white flex items-center">
@@ -191,6 +192,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
               <MongoStatusBadge />
           </div>
           <button 
+              type="button"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="w-full bg-[#111] border border-zinc-800 rounded-xl p-4 flex justify-between items-center text-white active:scale-[0.98] transition-transform"
           >
@@ -201,12 +203,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
               <ChevronDown className={`w-5 h-5 text-zinc-400 transition-transform ${isMobileMenuOpen ? 'rotate-180' : ''}`} />
           </button>
           
-          {/* Dropdown Menu Items */}
           {isMobileMenuOpen && (
               <div className="absolute top-full mt-2 left-0 right-0 bg-black border border-zinc-800 rounded-xl shadow-2xl p-2 space-y-1 z-30">
                   {navItems.map(item => (
                       <button
                           key={item.id}
+                          type="button"
                           onClick={() => { setActiveTab(item.id as any); setIsMobileMenuOpen(false); }}
                           className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center ${
                               activeTab === item.id ? 'bg-yellow-500 text-zinc-900 font-bold' : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
@@ -253,18 +255,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
       {/* --- Main Content Area --- */}
       <div className="flex-1 min-w-0 space-y-6 z-10">
           
-          {/* Search and Action Bar (Only visible on specific tabs) */}
-          {['media', 'users', 'settings'].includes(activeTab) && (
+          {/* Search and Action Bar */}
+          {['media', 'users', 'talent'].includes(activeTab) && (
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-[#111]/30 p-4 rounded-2xl border border-zinc-800/50">
                 <input 
                     type="text" 
-                    placeholder={`Search ${activeTab === 'settings' ? 'talent...' : activeTab + '...'}`} 
+                    placeholder={`Search ${activeTab}...`} 
                     value={searchTerm} 
                     onChange={e => setSearchTerm(e.target.value)} 
                     className="bg-black border border-zinc-800 rounded-full py-2.5 px-5 text-sm text-zinc-200 focus:outline-none focus:border-yellow-500 w-full sm:w-auto min-w-[250px]" 
                 />
                 
-                {/* Contextual Action Buttons */}
                 {activeTab === 'media' && (
                     <button type="button" onClick={() => openMediaModal()} className="flex items-center bg-yellow-500 hover:bg-yellow-600 text-zinc-900 px-5 py-2.5 rounded-full text-sm font-bold w-full sm:w-auto justify-center transition-all">
                         <PlusCircle className="w-4 h-4 mr-2" /> Add Media
@@ -275,26 +276,120 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                         <PlusCircle className="w-4 h-4 mr-2" /> Add User
                     </button>
                 )}
+                {activeTab === 'talent' && (
+                    <button type="button" onClick={() => openTalentModal()} className="flex items-center bg-yellow-500 hover:bg-yellow-600 text-zinc-900 px-5 py-2.5 rounded-full text-sm font-bold w-full sm:w-auto justify-center transition-all">
+                        <PlusCircle className="w-4 h-4 mr-2" /> Add Talent
+                    </button>
+                )}
             </div>
           )}
           
           {/* Tab Content Routing */}
-          {activeTab === 'import' ? (
-            <AdminBulkImport />
-          ) : activeTab === 'logs' ? (
+          {activeTab === 'bulk-upload' ? (
+            <AdminBulkUpload user={user} onComplete={() => { setActiveTab('media'); fetchData(); }} />
+          ) : activeTab === 'import-export' ? (
+            <AdminBulkImport onImported={() => { setActiveTab('media'); fetchData(); }} />
+          ) : activeTab === 'activity' ? (
             <ActivityLogPanel logs={activityLogs} />
           ) : activeTab === 'system' ? (
             <SystemStatusPanel />
           ) : (
             <div className="bg-[#111]/40 border border-zinc-800/80 rounded-2xl overflow-hidden shadow-2xl">
-              {activeTab === 'media' && <MediaTable media={filteredData} onEdit={openMediaModal} onDelete={handleDeleteMedia} />}
-              {activeTab === 'users' && <UserTable users={filteredData} onEdit={openUserModal} onDelete={handleDeleteUser} />}
-              {activeTab === 'settings' && <SiteSettingsPanel talent={filteredData as TalentProfile[]} media={media} settings={siteSettings} onEditTalent={openTalentModal} onDeleteTalent={handleDeleteTalent} onAddTalent={() => openTalentModal()} onSettingsChange={handleSettingsChange} onSaveSettings={saveSettings} />}
+              {activeTab === 'media' && (
+                <MediaTable 
+                  media={filteredData} 
+                  onEdit={openMediaModal} 
+                  onDelete={handleDeleteMedia} 
+                  selected={selectedMedia}
+                  onToggleSelect={(id: string) => {
+                    const next = new Set(selectedMedia);
+                    if (next.has(id)) next.delete(id); else next.add(id);
+                    setSelectedMedia(next);
+                  }}
+                  onToggleAll={(checked: boolean) => {
+                    if (checked) setSelectedMedia(new Set(filteredData.map(m => m.id)));
+                    else setSelectedMedia(new Set());
+                  }}
+                />
+              )}
+              {activeTab === 'users' && (
+                <UserTable 
+                  users={filteredData as User[]} 
+                  onEdit={openUserModal} 
+                  onDelete={handleDeleteUser}
+                  selected={selectedUsers}
+                  onToggleSelect={(id: string) => {
+                    const next = new Set(selectedUsers);
+                    if (next.has(id)) next.delete(id); else next.add(id);
+                    setSelectedUsers(next);
+                  }}
+                  onToggleAll={(checked: boolean) => {
+                    if (checked) setSelectedUsers(new Set(filteredData.map(u => u.id)));
+                    else setSelectedUsers(new Set());
+                  }}
+                />
+              )}
+              {activeTab === 'talent' && (
+                <TalentTable 
+                  talent={filteredData as TalentProfile[]} 
+                  onEdit={openTalentModal} 
+                  onDelete={handleDeleteTalent}
+                  selected={selectedTalent}
+                  onToggleSelect={(id: string) => {
+                    const next = new Set(selectedTalent);
+                    if (next.has(id)) next.delete(id); else next.add(id);
+                    setSelectedTalent(next);
+                  }}
+                  onToggleAll={(checked: boolean) => {
+                    if (checked) setSelectedTalent(new Set(filteredData.map(t => t.id)));
+                    else setSelectedTalent(new Set());
+                  }}
+                />
+              )}
+              {activeTab === 'settings' && (
+                <SiteSettingsPanel 
+                  media={media} 
+                  settings={siteSettings} 
+                  onSettingsChange={handleSettingsChange} 
+                  onSaveSettings={saveSettings} 
+                />
+              )}
             </div>
           )}
       </div>
 
-      {/* --- Floating Modals --- */}
+      {/* --- Bulk Action Bar & Modals --- */}
+      <BulkActionBar
+        count={selectedMedia.size + selectedUsers.size + selectedTalent.size}
+        onClear={() => { setSelectedMedia(new Set()); setSelectedUsers(new Set()); setSelectedTalent(new Set()); }}
+        onEdit={() => {
+          if (selectedMedia.size) { setBulkEntity('media'); setBulkEditOpen(true); }
+          else if (selectedUsers.size) { setBulkEntity('users'); setBulkEditOpen(true); }
+          else if (selectedTalent.size) { setBulkEntity('talent'); setBulkEditOpen(true); }
+        }}
+        onDelete={async () => {
+          if (selectedMedia.size) { await api.media.bulkDelete([...selectedMedia]); setSelectedMedia(new Set()); fetchData(); }
+          else if (selectedUsers.size) { await api.users.bulkDelete([...selectedUsers]); setSelectedUsers(new Set()); fetchData(); }
+          else if (selectedTalent.size) { await api.talent.bulkDelete([...selectedTalent]); setSelectedTalent(new Set()); fetchData(); }
+        }}
+      />
+
+      <BulkEditModal
+        isOpen={bulkEditOpen}
+        count={bulkEntity === 'media' ? selectedMedia.size : bulkEntity === 'users' ? selectedUsers.size : selectedTalent.size}
+        entityType={bulkEntity}
+        onClose={() => setBulkEditOpen(false)}
+        onSubmit={async (updates) => {
+          if (bulkEntity === 'media') await api.media.bulkUpdate([...selectedMedia], updates);
+          if (bulkEntity === 'users') await api.users.bulkUpdate([...selectedUsers], updates);
+          if (bulkEntity === 'talent') await api.talent.bulkUpdate([...selectedTalent], updates);
+          setSelectedMedia(new Set());
+          setSelectedUsers(new Set());
+          setSelectedTalent(new Set());
+          fetchData();
+        }}
+      />
+
       {isMediaModalOpen && <MediaFormModal media={editingMedia} onClose={closeMediaModal} onSubmit={handleMediaSubmit} currentUser={user}/>}
       {isUserModalOpen && <UserFormModal user={editingUser} onClose={closeUserModal} onSubmit={handleUserSubmit} />}
       {isTalentModalOpen && <TalentFormModal talent={editingTalent} onClose={closeTalentModal} onSubmit={handleTalentSubmit} />}
@@ -302,551 +397,239 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   );
 };
 
-// ============================================================================
-// Sub-components & UI Elements
-// ============================================================================
+// --- Sub-components for Tables & Panels ---
 
-/**
- * Shared action buttons (Edit/Delete) for table rows
- */
-const renderActions = (onEdit: () => void, onDelete: () => void, itemType: string, itemName: string) => (
-  <div className="flex justify-end space-x-2 pt-2 md:pt-0">
-    <button type="button" onClick={onEdit} className="p-2 hover:bg-zinc-800 rounded-full transition-colors" aria-label={`Edit ${itemType} ${itemName}`}>
-        <Edit className="w-4 h-4 text-zinc-400"/>
-    </button>
-    <button type="button" onClick={onDelete} className="p-2 hover:bg-zinc-800 rounded-full transition-colors" aria-label={`Delete ${itemType} ${itemName}`}>
-        <Trash2 className="w-4 h-4 text-yellow-400"/>
-    </button>
-  </div>
-);
-
-/**
- * Table displaying all media items. Uses a list view on mobile and standard table on desktop.
- */
-const MediaTable = ({ media, onEdit, onDelete }: any) => (
-  <div>
-    {/* Desktop View */}
-    <table className="w-full text-sm text-left text-zinc-400 hidden md:table">
-      <thead className="text-xs text-zinc-400 uppercase bg-[#111]/50">
+const MediaTable = ({ media, onEdit, onDelete, selected, onToggleSelect, onToggleAll }: any) => {
+  const allSelected = media.length > 0 && media.every((m: MediaItem) => selected.has(m.id));
+  return (
+    <div>
+      <table className="w-full text-sm text-left text-zinc-400 hidden md:table">
+        <thead className="text-xs text-zinc-400 uppercase bg-[#111]/50">
           <tr>
-              <th scope="col" className="px-6 py-3">Thumbnail</th>
-              <th scope="col" className="px-6 py-3">Title</th>
-              <th scope="col" className="px-6 py-3">Creator</th>
-              <th scope="col" className="px-6 py-3">Status</th>
-              <th scope="col" className="px-6 py-3 text-right">Actions</th>
+            <th className="px-4 py-3 w-10">
+              <input type="checkbox" checked={allSelected} onChange={(e) => onToggleAll(e.target.checked)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
+            </th>
+            <th className="px-6 py-3">Thumbnail</th>
+            <th className="px-6 py-3">Title</th>
+            <th className="px-6 py-3">Creator</th>
+            <th className="px-6 py-3">Status</th>
+            <th className="px-6 py-3 text-right">Actions</th>
           </tr>
-      </thead>
-      <tbody>
+        </thead>
+        <tbody>
           {media.map((item: MediaItem) => (
-              <tr key={item.id} className="border-b border-zinc-800 hover:bg-[#111]">
-                  <td className="px-6 py-4">
-                      {item.thumbnailUrl ? (
-                          <img src={item.thumbnailUrl} alt={item.title} className="w-20 h-12 object-cover rounded-md"/>
-                      ) : (
-                          <div className="w-20 h-12 bg-zinc-800 rounded-md flex items-center justify-center text-zinc-500 text-xs">No media</div>
-                      )}
-                  </td>
-                  <td className="px-6 py-4 font-medium text-white max-w-[200px] truncate">{item.title}</td>
-                  <td className="px-6 py-4">{item.creatorName}</td>
-                  <td className="px-6 py-4">
-                      {item.isPremium 
-                          ? <span className="px-2 py-1 text-xs font-medium rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20">Premium</span> 
-                          : <span className="px-2 py-1 text-xs font-medium rounded-full bg-zinc-700 text-zinc-300">Free</span>}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                      {renderActions(() => onEdit(item), () => onDelete(item.id), 'media', item.title)}
-                  </td>
-              </tr>
+            <tr key={item.id} className={`border-b border-zinc-800 hover:bg-[#111] ${selected.has(item.id) ? 'bg-yellow-500/5' : ''}`}>
+              <td className="px-4 py-4">
+                <input type="checkbox" checked={selected.has(item.id)} onChange={() => onToggleSelect(item.id)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
+              </td>
+              <td className="px-6 py-4">
+                {item.thumbnailUrl ? (
+                  <img src={item.thumbnailUrl} alt={item.title} className="w-20 h-12 object-cover rounded-md" />
+                ) : (
+                  <div className="w-20 h-12 bg-zinc-800 rounded-md flex items-center justify-center text-zinc-500 text-xs">No media</div>
+                )}
+              </td>
+              <td className="px-6 py-4 font-medium text-white max-w-[200px] truncate">{item.title}</td>
+              <td className="px-6 py-4">{item.creatorName}</td>
+              <td className="px-6 py-4">
+                {item.isPremium
+                  ? <span className="px-2 py-1 text-xs font-medium rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20">Premium</span>
+                  : <span className="px-2 py-1 text-xs font-medium rounded-full bg-zinc-700 text-zinc-300">Free</span>}
+              </td>
+              <td className="px-6 py-4 text-right space-x-2">
+                <button type="button" onClick={() => onEdit(item)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
+                <button type="button" onClick={() => onDelete(item.id)} className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+              </td>
+            </tr>
           ))}
-      </tbody>
-    </table>
-    
-    {/* Mobile View */}
-    <div className="md:hidden space-y-4 p-4">
-        {media.map((item: MediaItem) => (
-            <div key={item.id} className="bg-black/50 rounded-xl p-4 border border-zinc-800/80 flex flex-col space-y-3">
-                <div className="flex items-start space-x-3">
-                    {item.thumbnailUrl ? (
-                        <img src={item.thumbnailUrl} alt={item.title} className="w-20 h-20 object-cover rounded-md flex-shrink-0 border border-zinc-800"/>
-                    ) : (
-                        <div className="w-20 h-20 bg-zinc-800 rounded-md flex-shrink-0 border border-zinc-800 flex items-center justify-center text-zinc-500 text-xs">No media</div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                        <p className="font-bold text-white mb-1 text-sm leading-snug break-words">{item.title}</p>
-                        <p className="text-xs text-zinc-400 mb-2 truncate">by {item.creatorName}</p>
-                        {item.isPremium 
-                            ? <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20">Premium</span> 
-                            : <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-zinc-700 text-zinc-300">Free</span>}
-                    </div>
-                </div>
-                <div className="border-t border-zinc-900/60 pt-2 flex justify-end space-x-2">
-                    <button type="button" onClick={() => onEdit(item)} className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-lg text-xs font-semibold flex items-center transition-all"><Edit className="w-3.5 h-3.5 mr-1 text-zinc-400"/> Edit</button>
-                    <button type="button" onClick={() => onDelete(item.id)} className="px-3 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 rounded-lg text-xs font-semibold flex items-center transition-all"><Trash2 className="w-3.5 h-3.5 mr-1"/> Delete</button>
-                </div>
-            </div>
-        ))}
+        </tbody>
+      </table>
     </div>
-  </div>
-);
+  );
+};
 
-/**
- * Table displaying all registered users.
- */
-const UserTable = ({ users, onEdit, onDelete }: any) => (
-  <div>
-    {/* Desktop View */}
-    <table className="w-full text-sm text-left text-zinc-400 hidden md:table">
-      <thead className="text-xs text-zinc-400 uppercase bg-[#111]/50">
+const UserTable = ({ users, onEdit, onDelete, selected, onToggleSelect, onToggleAll }: any) => {
+  const allSelected = users.length > 0 && users.every((u: User) => selected.has(u.id));
+  return (
+    <div>
+      <table className="w-full text-sm text-left text-zinc-400 hidden md:table">
+        <thead className="text-xs text-zinc-400 uppercase bg-[#111]/50">
           <tr>
-              <th scope="col" className="px-6 py-3">User</th>
-              <th scope="col" className="px-6 py-3">Role</th>
-              <th scope="col" className="px-6 py-3">Status</th>
-              <th scope="col" className="px-6 py-3 text-right">Actions</th>
+            <th className="px-4 py-3 w-10">
+              <input type="checkbox" checked={allSelected} onChange={(e) => onToggleAll(e.target.checked)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
+            </th>
+            <th className="px-6 py-3">Name</th>
+            <th className="px-6 py-3">Email</th>
+            <th className="px-6 py-3">Role</th>
+            <th className="px-6 py-3 text-right">Actions</th>
           </tr>
-      </thead>
-      <tbody>
+        </thead>
+        <tbody>
           {users.map((user: User) => (
-              <tr key={user.id} className="border-b border-zinc-800 hover:bg-[#111]">
-                  <td className="px-6 py-4 font-medium text-white flex items-center">
-                      {user.avatarUrl ? (
-                          <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 rounded-full mr-3 object-cover"/>
-                      ) : (
-                          <div className="w-8 h-8 rounded-full mr-3 bg-zinc-800 text-yellow-500 font-bold flex items-center justify-center text-xs flex-shrink-0">
-                              {(user.name || "U").charAt(0).toUpperCase()}
-                          </div>
-                      )}
-                      {user.name}
-                  </td>
-                  <td className="px-6 py-4">{user.role}</td>
-                  <td className="px-6 py-4">
-                      {user.verified 
-                          ? <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-500/10 text-green-500 border border-green-500/20">Verified</span> 
-                          : <span className="px-2 py-1 text-xs font-medium rounded-full bg-zinc-700 text-zinc-300">Unverified</span>}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                      {renderActions(() => onEdit(user), () => onDelete(user.id), 'user', user.name)}
-                  </td>
-              </tr>
+            <tr key={user.id} className={`border-b border-zinc-800 hover:bg-[#111] ${selected.has(user.id) ? 'bg-yellow-500/5' : ''}`}>
+              <td className="px-4 py-4">
+                <input type="checkbox" checked={selected.has(user.id)} onChange={() => onToggleSelect(user.id)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
+              </td>
+              <td className="px-6 py-4 font-medium text-white">{user.name}</td>
+              <td className="px-6 py-4">{user.email}</td>
+              <td className="px-6 py-4"><span className="px-2 py-1 text-xs font-semibold rounded bg-zinc-800 text-zinc-300">{user.role}</span></td>
+              <td className="px-6 py-4 text-right space-x-2">
+                <button type="button" onClick={() => onEdit(user)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
+                <button type="button" onClick={() => onDelete(user.id)} className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+              </td>
+            </tr>
           ))}
-      </tbody>
-    </table>
-    
-    {/* Mobile View */}
-    <div className="md:hidden space-y-4 p-4">
-        {users.map((user: User) => (
-            <div key={user.id} className="bg-black/50 rounded-xl p-4 border border-zinc-800/80 flex flex-col space-y-3">
-                <div className="flex items-center space-x-3">
-                    {user.avatarUrl ? (
-                        <img src={user.avatarUrl} alt={user.name} className="w-12 h-12 rounded-full border border-zinc-800 flex-shrink-0 object-cover"/>
-                    ) : (
-                        <div className="w-12 h-12 rounded-full border border-zinc-800 bg-zinc-800 text-yellow-500 font-bold flex items-center justify-center text-sm flex-shrink-0">
-                            {(user.name || "U").charAt(0).toUpperCase()}
-                        </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                        <p className="font-bold text-white text-sm truncate">{user.name}</p>
-                        <p className="text-xs text-zinc-400 mb-1">{user.role}</p>
-                        {user.verified 
-                            ? <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-green-500/10 text-green-500 border border-green-500/20 inline-block">Verified</span> 
-                            : <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-zinc-700 text-zinc-300 inline-block">Unverified</span>}
-                    </div>
-                </div>
-                <div className="border-t border-zinc-900/60 pt-2 flex justify-end space-x-2">
-                    <button type="button" onClick={() => onEdit(user)} className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-lg text-xs font-semibold flex items-center transition-all"><Edit className="w-3.5 h-3.5 mr-1 text-zinc-400"/> Edit</button>
-                    <button type="button" onClick={() => onDelete(user.id)} className="px-3 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 rounded-lg text-xs font-semibold flex items-center transition-all"><Trash2 className="w-3.5 h-3.5 mr-1"/> Delete</button>
-                </div>
-            </div>
-        ))}
+        </tbody>
+      </table>
     </div>
-  </div>
-);
+  );
+};
 
-/**
- * Table displaying talent profiles (used inside Site Settings)
- */
-const TalentTable = ({ talent, onEdit, onDelete }: any) => (
-  <div>
-    <table className="w-full text-sm text-left text-zinc-400 hidden md:table">
-      <thead className="text-xs text-zinc-400 uppercase bg-[#111]/50">
+const TalentTable = ({ talent, onEdit, onDelete, selected, onToggleSelect, onToggleAll }: any) => {
+  const allSelected = talent.length > 0 && talent.every((t: TalentProfile) => selected.has(t.id));
+  return (
+    <div>
+      <table className="w-full text-sm text-left text-zinc-400 hidden md:table">
+        <thead className="text-xs text-zinc-400 uppercase bg-[#111]/50">
           <tr>
-              <th scope="col" className="px-6 py-3">Name</th>
-              <th scope="col" className="px-6 py-3">Location</th>
-              <th scope="col" className="px-6 py-3">Rating</th>
-              <th scope="col" className="px-6 py-3 text-right">Actions</th>
+            <th className="px-4 py-3 w-10">
+              <input type="checkbox" checked={allSelected} onChange={(e) => onToggleAll(e.target.checked)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
+            </th>
+            <th className="px-6 py-3">Name</th>
+            <th className="px-6 py-3">Category</th>
+            <th className="px-6 py-3">Rate</th>
+            <th className="px-6 py-3 text-right">Actions</th>
           </tr>
-      </thead>
-      <tbody>
-          {talent.map((t: TalentProfile) => (
-              <tr key={t.id} className="border-b border-zinc-800 hover:bg-[#111]">
-                  <td className="px-6 py-4 font-medium text-white flex items-center">
-                      {t.imageUrl ? (
-                          <img src={t.imageUrl} alt={t.name} className="w-8 h-8 rounded-full mr-3 object-cover"/>
-                      ) : (
-                          <div className="w-8 h-8 rounded-full mr-3 bg-zinc-800 text-yellow-500 font-bold flex items-center justify-center text-xs flex-shrink-0">
-                              {(t.name || "T").charAt(0).toUpperCase()}
-                          </div>
-                      )}
-                      {t.name}
-                  </td>
-                  <td className="px-6 py-4">{t.location}</td>
-                  <td className="px-6 py-4 flex items-center">
-                      <Star className="w-3 h-3 mr-1 text-amber-500 fill-current"/>{t.rating}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                      {renderActions(() => onEdit(t), () => onDelete(t.id), 'talent', t.name)}
-                  </td>
-              </tr>
+        </thead>
+        <tbody>
+          {talent.map((item: TalentProfile) => (
+            <tr key={item.id} className={`border-b border-zinc-800 hover:bg-[#111] ${selected.has(item.id) ? 'bg-yellow-500/5' : ''}`}>
+              <td className="px-4 py-4">
+                <input type="checkbox" checked={selected.has(item.id)} onChange={() => onToggleSelect(item.id)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
+              </td>
+              <td className="px-6 py-4 font-medium text-white">{item.name}</td>
+              <td className="px-6 py-4">{item.category}</td>
+              <td className="px-6 py-4">R {item.hourlyRate}/hr</td>
+              <td className="px-6 py-4 text-right space-x-2">
+                <button type="button" onClick={() => onEdit(item)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
+                <button type="button" onClick={() => onDelete(item.id)} className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+              </td>
+            </tr>
           ))}
-      </tbody>
-    </table>
-    <div className="md:hidden space-y-4 p-4">
-        {talent.map((t: TalentProfile) => (
-            <div key={t.id} className="bg-black/50 rounded-xl p-4 border border-zinc-800/80 flex flex-col space-y-3">
-                <div className="flex items-center space-x-3">
-                    {t.imageUrl ? (
-                        <img src={t.imageUrl} alt={t.name} className="w-12 h-12 rounded-full border border-zinc-800 flex-shrink-0 object-cover"/>
-                    ) : (
-                        <div className="w-12 h-12 rounded-full border border-zinc-800 bg-zinc-800 text-yellow-500 font-bold flex items-center justify-center text-sm flex-shrink-0">
-                            {(t.name || "T").charAt(0).toUpperCase()}
-                        </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                        <p className="font-bold text-white text-sm truncate">{t.name}</p>
-                        <p className="text-xs text-zinc-400 flex items-center mt-0.5 truncate">
-                            <MapPin className="w-3 h-3 mr-1 flex-shrink-0 text-zinc-500"/>{t.location}
-                        </p>
-                    </div>
-                </div>
-                <div className="border-t border-zinc-900/60 pt-2 flex justify-end space-x-2">
-                    <button type="button" onClick={() => onEdit(t)} className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-lg text-xs font-semibold flex items-center transition-all"><Edit className="w-3.5 h-3.5 mr-1 text-zinc-400"/> Edit</button>
-                    <button type="button" onClick={() => onDelete(t.id)} className="px-3 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 rounded-lg text-xs font-semibold flex items-center transition-all"><Trash2 className="w-3.5 h-3.5 mr-1"/> Delete</button>
-                </div>
-            </div>
-        ))}
+        </tbody>
+      </table>
     </div>
-  </div>
-);
+  );
+};
 
-/**
- * Panel managing global application settings (e.g., featured media, talent directory)
- */
-const SiteSettingsPanel = ({ talent, media, settings, onEditTalent, onDeleteTalent, onAddTalent, onSettingsChange, onSaveSettings }: any) => ( 
-    <div className="p-4 md:p-6 space-y-8"> 
-        <div> 
-            <h3 className="text-xl font-bold text-white mb-4">Homepage Configuration</h3> 
-            <div className="bg-[#111] p-6 rounded-2xl border border-zinc-800 space-y-4"> 
-                <div>
-                    <label htmlFor="featuredMediaId" className="block text-sm font-semibold text-zinc-300 mb-2">Featured Hero Video</label> 
-                    <select id="featuredMediaId" name="featuredMediaId" value={settings.featuredMediaId || ''} onChange={onSettingsChange} className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-1 focus:ring-yellow-500 focus:border-yellow-500 transition cursor-pointer"> 
-                        <option value="">-- Select a Video --</option> 
-                        {media.map((m: MediaItem) => <option key={m.id} value={m.id}>{m.title}</option>)} 
-                    </select>
-                </div> 
-                <div className="flex justify-end pt-2"> 
-                    <button type="button" onClick={onSaveSettings} className="bg-yellow-500 hover:bg-yellow-600 text-zinc-900 px-6 py-2.5 rounded-full text-sm font-bold transition-colors">
-                        Save Global Settings
-                    </button> 
-                </div> 
-            </div> 
-        </div> 
-        <div> 
-            <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4"> 
-                <h3 className="text-xl font-bold text-white">Talent Directory</h3> 
-                <button type="button" onClick={onAddTalent} className="flex items-center bg-yellow-500 hover:bg-yellow-600 text-zinc-900 px-5 py-2 rounded-full text-sm font-bold w-full sm:w-auto justify-center transition-colors">
-                    <PlusCircle className="w-4 h-4 mr-2" /> Add Talent
-                </button> 
-            </div> 
-            <div className="overflow-hidden border border-zinc-800 rounded-xl bg-[#111]"> 
-                <TalentTable talent={talent} onEdit={onEditTalent} onDelete={onDeleteTalent} /> 
-            </div> 
-        </div> 
-        
-        <div className="pt-6 border-t border-zinc-900">
-            <CMPSandbox />
+const SiteSettingsPanel = ({ media, settings, onSettingsChange, onSaveSettings }: any) => {
+  return (
+    <div className="p-6 space-y-6">
+      <h3 className="text-lg font-bold text-white">Global Site Control</h3>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-semibold text-zinc-300 mb-2">Site Name</label>
+          <input
+            type="text"
+            name="siteName"
+            value={settings.siteName || ''}
+            onChange={onSettingsChange}
+            placeholder="Elysian"
+            className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+          />
         </div>
-    </div> 
-);
+        <div>
+          <label className="block text-sm font-semibold text-zinc-300 mb-2">Hero Headline</label>
+          <input
+            type="text"
+            name="heroHeadline"
+            value={settings.heroHeadline || ''}
+            onChange={onSettingsChange}
+            placeholder="Midnight in Paris: The Collection"
+            className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+          />
+        </div>
+        <div className="md:col-span-2">
+          <label className="block text-sm font-semibold text-zinc-300 mb-2">Announcement Banner</label>
+          <input
+            type="text"
+            name="announcementBanner"
+            value={settings.announcementBanner || ''}
+            onChange={onSettingsChange}
+            placeholder="Leave empty to hide"
+            className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-zinc-300 mb-2">Maintenance Mode</label>
+          <select
+            name="maintenanceMode"
+            value={settings.maintenanceMode ? 'on' : 'off'}
+            onChange={(e) => onSettingsChange({ target: { name: 'maintenanceMode', value: e.target.value === 'on' } } as any)}
+            className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 cursor-pointer"
+          >
+            <option value="off">Off - site live</option>
+            <option value="on">On - show maintenance page</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-zinc-300 mb-2">Default Subscription Price (ZAR)</label>
+          <input
+            type="number"
+            name="defaultSubPrice"
+            value={settings.defaultSubPrice || ''}
+            onChange={onSettingsChange}
+            placeholder="150"
+            className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+          />
+        </div>
+        <div className="md:col-span-2">
+          <label className="block text-sm font-semibold text-zinc-300 mb-2">Featured Hero Video</label>
+          <select
+            name="featuredMediaId"
+            value={settings.featuredMediaId || ''}
+            onChange={onSettingsChange}
+            className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 cursor-pointer"
+          >
+            <option value="">-- None --</option>
+            {media.map((m: MediaItem) => (
+              <option key={m.id} value={m.id}>{m.title}</option>
+            ))}
+          </select>
+        </div>
+      </div>
 
-/**
- * Panel displaying real-time system activity logs
- */
-const ActivityLogPanel = ({ logs }: { logs: any[] }) => (
-  <div className="bg-[#111]/40 border border-zinc-800/80 rounded-2xl overflow-hidden p-4 md:p-6 space-y-4 shadow-2xl">
-    <h3 className="text-xl font-bold text-white mb-4">System Activity Log</h3>
-    <div className="space-y-3">
-      {logs.length === 0 ? (
-         <p className="text-zinc-500 text-sm italic">No system activity recorded yet.</p>
-      ) : logs.map((log: any) => (
-        <div key={log.id} className="flex items-start space-x-4 bg-black/60 p-4 rounded-xl border border-zinc-800/80 transition-colors hover:border-zinc-700">
-           {/* Dynamic Icon based on log type */}
-           <div className={`p-2.5 rounded-full flex-shrink-0 ${
-             log.actionType === 'error' ? 'bg-red-500/10 text-red-500 border border-red-500/20' :
-             log.actionType === 'import' ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' :
-             log.actionType === 'rating' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
-             'bg-green-500/10 text-green-500 border border-green-500/20'
-           }`}>
-             {log.actionType === 'error' ? <X className="w-4 h-4"/> : 
-              log.actionType === 'import' ? <UploadCloud className="w-4 h-4"/> : 
-              log.actionType === 'rating' ? <Star className="w-4 h-4"/> : 
-              <ShieldCheck className="w-4 h-4"/>}
-           </div>
-           
-           <div className="flex-1 min-w-0">
-             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1 mb-1">
-               <p className="font-bold text-white capitalize">{log.actionType}</p>
-               <span className="text-xs text-zinc-500 font-mono bg-zinc-900 px-2 py-0.5 rounded">{new Date(log.timestamp).toLocaleString()}</span>
-             </div>
-             <p className="text-sm text-zinc-300 mt-1 leading-relaxed">{log.details}</p>
-             {log.userId && <p className="text-xs text-zinc-500 mt-2 font-mono">Actor ID: {log.userId}</p>}
-           </div>
+      <div className="flex justify-end pt-4 border-t border-zinc-800">
+        <button
+          type="button"
+          onClick={onSaveSettings}
+          className="bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-bold px-6 py-3 rounded-xl transition-colors flex items-center space-x-2"
+        >
+          <Save className="w-5 h-5" />
+          <span>Save Global Settings</span>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const ActivityLogPanel = ({ logs }: { logs: ActivityLog[] }) => (
+  <div className="bg-[#111]/40 border border-zinc-800/80 rounded-2xl p-6 space-y-4">
+    <h3 className="text-lg font-bold text-white">Activity Log</h3>
+    <div className="space-y-2 max-h-[600px] overflow-y-auto">
+      {logs.map((log) => (
+        <div key={log.id} className="bg-black/40 border border-zinc-900 rounded-xl p-4 flex justify-between items-center text-sm">
+          <div>
+            <span className="font-semibold text-white uppercase text-xs px-2 py-0.5 rounded bg-zinc-800 mr-3">{log.action}</span>
+            <span className="text-zinc-300">{log.details}</span>
+          </div>
+          <span className="text-xs text-zinc-500">{new Date(log.timestamp).toLocaleString()}</span>
         </div>
       ))}
     </div>
   </div>
 );
-
-// --- Form Modals & Inputs ---
-
-const ModalWrapper = ({ title, onClose, children, onSubmit, submitText }: any) => ( 
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"> 
-        <div className="bg-[#111] border border-zinc-800 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"> 
-            <div className="p-5 border-b border-zinc-800 flex justify-between items-center bg-black/30"> 
-                <h3 className="text-lg font-bold text-white">{title}</h3> 
-                <button type="button" aria-label="Close modal" onClick={onClose} className="p-1 hover:bg-zinc-800 rounded-full transition-colors">
-                    <X className="w-5 h-5 text-zinc-400"/>
-                </button> 
-            </div> 
-            <form onSubmit={onSubmit} className="p-6 space-y-6 overflow-y-auto custom-scrollbar"> 
-                {children} 
-                <div className="pt-6 mt-6 border-t border-zinc-800/50 flex justify-end space-x-3 sticky bottom-0 bg-[#111]"> 
-                    <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-full text-zinc-400 font-medium hover:bg-zinc-800 transition-colors">Cancel</button> 
-                    <button type="submit" className="px-6 py-2.5 rounded-full bg-yellow-500 text-zinc-900 font-bold hover:bg-yellow-400 transition-colors shadow-lg shadow-yellow-500/20">{submitText || 'Save Changes'}</button> 
-                </div> 
-            </form> 
-        </div> 
-    </div> 
-);
-
-// Reusable Form Inputs
-const FormInput = ({ label, name, value, onChange, placeholder, required = false, type = 'text' }: any) => (
-    <div>
-        <label htmlFor={name} className="block mb-2 text-sm font-semibold text-zinc-300">{label}</label>
-        <input id={name} type={type} name={name} value={value} onChange={onChange} placeholder={placeholder} required={required} className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 transition-colors placeholder:text-zinc-600" />
-    </div>
-);
-const FormTextarea = ({ label, name, value, onChange, placeholder }: any) => (
-    <div>
-        <label htmlFor={name} className="block mb-2 text-sm font-semibold text-zinc-300">{label}</label>
-        <textarea id={name} name={name} value={value} onChange={onChange} placeholder={placeholder} className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white h-24 focus:outline-none focus:border-yellow-500 transition-colors placeholder:text-zinc-600 resize-none" />
-    </div>
-);
-const FormSelect = ({ label, name, value, onChange, children }: any) => (
-    <div>
-        <label htmlFor={name} className="block mb-2 text-sm font-semibold text-zinc-300">{label}</label>
-        <select id={name} name={name} value={value} onChange={onChange} className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 transition-colors cursor-pointer">{children}</select>
-    </div>
-);
-const FormCheckbox = ({ name, checked, onChange, label }: any) => (
-    <label htmlFor={name} className="flex items-center cursor-pointer group">
-        <div className="relative flex items-center justify-center w-5 h-5 mr-3">
-            <input id={name} type="checkbox" name={name} checked={checked} onChange={onChange} className="peer appearance-none w-5 h-5 border-2 border-zinc-600 rounded bg-black checked:bg-yellow-500 checked:border-yellow-500 focus:outline-none transition-colors cursor-pointer"/>
-            {/* Custom Checkmark SVG overlaid on hidden native checkbox */}
-            <svg className="absolute w-3 h-3 text-zinc-900 pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity" viewBox="0 0 14 10" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 5L5 9L13 1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </div>
-        <span className="text-zinc-300 group-hover:text-white transition-colors select-none">{label}</span>
-    </label>
-);
-
-/**
- * Media Editor / Creator Modal
- */
-const MediaFormModal = ({ media, onClose, onSubmit, currentUser }: any) => { 
-    const [formData, setFormData] = useState({ 
-        title: media?.title || '', 
-        description: media?.description || '', 
-        thumbnailUrl: media?.thumbnailUrl || '', 
-        sourceUrl: media?.sourceUrl || '', 
-        mediaType: media?.mediaType || 'video', 
-        creatorName: media?.creatorName || currentUser.name, 
-        tags: media?.tags?.join(', ') || '', 
-        isPremium: media?.isPremium || false, 
-        price: media?.price || '' 
-    }); 
-    const [isAIProcessing, setIsAIProcessing] = useState(false);
-    
-    const handleChange = (e: any) => { 
-        const { name, value, type, checked } = e.target; 
-        setFormData(p => ({ ...p, [name]: type === 'checkbox' ? checked : value })); 
-    }; 
-    
-    const handleSubmit = (e: React.FormEvent) => { 
-        e.preventDefault(); 
-        const tagList = formData.tags.split(',').map((t: string) => t.trim()).filter(Boolean); 
-        onSubmit({ ...formData, tags: tagList, price: parseFloat(formData.price) || 0 }); 
-    }; 
-    
-    return ( 
-        <ModalWrapper title={media ? 'Edit Media' : 'Add New Media'} onClose={onClose} onSubmit={handleSubmit}> 
-            <FormInput label="Title" name="title" value={formData.title} onChange={handleChange} placeholder="Media Title" required /> 
-            <FormTextarea label="Description" name="description" value={formData.description} onChange={handleChange} placeholder="Detailed description..." /> 
-            
-            <div>
-                <div className="flex items-center justify-between mb-2">
-                    <label htmlFor="sourceUrl" className="text-sm font-semibold text-zinc-300">Source URL (Video Link)</label>
-                    <button
-                        type="button"
-                        disabled={isAIProcessing}
-                        onClick={async () => {
-                            if (!formData.sourceUrl) {
-                                alert("Please enter a Source URL (Video Link) first so the AI can scrape it!");
-                                return;
-                            }
-                            setIsAIProcessing(true);
-                            try {
-                                const result = await api.media.scrapeMetadata(formData.sourceUrl);
-                                setFormData(prev => ({
-                                    ...prev,
-                                    title: result.title || prev.title,
-                                    description: result.description || prev.description,
-                                    tags: result.tags ? result.tags.join(', ') : prev.tags
-                                }));
-                            } catch (e) {
-                                console.error(e);
-                                alert("AI Scraping failed. Make sure the link is valid and try again.");
-                            } finally {
-                                setIsAIProcessing(false);
-                            }
-                        }}
-                        className="text-xs flex items-center text-yellow-500 hover:text-yellow-400 font-bold transition-colors disabled:opacity-50 cursor-pointer select-none"
-                    >
-                        <Wand2 className="w-3.5 h-3.5 mr-1" />
-                        {isAIProcessing ? 'Scraping with AI...' : 'Auto-Fill with AI'}
-                    </button>
-                </div>
-                <input
-                    id="sourceUrl"
-                    type="text"
-                    name="sourceUrl"
-                    value={formData.sourceUrl}
-                    onChange={handleChange}
-                    placeholder="e.g., https://example.com/video"
-                    required
-                    className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 transition-colors placeholder:text-zinc-600"
-                />
-            </div>
-
-            <FormInput label="Thumbnail URL" name="thumbnailUrl" value={formData.thumbnailUrl} onChange={handleChange} placeholder="e.g., https://example.com/image.jpg" required /> 
-            <FormSelect label="Media Type" name="mediaType" value={formData.mediaType} onChange={handleChange}>
-                <option value="video">Video File</option>
-                <option value="image">Static Image</option>
-            </FormSelect> 
-            <FormInput label="Creator Name" name="creatorName" value={formData.creatorName} onChange={handleChange} placeholder="Original Creator" required /> 
-            <FormInput label="Tags (comma-separated)" name="tags" value={formData.tags} onChange={handleChange} placeholder="e.g., 4k, exclusive, vr" /> 
-            <div className="bg-black p-4 rounded-xl border border-zinc-800/50 space-y-4 mt-2"> 
-                <FormCheckbox name="isPremium" checked={formData.isPremium} onChange={handleChange} label="Requires Premium Subscription" /> 
-                {formData.isPremium && <FormInput label="Price Override (ZAR)" type="number" name="price" value={formData.price} onChange={handleChange} placeholder="Leave 0 for default sub price" />} 
-            </div> 
-        </ModalWrapper> 
-    ); 
-};
-
-/**
- * User Editor / Creator Modal
- */
-const UserFormModal = ({ user, onClose, onSubmit }: any) => { 
-    const [formData, setFormData] = useState({ 
-        name: user?.name || '', 
-        email: user?.email || '', 
-        password: '', 
-        role: user?.role || UserRole.CONSUMER, 
-        verified: user?.verified || false 
-    }); 
-    
-    const handleChange = (e: any) => { 
-        const { name, value, type, checked } = e.target; 
-        setFormData(p => ({ ...p, [name]: type === 'checkbox' ? checked : value })); 
-    }; 
-    
-    const handleSubmit = (e: React.FormEvent) => { 
-        e.preventDefault(); 
-        const submissionData = { ...formData }; 
-        if (!submissionData.password) { delete (submissionData as any).password; } 
-        onSubmit(submissionData); 
-    }; 
-    
-    return ( 
-        <ModalWrapper title={user ? 'Edit User Profile' : 'Register New User'} onClose={onClose} onSubmit={handleSubmit}> 
-            <FormInput label="Display Name" name="name" value={formData.name} onChange={handleChange} placeholder="John Doe" required /> 
-            <FormInput label="Email Address" type="email" name="email" value={formData.email} onChange={handleChange} placeholder="john@example.com" required /> 
-            <FormInput label="Password" type="password" name="password" value={formData.password} onChange={handleChange} placeholder={user ? "Leave blank to keep unchanged" : "Set secure password"} /> 
-            <FormSelect label="System Role" name="role" value={formData.role} onChange={handleChange}>
-                {Object.values(UserRole).map(role => <option key={role} value={role}>{role}</option>)}
-            </FormSelect> 
-            <div className="bg-black p-4 rounded-xl border border-zinc-800/50 mt-2">
-                <FormCheckbox name="verified" checked={formData.verified} onChange={handleChange} label="Verified Creator Account Badge" /> 
-            </div>
-        </ModalWrapper> 
-    ); 
-};
-
-/**
- * Talent Profile Editor / Creator Modal
- */
-const TalentFormModal = ({ talent, onClose, onSubmit }: any) => { 
-    const [formData, setFormData] = useState({ 
-        name: talent?.name || '', 
-        title: talent?.title || '', 
-        location: talent?.location || '', 
-        rating: talent?.rating || '4.5', 
-        reviewCount: talent?.reviewCount || '0', 
-        hourlyRate: talent?.hourlyRate || '1000', 
-        imageUrl: talent?.imageUrl || '', 
-        verified: talent?.verified || false, 
-        online: talent?.online || false, 
-        tags: talent?.tags?.join(', ') || '', 
-        availability: talent?.availability || 'Available Now' 
-    }); 
-    
-    const handleChange = (e: any) => { 
-        const { name, value, type, checked } = e.target; 
-        setFormData(p => ({ ...p, [name]: type === 'checkbox' ? checked : value })); 
-    }; 
-    
-    const handleSubmit = (e: React.FormEvent) => { 
-        e.preventDefault(); 
-        const tagList = formData.tags.split(',').map((t: string) => t.trim()).filter(Boolean); 
-        onSubmit({ 
-            ...formData, 
-            tags: tagList, 
-            rating: parseFloat(formData.rating), 
-            reviewCount: parseInt(formData.reviewCount), 
-            hourlyRate: parseInt(formData.hourlyRate) 
-        }); 
-    }; 
-    
-    return ( 
-        <ModalWrapper title={talent ? 'Edit Talent Profile' : 'Add New Talent Profile'} onClose={onClose} onSubmit={handleSubmit}> 
-            <FormInput label="Full Name" name="name" value={formData.name} onChange={handleChange} placeholder="Full Name" required /> 
-            <FormInput label="Professional Title" name="title" value={formData.title} onChange={handleChange} placeholder="e.g., Glamour Model & Host" /> 
-            <FormInput label="Location" name="location" value={formData.location} onChange={handleChange} placeholder="e.g., Sandton, GP" /> 
-            <FormInput label="Profile Image URL" name="imageUrl" value={formData.imageUrl} onChange={handleChange} placeholder="https://..." /> 
-            <div className="grid grid-cols-2 gap-4">
-                <FormInput label="Hourly Rate (ZAR)" name="hourlyRate" type="number" value={formData.hourlyRate} onChange={handleChange} placeholder="1500" /> 
-                <FormInput label="Avg Rating (0-5)" name="rating" type="number" step="0.1" value={formData.rating} onChange={handleChange} placeholder="4.9" /> 
-            </div>
-            <FormInput label="Profile Tags (comma-separated)" name="tags" value={formData.tags} onChange={handleChange} placeholder="e.g., VIP, Hosting, Escort" /> 
-            <FormSelect label="Current Availability" name="availability" value={formData.availability} onChange={handleChange}>
-                <option>Available Now</option>
-                <option>This Week</option>
-                <option>Booked</option>
-            </FormSelect> 
-            <div className="bg-black p-4 rounded-xl border border-zinc-800/50 space-y-4 mt-2"> 
-                <FormCheckbox name="verified" checked={formData.verified} onChange={handleChange} label="ID/Background Verified" /> 
-                <FormCheckbox name="online" checked={formData.online} onChange={handleChange} label="Currently Online (Green Dot)" /> 
-            </div>
-        </ModalWrapper> 
-    ); 
-};
 
 const MongoStatusBadge: React.FC = () => {
   const [status, setStatus] = React.useState<any>(null);

@@ -1201,6 +1201,195 @@ Respond ONLY with valid JSON matching the schema.`;
     res.json({ success: true, count: items.length });
   });
 
+  // -----------------------------------------------------------------------------
+  // BULK OPERATIONS (admin only)
+  // -----------------------------------------------------------------------------
+
+  app.post("/api/media/bulk-create", requireUser, async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
+    const items = Array.isArray(req.body?.items) ? req.body.items : Array.isArray(req.body) ? req.body : [];
+    if (items.length === 0) return res.status(400).json({ error: "No items provided" });
+
+    const created: any[] = [];
+    const errors: any[] = [];
+    for (let i = 0; i < items.length; i++) {
+      try {
+        const item = items[i];
+        const doc: any = {
+          ...item,
+          id: item.id || generateId(),
+          userId: item.userId || user.id,
+          creatorName: item.creatorName || user.name,
+          creatorAvatar: item.creatorAvatar || user.avatarUrl,
+          views: item.views ?? 0,
+          uploadedAt: item.uploadedAt || new Date().toISOString(),
+          likes: item.likes || [],
+          dislikes: item.dislikes || [],
+        };
+        await upsertDoc("media", doc);
+        created.push(doc);
+      } catch (e: any) {
+        errors.push({ index: i, error: e.message });
+      }
+    }
+    await logActivity("import", `Bulk created ${created.length} media items`, user.id);
+    res.json({ success: true, created: created.length, errors, items: created });
+  });
+
+  app.post("/api/media/bulk-update", requireUser, async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
+    const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const updates = req.body?.updates || {};
+    if (ids.length === 0) return res.status(400).json({ error: "No ids provided" });
+
+    delete updates.id;
+    delete updates.userId;
+
+    let updated = 0;
+    for (const id of ids) {
+      const existing: any = await findOneByField("media", "id", id);
+      if (!existing) continue;
+      await upsertDoc("media", { ...existing, ...updates, id });
+      updated++;
+    }
+    await logActivity("update", `Bulk updated ${updated} media items`, user.id);
+    res.json({ success: true, updated });
+  });
+
+  app.post("/api/media/bulk-delete", requireUser, async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
+    const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    if (ids.length === 0) return res.status(400).json({ error: "No ids provided" });
+
+    let deleted = 0;
+    for (const id of ids) {
+      if (await removeDoc("media", id)) deleted++;
+    }
+    await logActivity("delete", `Bulk deleted ${deleted} media items`, user.id);
+    res.json({ success: true, deleted });
+  });
+
+  app.post("/api/users/bulk-update", requireUser, async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
+    const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const updates = req.body?.updates || {};
+    if (ids.length === 0) return res.status(400).json({ error: "No ids provided" });
+    delete updates.id;
+    let updated = 0;
+    for (const id of ids) {
+      const existing: any = await findOneByField("users", "id", id);
+      if (!existing) continue;
+      await upsertDoc("users", { ...existing, ...updates, id });
+      updated++;
+    }
+    await logActivity("update", `Bulk updated ${updated} users`, user.id);
+    res.json({ success: true, updated });
+  });
+
+  app.post("/api/users/bulk-delete", requireUser, async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
+    const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    if (ids.length === 0) return res.status(400).json({ error: "No ids provided" });
+    let deleted = 0;
+    for (const id of ids) {
+      if (id === user.id) continue;
+      if (await removeDoc("users", id)) deleted++;
+    }
+    await logActivity("delete", `Bulk deleted ${deleted} users`, user.id);
+    res.json({ success: true, deleted });
+  });
+
+  app.post("/api/talentProfiles/bulk-update", requireUser, async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
+    const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    const updates = req.body?.updates || {};
+    if (ids.length === 0) return res.status(400).json({ error: "No ids provided" });
+    delete updates.id;
+    let updated = 0;
+    for (const id of ids) {
+      const existing: any = await findOneByField("talentProfiles", "id", id);
+      if (!existing) continue;
+      await upsertDoc("talentProfiles", { ...existing, ...updates, id });
+      updated++;
+    }
+    await logActivity("update", `Bulk updated ${updated} talent profiles`, user.id);
+    res.json({ success: true, updated });
+  });
+
+  app.post("/api/talentProfiles/bulk-delete", requireUser, async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
+    const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    if (ids.length === 0) return res.status(400).json({ error: "No ids provided" });
+    let deleted = 0;
+    for (const id of ids) {
+      if (await removeDoc("talentProfiles", id)) deleted++;
+    }
+    await logActivity("delete", `Bulk deleted ${deleted} talent profiles`, user.id);
+    res.json({ success: true, deleted });
+  });
+
+  // -----------------------------------------------------------------------------
+  // BATCH FILE UPLOAD (multiple files at once)
+  // -----------------------------------------------------------------------------
+
+  app.post("/api/upload/batch", requireUser, upload.array("files", 50), async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
+    const files = (req.files as Express.Multer.File[]) || [];
+    if (files.length === 0) return res.status(400).json({ error: "No files uploaded" });
+
+    const results: any[] = [];
+    for (const file of files) {
+      try {
+        if (bucket) {
+          const readableStream = new Readable();
+          readableStream.push(file.buffer);
+          readableStream.push(null);
+          const uploadStream = bucket.openUploadStream(file.originalname, {
+            contentType: file.mimetype,
+            metadata: { size: file.size, uploadedAt: new Date().toISOString() },
+          });
+          readableStream.pipe(uploadStream);
+          const id: string = await new Promise((resolve, reject) => {
+            uploadStream.on("error", reject);
+            uploadStream.on("finish", () => resolve(uploadStream.id.toString()));
+          });
+          results.push({
+            url: `/api/files/${id}`,
+            filename: file.originalname,
+            size: file.size,
+            mimetype: file.mimetype,
+          });
+        } else {
+          await fs.mkdir(UPLOAD_DIR, { recursive: true });
+          const id = new ObjectId().toString();
+          const filePath = path.join(UPLOAD_DIR, id);
+          await fs.writeFile(filePath, file.buffer);
+          await fs.writeFile(
+            filePath + ".meta.json",
+            JSON.stringify({ originalname: file.originalname, mimetype: file.mimetype, size: file.size }),
+          );
+          results.push({
+            url: `/api/files/${id}`,
+            filename: file.originalname,
+            size: file.size,
+            mimetype: file.mimetype,
+          });
+        }
+      } catch (e: any) {
+        results.push({ error: e.message, filename: file.originalname });
+      }
+    }
+    res.json({ success: true, results });
+  });
+
   // --- Conversations & Notifications ---
 
   app.get("/api/messages/conversation/:userId", requireUser, async (req, res) => {
