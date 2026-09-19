@@ -181,6 +181,11 @@ export const api = {
         body: JSON.stringify({ like: isLike }),
       }),
 
+    recordView: (mediaId: string): Promise<{ views: number; totalViews: number; viewed: boolean }> =>
+      request<{ views: number; totalViews: number; viewed: boolean }>(`/api/media/${mediaId}/view`, {
+        method: 'POST',
+      }),
+
     checkDuplicate: (item: Partial<MediaItem>): Promise<{ duplicate: boolean; match: { id: string; title: string; reason: string } | null }> =>
       request<{ duplicate: boolean; match: { id: string; title: string; reason: string } | null }>('/api/media/check-duplicate', {
         method: 'POST',
