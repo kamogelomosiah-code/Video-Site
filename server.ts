@@ -428,9 +428,12 @@ async function ensureSchema(): Promise<void> {
         required: ["id", "email", "role"],
         properties: {
           id: { bsonType: "string" },
+          name: { bsonType: "string" },
           email: { bsonType: "string" },
+          username: { bsonType: "string" },
           role: { enum: ["CONSUMER", "CREATOR", "PROFESSIONAL", "ADMIN"] },
           verified: { bsonType: "bool" },
+          avatarUrl: { bsonType: "string" },
           subscriptions: { bsonType: "array" },
         },
       },
@@ -441,11 +444,23 @@ async function ensureSchema(): Promise<void> {
         required: ["id", "title", "mediaType"],
         properties: {
           id: { bsonType: "string" },
+          userId: { bsonType: "string" },
           title: { bsonType: "string" },
+          description: { bsonType: "string" },
+          thumbnailUrl: { bsonType: "string" },
+          sourceUrl: { bsonType: "string" },
+          redirectUrl: { bsonType: "string" },
           mediaType: { enum: ["video", "image"] },
+          duration: { bsonType: "string" },
           views: { bsonType: ["int", "long", "double"] },
+          creatorName: { bsonType: "string" },
+          creatorAvatar: { bsonType: "string" },
           tags: { bsonType: "array" },
           isPremium: { bsonType: "bool" },
+          price: { bsonType: ["int", "long", "double"] },
+          likes: { bsonType: "array" },
+          dislikes: { bsonType: "array" },
+          uploadedAt: { bsonType: "string" },
         },
       },
     },
@@ -456,7 +471,102 @@ async function ensureSchema(): Promise<void> {
         properties: {
           token: { bsonType: "string" },
           userId: { bsonType: "string" },
+          createdAt: { bsonType: "date" },
           expiresAt: { bsonType: "date" },
+        },
+      },
+    },
+    talentProfiles: {
+      $jsonSchema: {
+        bsonType: "object",
+        required: ["id", "name"],
+        properties: {
+          id: { bsonType: "string" },
+          name: { bsonType: "string" },
+          title: { bsonType: "string" },
+          location: { bsonType: "string" },
+          rating: { bsonType: ["int", "long", "double"] },
+          hourlyRate: { bsonType: ["int", "long", "double"] },
+          imageUrl: { bsonType: "string" },
+          verified: { bsonType: "bool" },
+          online: { bsonType: "bool" },
+          tags: { bsonType: "array" },
+          availability: { enum: ["AvailableNow", "ThisWeek", "Booked"] },
+        },
+      },
+    },
+    messages: {
+      $jsonSchema: {
+        bsonType: "object",
+        required: ["id", "senderId", "receiverId", "text"],
+        properties: {
+          id: { bsonType: "string" },
+          senderId: { bsonType: "string" },
+          receiverId: { bsonType: "string" },
+          text: { bsonType: "string" },
+          createdAt: { bsonType: "string" },
+        },
+      },
+    },
+    notifications: {
+      $jsonSchema: {
+        bsonType: "object",
+        required: ["id", "userId", "message"],
+        properties: {
+          id: { bsonType: "string" },
+          userId: { bsonType: "string" },
+          type: { enum: ["like", "comment", "system", "booking", "upload"] },
+          message: { bsonType: "string" },
+          read: { bsonType: "bool" },
+          createdAt: { bsonType: "string" },
+        },
+      },
+    },
+    comments: {
+      $jsonSchema: {
+        bsonType: "object",
+        required: ["id", "mediaId", "userId", "text"],
+        properties: {
+          id: { bsonType: "string" },
+          mediaId: { bsonType: "string" },
+          userId: { bsonType: "string" },
+          userName: { bsonType: "string" },
+          userAvatar: { bsonType: "string" },
+          text: { bsonType: "string" },
+          createdAt: { bsonType: "string" },
+          likes: { bsonType: ["int", "long", "double"] },
+        },
+      },
+    },
+    activityLogs: {
+      $jsonSchema: {
+        bsonType: "object",
+        required: ["id", "actionType", "details"],
+        properties: {
+          id: { bsonType: "string" },
+          actionType: { enum: ["signup", "rating", "import", "error", "upload", "login", "logout", "update", "delete", "subscribe", "settings"] },
+          userId: { bsonType: "string" },
+          details: { bsonType: "string" },
+          timestamp: { bsonType: "string" },
+        },
+      },
+    },
+    siteSettings: {
+      $jsonSchema: {
+        bsonType: "object",
+        properties: {
+          _id: { bsonType: "string" },
+          featuredMediaId: { bsonType: ["string", "null"] },
+          siteName: { bsonType: "string" },
+          heroHeadline: { bsonType: "string" },
+          announcementBanner: { bsonType: "string" },
+          maintenanceMode: { bsonType: "bool" },
+          defaultSubPrice: { bsonType: ["int", "long", "double"] },
+          adsEnabled: { bsonType: "bool" },
+          adsenseClientId: { bsonType: "string" },
+          adsenseBannerSlot: { bsonType: "string" },
+          adsenseRectangleSlot: { bsonType: "string" },
+          adsTxtContent: { bsonType: "string" },
         },
       },
     },
@@ -467,6 +577,7 @@ async function ensureSchema(): Promise<void> {
       { key: { id: 1 }, options: { unique: true, name: "uniq_id" } },
       { key: { email: 1 }, options: { unique: true, sparse: true, name: "uniq_email" } },
       { key: { username: 1 }, options: { unique: true, sparse: true, name: "uniq_username" } },
+      { key: { role: 1 }, options: { name: "by_role" } },
     ]},
     { name: "sessions", indexes: [
       { key: { token: 1 }, options: { unique: true, name: "uniq_token" } },
@@ -475,11 +586,14 @@ async function ensureSchema(): Promise<void> {
     { name: "media", indexes: [
       { key: { id: 1 }, options: { unique: true, name: "uniq_id" } },
       { key: { userId: 1, uploadedAt: -1 }, options: { name: "user_recent" } },
+      { key: { mediaType: 1 }, options: { name: "by_type" } },
+      { key: { isPremium: 1 }, options: { name: "by_premium" } },
       { key: { title: "text", description: "text", tags: "text" }, options: { name: "text_search" } },
     ]},
     { name: "talentProfiles", indexes: [
       { key: { id: 1 }, options: { unique: true, name: "uniq_id" } },
       { key: { name: 1 }, options: { name: "by_name" } },
+      { key: { location: 1 }, options: { name: "by_location" } },
     ]},
     { name: "messages", indexes: [
       { key: { id: 1 }, options: { unique: true, name: "uniq_id" } },
@@ -496,6 +610,7 @@ async function ensureSchema(): Promise<void> {
     { name: "activityLogs", indexes: [
       { key: { id: 1 }, options: { unique: true, name: "uniq_id" } },
       { key: { userId: 1, timestamp: -1 }, options: { name: "user_recent" } },
+      { key: { actionType: 1 }, options: { name: "by_action" } },
     ]},
     { name: "siteSettings", indexes: [] },
   ];
@@ -559,7 +674,22 @@ async function ensureSchema(): Promise<void> {
   try {
     await mongo.collection("siteSettings").updateOne(
       { _id: "site" },
-      { $setOnInsert: { _id: "site", featuredMediaId: null } },
+      {
+        $setOnInsert: {
+          _id: "site",
+          featuredMediaId: null,
+          siteName: "Elysian",
+          heroHeadline: "",
+          announcementBanner: "",
+          maintenanceMode: false,
+          defaultSubPrice: 150,
+          adsEnabled: false,
+          adsenseClientId: "",
+          adsenseBannerSlot: "",
+          adsenseRectangleSlot: "",
+          adsTxtContent: "",
+        },
+      },
       { upsert: true }
     );
   } catch (err: any) {
@@ -1438,6 +1568,35 @@ Respond ONLY with valid JSON matching the schema.`;
     const updated = await setSettings(req.body);
     await logActivity("settings", "Site settings updated", user.id);
     res.json(updated);
+  });
+
+  app.get("/ads.txt", async (_req, res) => {
+    try {
+      const settings = await getSettings();
+      const content = settings?.adsTxtContent || "";
+      res.type("text/plain").send(content);
+    } catch {
+      res.type("text/plain").send("");
+    }
+  });
+
+  app.get("/api/publicSettings", async (_req, res) => {
+    try {
+      const s = await getSettings();
+      res.json({
+        siteName: s?.siteName || "Elysian",
+        heroHeadline: s?.heroHeadline || "",
+        announcementBanner: s?.announcementBanner || "",
+        maintenanceMode: !!s?.maintenanceMode,
+        defaultSubPrice: s?.defaultSubPrice ?? 150,
+        adsEnabled: !!s?.adsEnabled,
+        adsenseClientId: s?.adsenseClientId || "",
+        adsenseBannerSlot: s?.adsenseBannerSlot || "",
+        adsenseRectangleSlot: s?.adsenseRectangleSlot || "",
+      });
+    } catch {
+      res.json({});
+    }
   });
 
   // --- Per-entity CRUD routes ---

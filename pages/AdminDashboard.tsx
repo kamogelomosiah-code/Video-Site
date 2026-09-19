@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { User, MediaItem, UserRole, TalentProfile, ActivityLog } from '../types';
 import { api } from '../services/api';
-import { ShieldCheck, Video, Users, PlusCircle, Edit, Trash2, X, Save, Settings, Star, MapPin, UploadCloud, Menu, ChevronDown, Wand2, Database as DatabaseIcon, RefreshCw, Upload, FileJson, Briefcase, Activity, Server } from 'lucide-react';
+import { ShieldCheck, Video, Users, PlusCircle, Edit, Trash2, X, Save, Settings, Star, MapPin, UploadCloud, Menu, ChevronDown, Wand2, Database as DatabaseIcon, RefreshCw, Upload, FileJson, Briefcase, Activity, Server, DollarSign } from 'lucide-react';
 import AdminBulkUpload from '../components/AdminBulkUpload';
 import AdminBulkImport from '../components/AdminBulkImport';
+import AdminAds from '../components/AdminAds';
 import { BulkActionBar, BulkEditModal } from '../components/AdminBulkActions';
 import { CMPSandbox } from '../components/CMPBanner';
 
@@ -15,7 +16,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   // --- State Management ---
   
   // Navigation state
-  const [activeTab, setActiveTab] = useState<'media' | 'users' | 'talent' | 'bulk-upload' | 'settings' | 'import-export' | 'activity' | 'system'>('media');
+  const [activeTab, setActiveTab] = useState<'media' | 'users' | 'talent' | 'bulk-upload' | 'settings' | 'import-export' | 'activity' | 'system' | 'ads'>('media');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // Selection states
@@ -170,6 +171,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const navItems = [
       { id: 'media', label: 'Media Library', icon: Video },
       { id: 'users', label: 'Users', icon: Users },
+      { id: 'ads', label: 'Google Ads', icon: DollarSign },
       { id: 'bulk-upload', label: 'Bulk Upload', icon: Upload },
       { id: 'talent', label: 'Talent', icon: Briefcase },
       { id: 'settings', label: 'Site Settings', icon: Settings },
@@ -289,6 +291,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
             <AdminBulkUpload user={user} onComplete={() => { setActiveTab('media'); fetchData(); }} />
           ) : activeTab === 'import-export' ? (
             <AdminBulkImport onImported={() => { setActiveTab('media'); fetchData(); }} />
+          ) : activeTab === 'ads' ? (
+            <AdminAds
+              settings={siteSettings}
+              onChange={(patch) => setSiteSettings((prev: any) => ({ ...prev, ...patch }))}
+              onSave={saveSettings}
+            />
           ) : activeTab === 'activity' ? (
             <ActivityLogPanel logs={activityLogs} />
           ) : activeTab === 'system' ? (
