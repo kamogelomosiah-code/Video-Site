@@ -18,9 +18,9 @@ const LegalDocsModal: React.FC<LegalDocsModalProps> = ({ isOpen, onClose, defaul
 
   return (
     <div id="legal-docs-modal" className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[calc(100vh-2rem)] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-zinc-900 bg-zinc-900/20">
+        <div className="flex items-center justify-between p-6 border-b border-zinc-900 bg-zinc-900/20 flex-shrink-0">
           <div className="flex items-center space-x-3">
             <FileText className="w-5 h-5 text-yellow-500" />
             <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">Legal Center & Compliance</h2>
@@ -35,7 +35,7 @@ const LegalDocsModal: React.FC<LegalDocsModalProps> = ({ isOpen, onClose, defaul
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex border-b border-zinc-900 px-6 bg-zinc-950">
+        <div className="flex border-b border-zinc-900 px-6 bg-zinc-950 overflow-x-auto scrollbar-none flex-shrink-0">
           <button 
             type="button"
             onClick={() => setActiveTab('privacy')}

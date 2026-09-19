@@ -9,6 +9,7 @@ import VerificationModal from './components/VerificationModal';
 import UserProfile from './pages/UserProfile';
 import AdminDashboard from './pages/AdminDashboard';
 import Auth from './pages/Auth';
+import ResetPassword from './pages/ResetPassword';
 import AgeGate from './components/AgeGate';
 import BottomNav from './components/BottomNav';
 import { generateAvatar } from './services/avatar';
@@ -29,10 +30,22 @@ const GUEST_USER: User = {
 
 const App: React.FC = () => {
   // Persistence Logic for GitHub Pages / Static Hosting Refresh Support
-  const [currentPage, setCurrentPage] = useState<'auth' | 'media' | 'directory' | 'messages' | 'profile' | 'view' | 'admin-dashboard'>(() => {
+  const [currentPage, setCurrentPage] = useState<'auth' | 'media' | 'directory' | 'messages' | 'profile' | 'view' | 'admin-dashboard' | 'reset-password'>(() => {
     return (localStorage.getItem('elysian_current_page') as any) || 'media';
   });
   
+  const [resetToken, setResetToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get('token');
+    const path = window.location.pathname;
+    if (path.includes('reset-password') && t) {
+      setResetToken(t);
+      setCurrentPage('reset-password');
+    }
+  }, []);
+
   const [selectedMediaId, setSelectedMediaId] = useState<string | null>(() => {
     return localStorage.getItem('elysian_media_id');
   });
@@ -153,6 +166,20 @@ const App: React.FC = () => {
     return (
       <div className="h-screen bg-black text-zinc-50 font-poppins">
         <Auth onLogin={handleLogin} onNavigateBack={() => setCurrentPage('media')} />
+      </div>
+    );
+  }
+
+  if (currentPage === 'reset-password' && resetToken) {
+    return (
+      <div className="h-screen bg-black text-zinc-50 font-poppins">
+        <ResetPassword 
+          token={resetToken} 
+          onNavigateLogin={() => {
+            setCurrentPage('auth');
+            window.history.replaceState({}, '', window.location.pathname);
+          }} 
+        />
       </div>
     );
   }

@@ -22,6 +22,10 @@ import { runDbSmokeTest } from "./scripts/db-smoke-test";
 import { runAdminSmokeTest, formatReport } from "./scripts/admin-smoke-test";
 import serverConfig from "./server.config.json" assert { type: "json" };
 
+import { createHash } from "crypto";
+import { sendPasswordResetEmail } from "./services/email";
+import { checkPassword } from "./utils/password";
+
 dotenv.config({ override: true });
 dotenv.config({ path: ".env.local", override: true });
 const ADMIN_KEY = process.env.ADMIN_KEY || "";
@@ -30,6 +34,13 @@ const UPLOAD_DIR = path.join(process.cwd(), "uploads");
 const scryptAsync = promisify(scrypt);
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const DATA_FILE = path.join(process.cwd(), "data.json");
+
+const RESET_TTL_MS = 30 * 60 * 1000;
+const RESET_COOLDOWN_MS = 60 * 1000;
+
+function hashResetToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
 
 // --- Password & Session Helpers ---
 
@@ -441,6 +452,7 @@ async function ensureSchema(): Promise<void> {
           verified: { bsonType: "bool" },
           avatarUrl: { bsonType: "string" },
           subscriptions: { bsonType: "array" },
+          resetEmailLastSentAt: { bsonType: "string" },
         },
       },
     },
@@ -576,6 +588,20 @@ async function ensureSchema(): Promise<void> {
         },
       },
     },
+    passwordResetTokens: {
+      $jsonSchema: {
+        bsonType: "object",
+        required: ["id", "userId", "tokenHash", "expiresAt", "used"],
+        properties: {
+          id: { bsonType: "string" },
+          userId: { bsonType: "string" },
+          tokenHash: { bsonType: "string" },
+          expiresAt: { bsonType: "date" },
+          used: { bsonType: "bool" },
+          createdAt: { bsonType: "date" },
+        },
+      },
+    },
   };
 
   const COLLECTION_SPECS = [
@@ -619,6 +645,12 @@ async function ensureSchema(): Promise<void> {
       { key: { actionType: 1 }, options: { name: "by_action" } },
     ]},
     { name: "siteSettings", indexes: [] },
+    { name: "passwordResetTokens", indexes: [
+      { key: { id: 1 }, options: { unique: true, name: "uniq_id" } },
+      { key: { tokenHash: 1 }, options: { unique: true, name: "uniq_tokenHash" } },
+      { key: { expiresAt: 1 }, options: { expireAfterSeconds: 0, name: "ttl_expiresAt" } },
+      { key: { userId: 1 }, options: { name: "by_user" } },
+    ]},
   ];
 
   let createdC = 0, existingC = 0, createdI = 0, existingI = 0;
@@ -1077,6 +1109,86 @@ async function startServer() {
   app.post("/api/auth/logout", async (req, res) => {
     const token = getToken(req);
     if (token) await deleteSession(token);
+    res.json({ success: true });
+  });
+
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ error: "email required" });
+    const user = await findOneByField("users", "email", email);
+    if (user) {
+      const last = user.resetEmailLastSentAt ? new Date(user.resetEmailLastSentAt).getTime() : 0;
+      if (Date.now() - last < RESET_COOLDOWN_MS) {
+        return res.json({ success: true });
+      }
+      const rawToken = generateToken();
+      const tokenHash = hashResetToken(rawToken);
+      const id = generateId();
+      const expiresAt = new Date(Date.now() + RESET_TTL_MS);
+      if (mongo) {
+        await mongo.collection("passwordResetTokens").deleteMany({ userId: user.id, used: false });
+      } else {
+        const dbInst = await loadJsonDB();
+        dbInst.passwordResetTokens = (dbInst.passwordResetTokens || []).filter((t: any) => !(t.userId === user.id && !t.used));
+        await saveJsonDB();
+      }
+      await upsertDoc("passwordResetTokens", {
+        id,
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+        used: false,
+        createdAt: new Date()
+      });
+      user.resetEmailLastSentAt = new Date().toISOString();
+      await upsertDoc("users", user);
+      const base = process.env.APP_URL || `http://localhost:${PORT}`;
+      const resetUrl = `${base}/reset-password?token=${rawToken}`;
+      await sendPasswordResetEmail(email, resetUrl);
+    }
+    res.json({ success: true });
+  });
+
+  app.get("/api/auth/verify-reset-token", async (req, res) => {
+    const token = String(req.query.token || "");
+    if (!token) return res.status(400).json({ valid: false, error: "token required" });
+    const tokenHash = hashResetToken(token);
+    const row = await findOneByField("passwordResetTokens", "tokenHash", tokenHash);
+    if (!row || row.used || new Date(row.expiresAt).getTime() < Date.now()) {
+      return res.status(400).json({ valid: false, error: "Invalid or expired token" });
+    }
+    const user = await findOneByField("users", "id", row.userId);
+    res.json({ valid: true, email: user ? user.email : null });
+  });
+
+  app.post("/api/auth/reset-password", async (req, res) => {
+    const { token, password } = req.body || {};
+    if (!token || !password) return res.status(400).json({ error: "token and password required" });
+    const tokenHash = hashResetToken(token);
+    const row = await findOneByField("passwordResetTokens", "tokenHash", tokenHash);
+    if (!row || row.used || new Date(row.expiresAt).getTime() < Date.now()) {
+      return res.status(400).json({ error: "Invalid or expired token" });
+    }
+    const user = await findOneByField("users", "id", row.userId);
+    if (!user) return res.status(400).json({ error: "Invalid token" });
+    const pwCheck = checkPassword(password, { email: user.email, name: user.name, username: user.username });
+    if (!pwCheck.ok) {
+      return res.status(400).json({ error: "Password does not meet security requirements.", passwordFailures: pwCheck.failures });
+    }
+    user.passwordHash = await hashPassword(password);
+    user.mustChangePassword = false;
+    await upsertDoc("users", user);
+    row.used = true;
+    row.usedAt = new Date().toISOString();
+    await upsertDoc("passwordResetTokens", row);
+    if (mongo) {
+      await mongo.collection("sessions").deleteMany({ userId: user.id });
+    } else {
+      const dbInst = await loadJsonDB();
+      dbInst.sessions = (dbInst.sessions || []).filter((s: any) => s.userId !== user.id);
+      await saveJsonDB();
+    }
+    await logActivity("update", `Password reset for user ${user.id}`, user.id);
     res.json({ success: true });
   });
 

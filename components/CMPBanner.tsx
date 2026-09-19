@@ -176,8 +176,8 @@ const CMPBanner: React.FC<CMPBannerProps> = ({ onOpenLegalDocs }) => {
       {/* Preferences Management Overlay Dialog */}
       {showManageModal && (
         <div className="fixed inset-0 z-[95] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-lg p-6 space-y-6 shadow-2xl overflow-hidden relative">
-            <div className="flex items-center justify-between">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-lg p-6 flex flex-col max-h-[calc(100vh-2rem)] shadow-2xl overflow-hidden relative">
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-900 flex-shrink-0">
               <div className="flex items-center space-x-2">
                 <Settings className="w-5 h-5 text-yellow-500" />
                 <h3 className="font-bold text-white text-base">Cookie & Advertising Choices</h3>
@@ -190,54 +190,56 @@ const CMPBanner: React.FC<CMPBannerProps> = ({ onOpenLegalDocs }) => {
               </button>
             </div>
 
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Deactivating tracking toggles will stop the initialization of non-essential cookies. Strictly necessary settings cannot be deactivated.
-            </p>
+            <div className="flex-1 overflow-y-auto space-y-4 py-4 pr-1 scrollbar-thin min-h-0">
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Deactivating tracking toggles will stop the initialization of non-essential cookies. Strictly necessary settings cannot be deactivated.
+              </p>
 
-            <div className="space-y-3">
-              {/* Option 1 */}
-              <div className="flex items-center justify-between p-3.5 bg-zinc-900/50 rounded-xl border border-zinc-900">
-                <div>
-                  <span className="font-bold text-white text-xs block mb-0.5">Strictly Necessary (Required)</span>
-                  <p className="text-zinc-400 text-[10px]">Stores age-verification parameters and sign-in credentials.</p>
+              <div className="space-y-3">
+                {/* Option 1 */}
+                <div className="flex items-center justify-between p-3.5 bg-zinc-900/50 rounded-xl border border-zinc-900">
+                  <div>
+                    <span className="font-bold text-white text-xs block mb-0.5">Strictly Necessary (Required)</span>
+                    <p className="text-zinc-400 text-[10px]">Stores age-verification parameters and sign-in credentials.</p>
+                  </div>
+                  <span className="text-[10px] bg-yellow-500/15 text-yellow-400 font-bold px-2 py-1 rounded border border-yellow-500/20 uppercase tracking-widest">
+                    Active
+                  </span>
                 </div>
-                <span className="text-[10px] bg-yellow-500/15 text-yellow-400 font-bold px-2 py-1 rounded border border-yellow-500/20 uppercase tracking-widest">
-                  Active
-                </span>
-              </div>
 
-              {/* Option 2 */}
-              <div className="flex items-center justify-between p-3.5 bg-zinc-900/50 rounded-xl border border-zinc-900">
-                <div>
-                  <span className="font-bold text-white text-xs block mb-0.5">Analytics & Stats</span>
-                  <p className="text-zinc-400 text-[10px]">Measures latency metrics and load balancers.</p>
+                {/* Option 2 */}
+                <div className="flex items-center justify-between p-3.5 bg-zinc-900/50 rounded-xl border border-zinc-900">
+                  <div>
+                    <span className="font-bold text-white text-xs block mb-0.5">Analytics & Stats</span>
+                    <p className="text-zinc-400 text-[10px]">Measures latency metrics and load balancers.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPrefs(p => ({ ...p, analytics: !p.analytics }))}
+                    className={`w-11 h-6 rounded-full transition-colors relative flex items-center p-0.5 flex-shrink-0 ${prefs.analytics ? 'bg-yellow-500' : 'bg-zinc-800'}`}
+                  >
+                    <span className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform ${prefs.analytics ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setPrefs(p => ({ ...p, analytics: !p.analytics }))}
-                  className={`w-11 h-6 rounded-full transition-colors relative flex items-center p-0.5 ${prefs.analytics ? 'bg-yellow-500' : 'bg-zinc-800'}`}
-                >
-                  <span className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform ${prefs.analytics ? 'translate-x-5' : 'translate-x-0'}`} />
-                </button>
-              </div>
 
-              {/* Option 3 */}
-              <div className="flex items-center justify-between p-3.5 bg-zinc-900/50 rounded-xl border border-zinc-900">
-                <div>
-                  <span className="font-bold text-white text-xs block mb-0.5">Personalized Ads (AdSense)</span>
-                  <p className="text-zinc-400 text-[10px]">Google AdSense targeting script for EEA/UK audience optimization.</p>
+                {/* Option 3 */}
+                <div className="flex items-center justify-between p-3.5 bg-zinc-900/50 rounded-xl border border-zinc-900">
+                  <div>
+                    <span className="font-bold text-white text-xs block mb-0.5">Personalized Ads (AdSense)</span>
+                    <p className="text-zinc-400 text-[10px]">Google AdSense targeting script for EEA/UK audience optimization.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPrefs(p => ({ ...p, adsense: !p.adsense }))}
+                    className={`w-11 h-6 rounded-full transition-colors relative flex items-center p-0.5 flex-shrink-0 ${prefs.adsense ? 'bg-yellow-500' : 'bg-zinc-800'}`}
+                  >
+                    <span className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform ${prefs.adsense ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setPrefs(p => ({ ...p, adsense: !p.adsense }))}
-                  className={`w-11 h-6 rounded-full transition-colors relative flex items-center p-0.5 ${prefs.adsense ? 'bg-yellow-500' : 'bg-zinc-800'}`}
-                >
-                  <span className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform ${prefs.adsense ? 'translate-x-5' : 'translate-x-0'}`} />
-                </button>
               </div>
             </div>
 
-            <div className="flex space-x-2 pt-2">
+            <div className="flex space-x-2 pt-4 border-t border-zinc-900 flex-shrink-0">
               <button
                 onClick={() => setShowManageModal(false)}
                 className="bg-zinc-900 border border-zinc-800 text-zinc-400 py-2.5 px-4 rounded-lg text-xs font-semibold hover:text-white transition-all flex-1"

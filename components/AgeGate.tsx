@@ -23,12 +23,12 @@ const AgeGate: React.FC = () => {
   if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl">
-      <div className="max-w-lg w-full mx-4 relative overflow-hidden">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-xl p-4 overflow-y-auto">
+      <div className="max-w-lg w-full relative overflow-hidden my-auto flex flex-col max-h-full">
         {/* Glow Effect */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-yellow-500/20 rounded-full blur-[100px]"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-yellow-500/20 rounded-full blur-[100px] pointer-events-none"></div>
         
-        <div className="relative z-10 bg-[#111] border border-zinc-800 rounded-3xl p-8 md:p-12 text-center shadow-2xl">
+        <div className="relative z-10 bg-[#111] border border-zinc-800 rounded-3xl p-6 sm:p-8 md:p-12 text-center shadow-2xl overflow-y-auto max-h-[calc(100vh-2rem)] scrollbar-thin">
           <div className="w-20 h-20 bg-black rounded-full border-2 border-yellow-500 flex items-center justify-center mx-auto mb-8 shadow-[0_0_20px_rgba(220,38,38,0.3)]">
             <span className="text-3xl font-bold text-yellow-400 font-poppins">18+</span>
           </div>

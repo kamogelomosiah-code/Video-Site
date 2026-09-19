@@ -19,7 +19,7 @@ const VerificationModal: React.FC<VerificationModalProps> = ({ onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="bg-[#111] border border-zinc-800 w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-fade-in-up">
+      <div className="bg-[#111] border border-zinc-800 w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-fade-in-up flex flex-col max-h-[calc(100vh-2rem)]">
         <div className="p-6 border-b border-zinc-800 flex justify-between items-center bg-black/50">
           <h3 className="text-xl font-bold text-white flex items-center">
             <ShieldCheck className="w-6 h-6 mr-2 text-yellow-500" />
@@ -30,7 +30,7 @@ const VerificationModal: React.FC<VerificationModalProps> = ({ onClose }) => {
           </button>
         </div>
 
-        <div className="p-8">
+        <div className="p-8 overflow-y-auto flex-1 scrollbar-thin">
             {step === 1 ? (
                 <>
                     <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 mb-6 flex items-start">

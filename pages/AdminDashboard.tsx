@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, MediaItem, UserRole, TalentProfile, ActivityLog } from '../types';
 import { api } from '../services/api';
-import { ShieldCheck, Video, Users, PlusCircle, Edit, Trash2, X, Save, Settings, Star, MapPin, UploadCloud, Menu, ChevronDown, Database as DatabaseIcon, RefreshCw, Upload, FileJson, Briefcase, Activity, Server, DollarSign, Play, Eye, ExternalLink, Film, Copy, Check, Lock, Unlock, Clock, Tag } from 'lucide-react';
+import { ShieldCheck, Video, Users, PlusCircle, Edit, Trash2, X, Save, Settings, Star, MapPin, UploadCloud, Menu, ChevronDown, Database as DatabaseIcon, RefreshCw, Upload, FileJson, Briefcase, Activity, Server, DollarSign, Play, Eye, ExternalLink, HardDrive, Film, Copy, Check, Lock, Unlock, Clock, Tag } from 'lucide-react';
 import AdminBulkUpload from '../components/AdminBulkUpload';
 import AdminBulkImport from '../components/AdminBulkImport';
 import AdminAds from '../components/AdminAds';
@@ -924,9 +924,9 @@ const VideoPreviewModal: React.FC<VideoPreviewModalProps> = ({ media, onClose, o
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
-      <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl my-6 animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl my-auto animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[calc(100vh-2rem)]">
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/80 bg-black/40">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/80 bg-black/40 flex-shrink-0">
           <div className="flex items-center space-x-3 min-w-0 pr-4">
             <div className="p-2 rounded-lg bg-yellow-500/10 text-yellow-400">
               <Film className="w-5 h-5" />
@@ -952,7 +952,7 @@ const VideoPreviewModal: React.FC<VideoPreviewModalProps> = ({ media, onClose, o
         </div>
 
         {/* Video Player / Media Content */}
-        <div className="relative bg-black aspect-video w-full flex items-center justify-center overflow-hidden border-b border-zinc-800">
+        <div className="relative bg-black aspect-video w-full flex items-center justify-center overflow-hidden border-b border-zinc-800 flex-shrink-0 max-h-[35vh] sm:max-h-[45vh] md:max-h-[55vh]">
           {media.mediaType === 'image' ? (
             <img 
               src={media.sourceUrl || media.thumbnailUrl} 
@@ -997,7 +997,7 @@ const VideoPreviewModal: React.FC<VideoPreviewModalProps> = ({ media, onClose, o
         </div>
 
         {/* Metadata Details & Creator Bar */}
-        <div className="p-6 space-y-5">
+        <div className="p-6 space-y-5 overflow-y-auto flex-1 scrollbar-thin min-h-0">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-zinc-800/80">
             <div className="flex items-center gap-3">
               {media.creatorAvatar ? (
@@ -1085,7 +1085,7 @@ const VideoPreviewModal: React.FC<VideoPreviewModalProps> = ({ media, onClose, o
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-4 bg-black/60 border-t border-zinc-800 flex justify-end">
+        <div className="px-6 py-4 bg-black/60 border-t border-zinc-800 flex justify-end flex-shrink-0">
           <button
             type="button"
             onClick={onClose}
@@ -1154,8 +1154,8 @@ const MediaFormModal: React.FC<MediaFormModalProps> = ({ media, onClose, onSubmi
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl my-8">
-        <div className="flex items-center justify-between p-6 border-b border-zinc-800">
+      <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl my-auto flex flex-col max-h-[calc(100vh-2rem)]">
+        <div className="flex items-center justify-between p-6 border-b border-zinc-800 flex-shrink-0 bg-black/20">
           <h3 className="text-xl font-bold text-white flex items-center gap-2">
             <Film className="w-5 h-5 text-yellow-500" />
             <span>{media ? 'Edit Video / Media' : 'Add New Video / Media'}</span>
@@ -1169,21 +1169,22 @@ const MediaFormModal: React.FC<MediaFormModalProps> = ({ media, onClose, onSubmi
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label htmlFor="mediaTitle" className="block mb-2 text-sm font-semibold text-zinc-300">
-              Title *
-            </label>
-            <input
-              id="mediaTitle"
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Exclusive Video Title"
-              required
-              className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
-            />
-          </div>
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="p-6 space-y-4 overflow-y-auto flex-1 scrollbar-thin min-h-0">
+            <div>
+              <label htmlFor="mediaTitle" className="block mb-2 text-sm font-semibold text-zinc-300">
+                Title *
+              </label>
+              <input
+                id="mediaTitle"
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Exclusive Video Title"
+                required
+                className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+              />
+            </div>
 
           <div>
             <label htmlFor="sourceUrl" className="block mb-2 text-sm font-semibold text-zinc-300">Source URL (Video Link / Stream URL) *</label>
@@ -1330,8 +1331,9 @@ const MediaFormModal: React.FC<MediaFormModalProps> = ({ media, onClose, onSubmi
               </div>
             )}
           </div>
+          </div>
 
-          <div className="flex justify-end space-x-3 pt-6 border-t border-zinc-800">
+          <div className="flex justify-end space-x-3 p-6 border-t border-zinc-800 bg-black/40 flex-shrink-0">
             <button
               type="button"
               onClick={onClose}
@@ -1389,8 +1391,8 @@ const UserFormModal: React.FC<UserFormModalProps> = ({ user, onClose, onSubmit }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl my-8">
-        <div className="flex items-center justify-between p-6 border-b border-zinc-800">
+      <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl my-auto flex flex-col max-h-[calc(100vh-2rem)]">
+        <div className="flex items-center justify-between p-6 border-b border-zinc-800 flex-shrink-0 bg-black/20">
           <h3 className="text-xl font-bold text-white">
             {user ? 'Edit User' : 'Add New User'}
           </h3>
@@ -1403,11 +1405,12 @@ const UserFormModal: React.FC<UserFormModalProps> = ({ user, onClose, onSubmit }
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label htmlFor="userName" className="block mb-2 text-sm font-semibold text-zinc-300">
-              Full Name
-            </label>
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="p-6 space-y-4 overflow-y-auto flex-1 scrollbar-thin min-h-0">
+            <div>
+              <label htmlFor="userName" className="block mb-2 text-sm font-semibold text-zinc-300">
+                Full Name
+              </label>
             <input
               id="userName"
               type="text"
@@ -1490,8 +1493,9 @@ const UserFormModal: React.FC<UserFormModalProps> = ({ user, onClose, onSubmit }
               Verified User Badge
             </label>
           </div>
+          </div>
 
-          <div className="flex justify-end space-x-3 pt-6 border-t border-zinc-800">
+          <div className="flex justify-end space-x-3 p-6 border-t border-zinc-800 bg-black/40 flex-shrink-0">
             <button
               type="button"
               onClick={onClose}
@@ -1560,8 +1564,8 @@ const TalentFormModal: React.FC<TalentFormModalProps> = ({ talent, onClose, onSu
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl my-8">
-        <div className="flex items-center justify-between p-6 border-b border-zinc-800">
+      <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl my-auto flex flex-col max-h-[calc(100vh-2rem)]">
+        <div className="flex items-center justify-between p-6 border-b border-zinc-800 flex-shrink-0 bg-black/20">
           <h3 className="text-xl font-bold text-white">
             {talent ? 'Edit Talent Profile' : 'Add New Talent Profile'}
           </h3>
@@ -1574,8 +1578,9 @@ const TalentFormModal: React.FC<TalentFormModalProps> = ({ talent, onClose, onSu
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="p-6 space-y-4 overflow-y-auto flex-1 scrollbar-thin min-h-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label htmlFor="talentName" className="block mb-2 text-sm font-semibold text-zinc-300">
                 Talent Name
@@ -1710,8 +1715,9 @@ const TalentFormModal: React.FC<TalentFormModalProps> = ({ talent, onClose, onSu
               </label>
             </div>
           </div>
+          </div>
 
-          <div className="flex justify-end space-x-3 pt-6 border-t border-zinc-800">
+          <div className="flex justify-end space-x-3 p-6 border-t border-zinc-800 bg-black/40 flex-shrink-0">
             <button
               type="button"
               onClick={onClose}

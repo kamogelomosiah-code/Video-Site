@@ -52,14 +52,18 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigateBack }) => {
     }
   };
 
-  const handleForgotPasswordSubmit = (e: React.FormEvent) => {
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
-    setTimeout(() => {
-        setIsLoading(false);
-        setResetEmailSent(true);
-    }, 1000);
+    try {
+      await api.auth.forgotPassword(email);
+      setResetEmailSent(true);
+    } catch (err: any) {
+      setError(err.message || 'Could not send reset email');
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   const resetForm = (mode: 'login' | 'register' | 'forgotPassword') => {
@@ -190,7 +194,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigateBack }) => {
      <div className="text-center">
         <div className="w-16 h-16 bg-green-600/10 border border-green-600/20 rounded-full flex items-center justify-center mx-auto mb-6"><MailCheck className="w-8 h-8 text-green-500" /></div>
         <h2 className="text-2xl font-bold text-white">Check your inbox</h2>
-        <p className="mt-2 text-zinc-400">If an account with that email exists, we've sent a password reset link. Please check your spam folder if you don't see it.</p>
+        <p className="mt-2 text-zinc-400">If an account with that email exists, we have sent a password reset link. The link expires in 30 minutes. Check your spam folder if you do not see it.</p>
         <button onClick={() => resetForm('login')} className="mt-8 w-full bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 rounded-xl transition-colors">Back to Sign In</button>
     </div>
   );

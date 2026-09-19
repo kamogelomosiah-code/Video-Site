@@ -122,8 +122,8 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="bg-[#111] border border-zinc-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
-        <div className="p-5 border-b border-zinc-800 flex justify-between items-center">
+      <div className="bg-[#111] border border-zinc-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100vh-2rem)]">
+        <div className="p-5 border-b border-zinc-800 flex justify-between items-center bg-black/50">
           <div>
             <h3 className="text-lg font-bold text-white">Bulk Edit</h3>
             <p className="text-xs text-zinc-500">Applying to {count} item{count === 1 ? '' : 's'}</p>
@@ -133,7 +133,7 @@ export const BulkEditModal: React.FC<BulkEditModalProps> = ({
           </button>
         </div>
 
-        <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+        <div className="p-6 space-y-4 overflow-y-auto flex-1 scrollbar-thin">
           <p className="text-xs text-zinc-400 mb-2">Check the fields you want to update in bulk:</p>
           {fieldsForEntity.map((field) => {
             const isEnabled = field.key in fields;

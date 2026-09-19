@@ -103,6 +103,21 @@ export const api = {
       session.updateUser(res.user);
       return res.user;
     },
+
+    forgotPassword: (email: string): Promise<{ success: boolean }> =>
+      request<{ success: boolean }>('/api/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      }),
+
+    verifyResetToken: (token: string): Promise<{ valid: boolean; email?: string; error?: string }> =>
+      request<{ valid: boolean; email?: string; error?: string }>(`/api/auth/verify-reset-token?token=${encodeURIComponent(token)}`),
+
+    resetPassword: (token: string, password: string): Promise<{ success: boolean }> =>
+      request<{ success: boolean }>('/api/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ token, password }),
+      }),
   },
 
   media: {
