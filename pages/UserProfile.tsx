@@ -473,7 +473,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ userId, currentUser, onMediaC
                   <p className="text-zinc-400 max-w-md text-center">This user has not uploaded any content yet.</p>
                 </div>
               )
-            )}
+            )
           )}
         </div>
       </div>
