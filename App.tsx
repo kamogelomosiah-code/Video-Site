@@ -15,6 +15,8 @@ import BottomNav from './components/BottomNav';
 import { generateAvatar } from './services/avatar';
 import { api } from './services/api';
 
+import { useScrollTop } from './hooks/useScrollTop';
+
 import MessagesPage from './pages/Messages';
 import Footer from './components/Footer';
 import CMPBanner from './components/CMPBanner';
@@ -36,6 +38,8 @@ const App: React.FC = () => {
     if (pageParam) return pageParam as any;
     return (localStorage.getItem('elysian_current_page') as any) || 'media';
   });
+  
+  useScrollTop(currentPage);
   
   const [resetToken, setResetToken] = useState<string | null>(null);
 

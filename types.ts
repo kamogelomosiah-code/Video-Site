@@ -19,6 +19,7 @@ export interface User {
   acceptsChat: boolean;
   chatEnabled: boolean;
   hasChosenChatPreference: boolean;
+  subscriberCount?: number; // computed, read-only
 }
 
 export interface Comment {
@@ -130,4 +131,21 @@ export interface FilterState {
   location: string;
   verifiedOnly: boolean;
   priceRange: [number, number];
+}
+
+export interface AdUnit {
+  id: string;
+  name: string;
+  slot: string; // e.g. "home_top", "home_mid", "media_sidebar", "profile_footer", "talent_mid"
+  type: 'adsense' | 'image' | 'html';
+  enabled: boolean;
+  adsenseClientId?: string;
+  adsenseSlotId?: string;
+  imageUrl?: string;
+  htmlSnippet?: string;
+  weight: number;
+  impressions: number;
+  clicks: number;
+  createdAt: string;
+  updatedAt: string;
 }
