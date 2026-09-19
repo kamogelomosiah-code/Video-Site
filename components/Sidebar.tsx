@@ -24,8 +24,8 @@ const Sidebar: React.FC<SidebarProps> = ({ user, activePage, onNavigate, onAdmin
       <div>
         <div className="h-16 flex items-center justify-between px-6 border-b border-zinc-900">
           <div className="flex items-center">
-            <div className="w-8 h-8 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-lg flex items-center justify-center shadow-lg shadow-yellow-500/20 overflow-hidden">
-              <img src="/peach-svgrepo-com.svg" alt="Elysian logo" className="w-6 h-6 object-contain" />
+            <div className="w-8 h-8 flex items-center justify-center overflow-hidden">
+              <img src="/peach-svgrepo-com.svg" alt="Elysian logo" className="w-7 h-7 object-contain" />
             </div>
             <span className="ml-3 font-bold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400">
               Elysian
