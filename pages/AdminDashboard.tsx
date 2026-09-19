@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, MediaItem, UserRole, TalentProfile, ActivityLog } from '../types';
 import { api } from '../services/api';
-import { ShieldCheck, Video, Users, PlusCircle, Edit, Trash2, X, Save, Settings, Star, MapPin, UploadCloud, Menu, ChevronDown, Wand2, Database as DatabaseIcon, RefreshCw, Upload, FileJson, Briefcase, Activity, Server, DollarSign } from 'lucide-react';
+import { ShieldCheck, Video, Users, PlusCircle, Edit, Trash2, X, Save, Settings, Star, MapPin, UploadCloud, Menu, ChevronDown, Database as DatabaseIcon, RefreshCw, Upload, FileJson, Briefcase, Activity, Server, DollarSign } from 'lucide-react';
 import AdminBulkUpload from '../components/AdminBulkUpload';
 import AdminBulkImport from '../components/AdminBulkImport';
 import AdminAds from '../components/AdminAds';
@@ -726,7 +726,6 @@ const SystemStatusPanel: React.FC = () => {
         <InfoRow label="Ping Time" value={status.mongo?.pingMs != null ? `${status.mongo.pingMs}ms` : "—"} />
         <InfoRow label="Storage Mode" value={status.storage?.mode || "—"} />
         <InfoRow label="GridFS Uplink" value={status.storage?.gridfs ? "Active" : "Inactive"} />
-        <InfoRow label="Gemini AI Integration" value={status.gemini?.enabled ? `Enabled (${status.gemini.model})` : "Disabled"} />
         <InfoRow label="Admin Access Guard" value={status.adminGuard ? "Strict PIN Verification" : "PIN-free Development Mode"} />
         <InfoRow label="System Uptime" value={`${status.uptime} seconds`} />
       </div>

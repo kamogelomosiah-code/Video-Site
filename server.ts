@@ -16,7 +16,6 @@ import { MongoClient, GridFSBucket, ObjectId, Db } from "mongodb";
 import multer from "multer";
 import { Readable } from "stream";
 import dotenv from "dotenv";
-import { GoogleGenAI, Type } from "@google/genai";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { runDbSmokeTest } from "./scripts/db-smoke-test";
@@ -24,9 +23,6 @@ import serverConfig from "./server.config.json" assert { type: "json" };
 
 dotenv.config({ override: true });
 dotenv.config({ path: ".env.local", override: true });
-
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 const ADMIN_KEY = process.env.ADMIN_KEY || "";
 const UPLOAD_DIR = path.join(process.cwd(), "uploads");
 
@@ -758,8 +754,6 @@ async function startServer() {
       status: "ok",
       mode: mongo ? "mongodb" : "disk",
       mongo: !!mongo,
-      gemini: !!GEMINI_API_KEY,
-      model: GEMINI_MODEL,
       adminGuard: !!ADMIN_KEY,
       uptime: Math.round(process.uptime()),
       timestamp: new Date().toISOString(),
@@ -778,7 +772,6 @@ async function startServer() {
       },
       schema: { ready: false, collections: [] as any[] },
       storage: { mode: mongo ? "mongodb" : "disk", gridfs: !!bucket },
-      gemini: { enabled: !!GEMINI_API_KEY, model: GEMINI_MODEL },
       adminGuard: !!ADMIN_KEY,
       uptime: Math.round(process.uptime()),
     };
@@ -859,122 +852,7 @@ async function startServer() {
     }
   });
 
-  // Metadata scraping with Gemini
-  app.post("/api/scrape-metadata", requireAdmin, async (req: any, res: any) => {
-    const { url } = req.body;
-    if (!url || typeof url !== "string") {
-      return res.status(400).json({ error: "URL is required" });
-    }
-    if (!isSafeUrl(url)) {
-      return res.status(400).json({ error: "URL is not allowed (SSRF guard)" });
-    }
 
-    console.log(`[Scrape] Attempting to scrape external link: ${url}`);
-    let scrapedTitle = "";
-    let scrapedDesc = "";
-    let scrapedKeywords = "";
-    let bodyText = "";
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      const response = await fetch(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.5",
-        },
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-
-      const html = await response.text();
-
-      const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-      if (titleMatch) scrapedTitle = titleMatch[1].trim();
-
-      const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i);
-      if (ogTitleMatch) scrapedTitle = ogTitleMatch[1].trim();
-
-      const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i);
-      if (descMatch) scrapedDesc = descMatch[1].trim();
-
-      const ogDescMatch = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i);
-      if (ogDescMatch) scrapedDesc = ogDescMatch[1].trim();
-
-      const keywordsMatch = html.match(/<meta[^>]*name=["']keywords["'][^>]*content=["']([^"']+)["']/i);
-      if (keywordsMatch) scrapedKeywords = keywordsMatch[1].trim();
-
-      bodyText = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-                     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-                     .replace(/<[^>]+>/g, ' ')
-                     .replace(/\s+/g, ' ')
-                     .trim()
-                     .slice(0, 3000);
-    } catch (scrapeErr: any) {
-      console.warn(`[Scrape] Direct fetch failed for ${url}:`, scrapeErr.message);
-    }
-
-    if (!GEMINI_API_KEY) {
-      return res.json({
-        title: scrapedTitle || "Imported Video Media",
-        description: scrapedDesc || "Content imported from link.",
-        tags: scrapedKeywords ? scrapedKeywords.split(',').map(s => s.trim()) : ["Exclusive", "HD"],
-        category: "exclusive"
-      });
-    }
-
-    try {
-      const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-      const prompt = `Analyze this webpage metadata and context from an adult media / entertainment video site:
-URL: ${url}
-Extracted Title: ${scrapedTitle}
-Extracted Description: ${scrapedDesc}
-Extracted Keywords: ${scrapedKeywords}
-Page Content Snippet: ${bodyText}
-
-Please synthesize:
-1. A clean, captivating title for this video item (standard title casing, free of site domain watermarks, spam suffixes, or repetitive SEO tags).
-2. A high-quality, tasteful 1-3 sentence description summarizing the video theme, aesthetics, and performers if evident.
-3. 3-6 accurate, lowercase tags characterizing the category, theme, quality, or vibe (e.g. "cinematic", "exclusive", "glamour", "bts", "4k").
-4. One best matching category from this list: "exclusive", "bts", "4k", "vr".
-
-Respond ONLY with valid JSON matching the schema.`;
-
-      const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              description: { type: Type.STRING },
-              tags: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING }
-              },
-              category: { type: Type.STRING }
-            },
-            required: ["title", "description", "tags", "category"]
-          }
-        }
-      });
-
-      const parsed = JSON.parse(response.text || "{}");
-      res.json(parsed);
-    } catch (aiErr: any) {
-      console.error("[Gemini] Enrichment failed:", aiErr);
-      res.json({
-        title: scrapedTitle || "Imported Video Media",
-        description: scrapedDesc || "Imported video content.",
-        tags: scrapedKeywords ? scrapedKeywords.split(',').map(s => s.trim()) : ["Exclusive", "Featured"],
-        category: "exclusive"
-      });
-    }
-  });
 
   // File upload: pipes to GridFS when Mongo is connected, else saves to ./uploads
   app.post("/api/upload", requireAdmin, upload.single("file"), async (req, res) => {
@@ -1777,7 +1655,6 @@ Respond ONLY with valid JSON matching the schema.`;
   app.listen(PORT, "0.0.0.0", () => {
     const mongoStatus = mongo ? "MongoDB" : "disk (data.json)";
     const uploads    = mongo ? "GridFS" : UPLOAD_DIR;
-    const gemini     = GEMINI_API_KEY ? GEMINI_MODEL : "disabled (no key)";
     const guard      = ADMIN_KEY ? "on" : "off (dev)";
 
     console.log("");
@@ -1787,7 +1664,6 @@ Respond ONLY with valid JSON matching the schema.`;
     console.log(`  ├─ Mongo host      ${mongo ? safeHostFromUri(process.env.MONGODB_URI || "") : "—"}`);
     console.log(`  ├─ Schema          ${mongo ? "verified" : "n/a"}`);
     console.log(`  ├─ Uploads         ${uploads}`);
-    console.log(`  ├─ Gemini          ${gemini}`);
     console.log(`  ├─ Admin key guard ${guard}`);
     console.log(`  └─ Admin login     username: admin · PIN required`);
     console.log("");

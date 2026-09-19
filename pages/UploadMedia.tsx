@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, X, FileVideo, Wand2, DollarSign, Save } from 'lucide-react';
+import { Upload, X, FileVideo, DollarSign, Save } from 'lucide-react';
 import { User } from '../types';
 import { api } from '../services/api';
 
@@ -13,7 +13,6 @@ const UploadMedia: React.FC<UploadMediaProps> = ({ user, onCancel, onUploadCompl
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   
   const [uploadMode, setUploadMode] = useState<'file' | 'link'>('file');
@@ -67,32 +66,7 @@ const UploadMedia: React.FC<UploadMediaProps> = ({ user, onCancel, onUploadCompl
     }, 100);
   };
 
-  const generateAITags = async () => {
-    if (uploadMode === 'link' && !externalUrl) {
-      alert("Please enter a Target Link (External URL) first so the AI can scrape and skim the data from there!");
-      return;
-    }
-    
-    setIsProcessing(true);
-    try {
-      const targetUrl = uploadMode === 'link' ? externalUrl : `https://elysian-media-placeholder.com/search?title=${encodeURIComponent(title || "exclusive video")}`;
-      const result = await api.media.scrapeMetadata(targetUrl);
-      if (result.title) {
-        setTitle(result.title);
-      }
-      if (result.description) {
-        setDescription(result.description);
-      }
-      if (result.tags && result.tags.length > 0) {
-        setTags(result.tags);
-      }
-    } catch (e) {
-      console.error("AI auto-fill failed:", e);
-      alert("AI Generation failed. Please try again.");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+
 
   const handlePublish = async () => {
     if (uploadMode === 'file' && !file) return;
@@ -274,18 +248,7 @@ const UploadMedia: React.FC<UploadMediaProps> = ({ user, onCancel, onUploadCompl
         {/* Right Column: Metadata */}
         <div className="lg:col-span-2 space-y-6">
           <div className="space-y-4 bg-[#111]/50 p-6 rounded-2xl border border-zinc-800">
-             <div className="flex items-center justify-between">
-               <h3 className="text-lg font-semibold text-white">Content Details</h3>
-               <button 
-                type="button"
-                onClick={generateAITags}
-                disabled={isProcessing}
-                className="text-xs flex items-center text-yellow-300 hover:text-red-300 transition-colors disabled:opacity-50"
-               >
-                 <Wand2 className="w-3 h-3 mr-1" />
-                 {isProcessing ? 'Generating...' : 'Auto-fill with AI'}
-               </button>
-             </div>
+             <h3 className="text-lg font-semibold text-white">Content Details</h3>
 
              <div className="space-y-2">
                <label className="text-sm text-zinc-400">Title</label>

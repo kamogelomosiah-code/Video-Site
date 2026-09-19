@@ -106,12 +106,6 @@ export const api = {
   },
 
   media: {
-    scrapeMetadata: (url: string): Promise<{ title: string; description: string; tags: string[]; category: string }> =>
-      request('/api/scrape-metadata', {
-        method: 'POST',
-        body: JSON.stringify({ url }),
-      }),
-
     uploadFile: async (file: File): Promise<string> => {
       const fd = new FormData();
       fd.append('file', file);
