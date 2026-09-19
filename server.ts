@@ -527,8 +527,10 @@ async function ensureSchema(): Promise<void> {
             });
             console.log(`[schema]   ~ validator updated: ${spec.name}`);
           } catch (e: any) {
-            if (e.code !== 26) {
-              console.warn(`[schema]   ! validator update failed for ${spec.name}: ${e.message}`);
+            if (e.message?.includes("not allowed") || e.code === 13) {
+              console.log(`[schema]   ~ validator update skipped for ${spec.name}: database user lacks collMod privileges`);
+            } else if (e.code !== 26) {
+              console.log(`[schema]   ~ validator update note for ${spec.name}: ${e.message}`);
             }
           }
         }

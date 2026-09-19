@@ -45,10 +45,16 @@ const Navbar: React.FC<NavbarProps> = ({
                              err?.message?.includes("Authentication required") ||
                              err?.message?.includes("Unauthorized");
         
+        const isNetworkErr = err?.message?.includes("Failed to fetch") || 
+                             err?.name === "TypeError" || 
+                             err?.message?.includes("NetworkError");
+        
         setNotifications([]);
         if (isSessionErr) {
           console.warn('Session expired or invalid. Logging out.');
           onLogout();
+        } else if (isNetworkErr) {
+          console.log('Notification fetch skipped (transient server/network offline)');
         } else {
           console.error('Failed to fetch notifications:', err);
         }
