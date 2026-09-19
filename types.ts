@@ -44,6 +44,8 @@ export interface MediaItem {
   uploadedAt: string;
   price?: number;
   redirectUrl?: string;
+  playbackMode?: 'external' | 'local';
+  externalUrl?: string;
   likes?: string[]; // Array of user IDs
   dislikes?: string[]; // Array of user IDs
 }

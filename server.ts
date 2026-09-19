@@ -19,6 +19,7 @@ import dotenv from "dotenv";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { runDbSmokeTest } from "./scripts/db-smoke-test";
+import { runAdminSmokeTest, formatReport } from "./scripts/admin-smoke-test";
 import serverConfig from "./server.config.json" assert { type: "json" };
 
 dotenv.config({ override: true });
@@ -328,6 +329,15 @@ function isPlainObject(v: unknown): v is Record<string, any> {
 }
 
 let mongoClient: MongoClient | null = null;
+
+async function disconnectMongoIfAny(): Promise<void> {
+  if (mongoClient) {
+    try { await mongoClient.close(); } catch {}
+  }
+  mongoClient = null;
+  mongo = null;
+  bucket = null;
+}
 
 function normalizeMongoUri(raw: string | undefined): string | null {
   if (!raw) return null;
@@ -811,6 +821,24 @@ async function startServer() {
     }
 
     res.json(status);
+  });
+
+  app.get("/api/admin/smoke-test", requireAdmin, async (_req, res) => {
+    try {
+      const report = await runAdminSmokeTest({
+        db: mongo,
+        listCollection,
+        findOneByField,
+        upsertDoc,
+        removeDoc,
+        getSettings,
+        setSettings,
+        generateId,
+      });
+      res.json(report);
+    } catch (e: any) {
+      res.status(500).json({ error: e.message || "Smoke test failed to run" });
+    }
   });
 
   // Legacy global data blob endpoint (fans out to per-entity collections)
@@ -1670,4 +1698,25 @@ async function startServer() {
   });
 }
 
-startServer();
+if (process.argv.includes("--smoke-test")) {
+  (async () => {
+    await loadJsonDB();
+    const connected = await connectToMongo();
+    if (connected) await ensureSchema();
+    const report = await runAdminSmokeTest({
+      db: mongo,
+      listCollection,
+      findOneByField,
+      upsertDoc,
+      removeDoc,
+      getSettings,
+      setSettings,
+      generateId,
+    });
+    console.log(formatReport(report));
+    await disconnectMongoIfAny();
+    process.exit(report.ok ? 0 : 1);
+  })();
+} else {
+  startServer();
+}

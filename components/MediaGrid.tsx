@@ -10,10 +10,12 @@ interface MediaGridProps {
 
 const MediaGrid: React.FC<MediaGridProps> = ({ items, onItemClick, showPremiumBadge = false }) => {
   const handleClick = (item: MediaItem) => {
-    if (item.sourceUrl && (item.sourceUrl.startsWith('http://') || item.sourceUrl.startsWith('https://'))) {
-      window.open(item.sourceUrl, '_blank');
-    } else if (item.redirectUrl) {
-      window.open(item.redirectUrl, '_blank');
+    const mode = item.playbackMode
+      ?? (item.redirectUrl || (item.sourceUrl && /^https?:\/\//.test(item.sourceUrl) && !item.sourceUrl.includes('/api/files/'))
+        ? 'external'
+        : 'local');
+    if (mode === 'external') {
+      window.open(item.externalUrl || item.redirectUrl || item.sourceUrl, '_blank');
     } else {
       onItemClick(item.id);
     }

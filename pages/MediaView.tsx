@@ -148,8 +148,12 @@ const MediaView: React.FC<MediaViewProps> = ({ mediaId, currentUser, onBack, onR
                             type="button"
                             aria-label="Play content"
                             onClick={() => {
-                                if (media.sourceUrl && (media.sourceUrl.startsWith('http://') || media.sourceUrl.startsWith('https://'))) {
-                                    window.open(media.sourceUrl, '_blank');
+                                const mode = media.playbackMode
+                                  ?? (media.redirectUrl || (media.sourceUrl && /^https?:\/\//.test(media.sourceUrl) && !media.sourceUrl.includes('/api/files/'))
+                                    ? 'external'
+                                    : 'local');
+                                if (mode === 'external') {
+                                    window.open(media.externalUrl || media.redirectUrl || media.sourceUrl, '_blank');
                                 } else {
                                     setIsPlaying(true);
                                 }

@@ -1,39 +1,52 @@
-import React, { useRef, useState } from 'react';
-import { UploadCloud, DownloadCloud, FileJson, Copy, Check, AlertCircle, CheckCircle, Trash2, Video, Image as ImageIcon } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import {
+  UploadCloud, DownloadCloud, FileJson, Copy, Check,
+  AlertCircle, CheckCircle, Trash2, Video, Image as ImageIcon,
+  Loader2, RefreshCw, ExternalLink, HardDrive,
+} from 'lucide-react';
 import { api } from '../services/api';
-import { MediaItem } from '../types';
 
 type MergeMode = 'create' | 'upsert' | 'skip-existing';
 
-const SAMPLE_VIDEO = [
+interface PreviewRow {
+  index: number;
+  ok: boolean;
+  issues: string[];
+  preview: any;
+}
+
+const SAMPLE = [
   {
-    "title": "Elysian Premium Video",
-    "description": "Exquisite high definition content shot in 4K.",
-    "videoUrl": "https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-lights-41580-large.mp4",
-    "imageUrl": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&q=80&w=800",
+    "title": "Midnight in Paris Vol 1",
+    "description": "Cinematic 4K feature with top talent.",
+    "externalUrl": "https://example.com/watch/midnight-paris-vol1",
+    "imageUrl": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800",
+    "mediaType": "video",
+    "playbackMode": "external",
+    "duration": "24:18",
     "creatorName": "Elysian Originals",
-    "creatorAvatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200",
     "tags": ["exclusive", "4k", "cinematic"],
     "isPremium": true,
-    "price": 199,
-    "duration": "18:45"
+    "price": 199
   },
   {
-    "title": "Behind The Scenes Volume 3",
-    "description": "Exclusive backstage access.",
-    "videoUrl": "https://assets.mixkit.co/videos/preview/mixkit-dj-playing-music-in-a-nightclub-41578-large.mp4",
-    "imageUrl": "https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&q=80&w=800",
+    "title": "Behind The Scenes — Studio 03",
+    "description": "Direct local video.",
+    "videoUrl": "/api/files/000000000000000000000000",
+    "imageUrl": "https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=800",
+    "mediaType": "video",
+    "playbackMode": "local",
+    "duration": "07:12",
     "creatorName": "Studio Nine",
     "tags": ["bts", "documentary"],
-    "isPremium": false,
-    "duration": "07:12"
+    "isPremium": false
   }
 ];
 
 const AdminBulkImport: React.FC<{ onImported?: () => void }> = ({ onImported }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [raw, setRaw] = useState('');
-  const [parsed, setParsed] = useState<any[] | null>(null);
+  const [rows, setRows] = useState<PreviewRow[]>([]);
   const [parseError, setParseError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [statusType, setStatusType] = useState<'success' | 'error'>('success');
@@ -41,82 +54,121 @@ const AdminBulkImport: React.FC<{ onImported?: () => void }> = ({ onImported }) 
   const [mergeMode, setMergeMode] = useState<MergeMode>('upsert');
   const [copied, setCopied] = useState(false);
 
-  const normalize = (item: any, i: number) => ({
-    __index: i,
-    id: item.id || `imported-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
-    title: item.title || 'Untitled',
-    description: item.description || '',
-    thumbnailUrl: item.imageUrl || item.thumbnailUrl || '',
-    sourceUrl: item.videoUrl || item.sourceUrl || item.redirectUrl || '',
-    redirectUrl: item.redirectUrl || item.videoUrl || undefined,
-    mediaType: item.mediaType || 'video',
-    duration: item.duration || '00:00',
-    views: Number(item.views) || 0,
-    creatorName: item.creatorName || 'Imported Content',
-    creatorAvatar: item.creatorAvatar || '',
-    tags: Array.isArray(item.tags) ? item.tags : [],
-    isPremium: Boolean(item.isPremium),
-    price: item.price != null ? Number(item.price) : undefined,
-    uploadedAt: item.uploadedAt || new Date().toISOString(),
-    likes: item.likes || [],
-    dislikes: item.dislikes || [],
-  });
+  const detectMode = (item: any): 'external' | 'local' => {
+    if (item.playbackMode === 'external' || item.playbackMode === 'local') return item.playbackMode;
+    const url = item.externalUrl || item.redirectUrl || item.videoUrl || item.sourceUrl || '';
+    if (!url) return 'local';
+    if (url.startsWith('/api/files/')) return 'local';
+    if (/^https?:\/\//.test(url)) return 'external';
+    return 'local';
+  };
 
-  const handleParse = (text: string) => {
+  const normalize = (item: any, i: number) => {
+    const mode = detectMode(item);
+    const external = item.externalUrl || item.redirectUrl || (mode === 'external' ? (item.videoUrl || item.sourceUrl) : undefined);
+    const local = item.sourceUrl && item.sourceUrl.startsWith('/api/files/') ? item.sourceUrl
+      : (item.videoUrl && item.videoUrl.startsWith('/api/files/') ? item.videoUrl : '');
+
+    return {
+      id: item.id || `imported-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+      title: item.title || 'Untitled',
+      description: item.description || '',
+      thumbnailUrl: item.imageUrl || item.thumbnailUrl || '',
+      sourceUrl: mode === 'external' ? (external || '') : (local || item.sourceUrl || ''),
+      externalUrl: external,
+      playbackMode: mode,
+      mediaType: item.mediaType || 'video',
+      duration: item.duration || '00:00',
+      views: Number(item.views) || 0,
+      creatorName: item.creatorName || 'Imported Content',
+      creatorAvatar: item.creatorAvatar || '',
+      tags: Array.isArray(item.tags) ? item.tags : [],
+      isPremium: Boolean(item.isPremium),
+      price: item.price != null ? Number(item.price) : undefined,
+      uploadedAt: item.uploadedAt || new Date().toISOString(),
+      likes: item.likes || [],
+      dislikes: item.dislikes || [],
+    };
+  };
+
+  const parseAndValidate = async (text: string) => {
     setRaw(text);
     setParseError(null);
-    setParsed(null);
+    setRows([]);
+    setStatus(null);
     if (!text.trim()) return;
+    let arr: any[];
     try {
-      const data = JSON.parse(text);
-      const arr = Array.isArray(data) ? data : [data];
-      const normalized = arr.map(normalize);
-      const missing = normalized.find((n) => !n.title || !n.sourceUrl);
-      if (missing) {
-        setParseError('Each item must include "title" and "videoUrl" (or "sourceUrl").');
-        return;
-      }
-      setParsed(normalized);
+      const parsed = JSON.parse(text);
+      arr = Array.isArray(parsed) ? parsed : [parsed];
     } catch (e: any) {
       setParseError(e.message);
+      return;
+    }
+    const normalized = arr.map(normalize);
+    try {
+      const res = await api.media.bulkValidate(normalized);
+      setRows(res.results.map(r => ({ index: r.index, ok: r.ok, issues: r.issues, preview: r.preview })));
+    } catch (e: any) {
+      // Fall back to client-side validation if endpoint missing
+      setRows(normalized.map((n, i) => {
+        const issues: string[] = [];
+        if (!n.title) issues.push('title is required');
+        if (!n.sourceUrl && !n.externalUrl) issues.push('sourceUrl or externalUrl is required');
+        return { index: i, ok: issues.length === 0, issues, preview: n };
+      }));
     }
   };
 
   const handleFile = (file: File) => {
     const reader = new FileReader();
-    reader.onload = (ev) => handleParse(String(ev.target?.result || ''));
+    reader.onload = ev => parseAndValidate(String(ev.target?.result || ''));
     reader.readAsText(file);
   };
 
-  const handleDownload = async () => {
+  const handleExport = async () => {
     try {
       const all = await api.media.getAll();
-      const mediaData = all.filter((m) => m.mediaType === 'video');
-      const blob = new Blob([JSON.stringify(mediaData, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify(all, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `videos-export-${Date.now()}.json`;
-      link.click();
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `elysian-media-${Date.now()}.json`;
+      a.click();
       URL.revokeObjectURL(url);
     } catch {
-      setStatus('Failed to export videos');
+      setStatus('Export failed');
       setStatusType('error');
     }
   };
 
   const handleImport = async () => {
-    if (!parsed || parsed.length === 0) return;
+    const validRows = rows.filter(r => r.ok);
+    if (validRows.length === 0) return;
     setLoading(true);
     setStatus(null);
     try {
-      const cleanItems = parsed.map(({ __index, ...rest }) => rest) as Partial<MediaItem>[];
-      const res = await api.media.bulkCreate(cleanItems);
-      setStatus(`Successfully imported ${res.created || cleanItems.length} items!`);
+      const items = validRows.map(r => r.preview);
+      if (mergeMode === 'skip-existing') {
+        const existing = await api.media.getAll();
+        const ids = new Set(existing.map((m: any) => m.id));
+        const filtered = items.filter(i => !ids.has(i.id));
+        if (filtered.length === 0) {
+          setStatus(`Nothing to import — all ${items.length} item(s) already exist`);
+          setStatusType('success');
+          setLoading(false);
+          return;
+        }
+        const res = await api.media.bulkCreate(filtered);
+        setStatus(`Imported ${res.created} new, skipped ${items.length - filtered.length}`);
+      } else {
+        const res = await api.media.bulkCreate(items);
+        setStatus(`Imported ${res.created} item(s)${res.errors?.length ? ` (${res.errors.length} errors)` : ''}`);
+      }
       setStatusType('success');
-      setParsed(null);
+      setRows([]);
       setRaw('');
-      if (onImported) onImported();
+      onImported?.();
     } catch (e: any) {
       setStatus(e.message || 'Import failed');
       setStatusType('error');
@@ -126,56 +178,58 @@ const AdminBulkImport: React.FC<{ onImported?: () => void }> = ({ onImported }) 
   };
 
   const copySample = () => {
-    navigator.clipboard.writeText(JSON.stringify(SAMPLE_VIDEO, null, 2));
+    navigator.clipboard.writeText(JSON.stringify(SAMPLE, null, 2));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const videoCount = parsed?.filter((p) => p.mediaType === 'video').length || 0;
-  const imageCount = parsed?.filter((p) => p.mediaType === 'image').length || 0;
-  const premiumCount = parsed?.filter((p) => p.isPremium).length || 0;
+  const stats = useMemo(() => {
+    const valid = rows.filter(r => r.ok).length;
+    return {
+      total: rows.length,
+      valid,
+      invalid: rows.length - valid,
+      external: rows.filter(r => r.preview?.playbackMode === 'external').length,
+      local: rows.filter(r => r.preview?.playbackMode === 'local').length,
+      premium: rows.filter(r => r.preview?.isPremium).length,
+    };
+  }, [rows]);
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      {/* Export Section */}
+    <div className="space-y-6 max-w-6xl">
       <div className="bg-[#111]/50 border border-zinc-800 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h4 className="font-bold text-white">Backup Your Video Library</h4>
-          <p className="text-xs text-zinc-500 mt-1">Download all video records as a JSON snapshot for external backup or migration.</p>
+          <h4 className="font-bold text-white">Backup your library</h4>
+          <p className="text-xs text-zinc-500 mt-1">Download all media records as a JSON snapshot.</p>
         </div>
-        <button
-          type="button"
-          onClick={handleDownload}
-          className="flex items-center bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-full font-semibold text-sm transition-all self-start sm:self-auto"
-        >
-          <DownloadCloud className="w-4 h-4 mr-2" /> Export Videos
+        <button type="button" onClick={handleExport} className="flex items-center bg-zinc-800 hover:bg-zinc-700 text-white px-5 py-2.5 rounded-full font-semibold text-sm cursor-pointer">
+          <DownloadCloud className="w-4 h-4 mr-2" /> Export JSON
         </button>
       </div>
 
-      {/* Import Section */}
       <div className="bg-[#111]/40 border border-zinc-800/80 rounded-2xl p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h3 className="text-lg font-bold text-white">Bulk JSON Video Import</h3>
-            <p className="text-xs text-zinc-400 mt-1">Paste a JSON array of video objects or upload a `.json` file.</p>
+            <h3 className="text-lg font-bold text-white">Bulk JSON Media Import</h3>
+            <p className="text-xs text-zinc-400 mt-1">Paste a JSON array of media items or upload a `.json` file.</p>
           </div>
           <button
             type="button"
             onClick={copySample}
-            className="flex items-center text-xs bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300 px-4 py-2 rounded-xl transition-all self-start sm:self-auto"
+            className="flex items-center text-xs bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300 px-4 py-2 rounded-xl transition-all self-start sm:self-auto cursor-pointer"
           >
             {copied ? <Check className="w-3.5 h-3.5 mr-1.5 text-green-400" /> : <Copy className="w-3.5 h-3.5 mr-1.5 text-yellow-500" />}
             <span>{copied ? 'Copied Sample!' : 'Copy Sample JSON'}</span>
           </button>
         </div>
 
-        {/* Upload drop / text area */}
+        {/* Text Area & Drag-and-Drop */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-2 space-y-4">
             <textarea
               rows={8}
               value={raw}
-              onChange={(e) => handleParse(e.target.value)}
+              onChange={(e) => parseAndValidate(e.target.value)}
               placeholder="Paste JSON array here..."
               className="w-full bg-black border border-zinc-800 rounded-xl p-4 text-white font-mono text-xs focus:outline-none focus:border-yellow-500"
             />
@@ -190,7 +244,7 @@ const AdminBulkImport: React.FC<{ onImported?: () => void }> = ({ onImported }) 
           <div className="space-y-4 flex flex-col justify-between">
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-zinc-800 hover:border-yellow-500/50 rounded-xl p-6 text-center cursor-pointer flex flex-col items-center justify-center bg-black/40 transition-all flex-1"
+              className="border-2 border-dashed border-zinc-800 hover:border-yellow-500/50 rounded-xl p-6 text-center cursor-pointer flex flex-col items-center justify-center bg-black/40 transition-all flex-1 min-h-[140px]"
             >
               <input
                 type="file"
@@ -219,24 +273,31 @@ const AdminBulkImport: React.FC<{ onImported?: () => void }> = ({ onImported }) 
           </div>
         </div>
 
-        {/* Parsed Preview & Summary */}
-        {parsed && (
+        {/* Stats Summary Panel */}
+        {rows.length > 0 && (
+          <div className="flex flex-wrap gap-3 pt-2">
+            <Chip label="Total" value={stats.total} tone="neutral" />
+            <Chip label="Valid" value={stats.valid} tone="good" />
+            {stats.invalid > 0 && <Chip label="Invalid" value={stats.invalid} tone="bad" />}
+            <Chip label="External Mode" value={stats.external} tone="neutral" />
+            <Chip label="Local Playback" value={stats.local} tone="neutral" />
+            <Chip label="Premium" value={stats.premium} tone="warn" />
+          </div>
+        )}
+
+        {/* Validate Panel & Import Trigger */}
+        {rows.length > 0 && (
           <div className="space-y-4 pt-4 border-t border-zinc-800">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center space-x-3 text-xs">
-                <Stat label="Total" value={parsed.length} />
-                <Stat label="Videos" value={videoCount} icon={<Video className="w-3.5 h-3.5 text-yellow-500" />} />
-                <Stat label="Images" value={imageCount} icon={<ImageIcon className="w-3.5 h-3.5 text-blue-400" />} />
-                <Stat label="Premium" value={premiumCount} />
-              </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-zinc-500">Ready to import: {stats.valid} valid records.</span>
               <button
                 type="button"
                 onClick={handleImport}
-                disabled={loading || parsed.length === 0}
-                className="bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-bold px-6 py-2.5 rounded-xl text-sm transition-colors flex items-center space-x-2 disabled:opacity-50"
+                disabled={loading || stats.valid === 0}
+                className="bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-bold px-6 py-2.5 rounded-xl text-sm transition-colors flex items-center space-x-2 disabled:opacity-50 cursor-pointer"
               >
-                <UploadCloud className="w-4 h-4" />
-                <span>{loading ? 'Importing...' : `Import ${parsed.length} Items`}</span>
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UploadCloud className="w-4 h-4" />}
+                <span>{loading ? 'Importing...' : `Import ${stats.valid} Items`}</span>
               </button>
             </div>
 
@@ -247,28 +308,44 @@ const AdminBulkImport: React.FC<{ onImported?: () => void }> = ({ onImported }) 
                   <tr>
                     <th className="px-4 py-3">Thumb</th>
                     <th className="px-4 py-3">Title</th>
+                    <th className="px-4 py-3">Playback</th>
                     <th className="px-4 py-3">Creator</th>
                     <th className="px-4 py-3">Type</th>
-                    <th className="px-4 py-3">Duration</th>
                     <th className="px-4 py-3">Premium</th>
+                    <th className="px-4 py-3">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {parsed.map((item, idx) => (
-                    <tr key={idx} className="border-b border-zinc-900 hover:bg-zinc-900/40">
+                  {rows.map((row) => (
+                    <tr key={row.index} className={`border-b border-zinc-900 hover:bg-zinc-900/40 ${!row.ok ? 'bg-red-500/5' : ''}`}>
                       <td className="px-4 py-2">
-                        {item.thumbnailUrl ? (
-                          <img src={item.thumbnailUrl} alt="" className="w-12 h-8 object-cover rounded" />
+                        {row.preview.thumbnailUrl ? (
+                          <img src={row.preview.thumbnailUrl} alt="" className="w-12 h-8 object-cover rounded" />
                         ) : (
                           <div className="w-12 h-8 bg-zinc-800 rounded flex items-center justify-center text-[10px]">No img</div>
                         )}
                       </td>
-                      <td className="px-4 py-2 font-medium text-white max-w-[180px] truncate">{item.title}</td>
-                      <td className="px-4 py-2">{item.creatorName}</td>
-                      <td className="px-4 py-2 uppercase">{item.mediaType}</td>
-                      <td className="px-4 py-2 font-mono">{item.duration}</td>
+                      <td className="px-4 py-2 font-medium text-white max-w-[180px] truncate">{row.preview.title}</td>
                       <td className="px-4 py-2">
-                        {item.isPremium ? <span className="text-amber-500 font-semibold">Yes</span> : <span className="text-zinc-500">No</span>}
+                        {row.preview.playbackMode === 'external' ? (
+                          <span className="inline-flex items-center text-amber-400"><ExternalLink className="w-3 h-3 mr-1" /> External</span>
+                        ) : (
+                          <span className="inline-flex items-center text-blue-400"><HardDrive className="w-3 h-3 mr-1" /> Local</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2">{row.preview.creatorName}</td>
+                      <td className="px-4 py-2 uppercase">{row.preview.mediaType}</td>
+                      <td className="px-4 py-2">
+                        {row.preview.isPremium ? <span className="text-amber-500 font-semibold">Yes (R{row.preview.price || 0})</span> : <span className="text-zinc-500">No</span>}
+                      </td>
+                      <td className="px-4 py-2">
+                        {row.ok ? (
+                          <span className="text-green-400 font-semibold flex items-center"><CheckCircle className="w-3 h-3 mr-1" /> OK</span>
+                        ) : (
+                          <span className="text-red-400 font-semibold flex items-center cursor-help" title={row.issues.join(', ')}>
+                            <AlertCircle className="w-3 h-3 mr-1" /> Error
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -289,12 +366,19 @@ const AdminBulkImport: React.FC<{ onImported?: () => void }> = ({ onImported }) 
   );
 };
 
-const Stat: React.FC<{ label: string; value: number; icon?: React.ReactNode }> = ({ label, value, icon }) => (
-  <div className="flex items-center space-x-2 bg-zinc-900/60 border border-zinc-800 rounded-lg px-3 py-1.5">
-    {icon}
-    <span className="text-zinc-500">{label}:</span>
-    <span className="text-white font-bold">{value}</span>
-  </div>
-);
+const Chip: React.FC<{ label: string; value: number; tone: 'neutral' | 'good' | 'bad' | 'warn' }> = ({ label, value, tone }) => {
+  const tones = {
+    neutral: 'bg-zinc-900/60 border-zinc-800 text-zinc-400',
+    good: 'bg-green-950/40 border-green-800/40 text-green-300',
+    bad: 'bg-red-950/40 border-red-800/40 text-red-300',
+    warn: 'bg-amber-950/40 border-amber-800/40 text-amber-300',
+  };
+  return (
+    <div className={`flex items-center space-x-2 border rounded-lg px-3 py-1.5 ${tones[tone]}`}>
+      <span>{label}</span>
+      <span className="text-white font-bold">{value}</span>
+    </div>
+  );
+};
 
 export default AdminBulkImport;

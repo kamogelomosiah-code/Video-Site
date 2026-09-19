@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, MediaItem, UserRole, TalentProfile, ActivityLog } from '../types';
 import { api } from '../services/api';
-import { ShieldCheck, Video, Users, PlusCircle, Edit, Trash2, X, Save, Settings, Star, MapPin, UploadCloud, Menu, ChevronDown, Database as DatabaseIcon, RefreshCw, Upload, FileJson, Briefcase, Activity, Server, DollarSign } from 'lucide-react';
+import { ShieldCheck, Video, Users, PlusCircle, Edit, Trash2, X, Save, Settings, Star, MapPin, UploadCloud, Menu, ChevronDown, Database as DatabaseIcon, RefreshCw, Upload, FileJson, Briefcase, Activity, Server, DollarSign, Play, Eye, ExternalLink, Film, Copy, Check, Lock, Unlock, Clock, Tag } from 'lucide-react';
 import AdminBulkUpload from '../components/AdminBulkUpload';
 import AdminBulkImport from '../components/AdminBulkImport';
 import AdminAds from '../components/AdminAds';
@@ -41,6 +41,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [isTalentModalOpen, setIsTalentModalOpen] = useState(false);
+  const [previewMedia, setPreviewMedia] = useState<MediaItem | null>(null);
   
   // Currently editing item states (null if creating new)
   const [editingMedia, setEditingMedia] = useState<MediaItem | null>(null);
@@ -306,6 +307,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
               {activeTab === 'media' && (
                 <MediaTable 
                   media={filteredData} 
+                  onView={(item: MediaItem) => setPreviewMedia(item)}
                   onEdit={openMediaModal} 
                   onDelete={handleDeleteMedia} 
                   selected={selectedMedia}
@@ -398,6 +400,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
         }}
       />
 
+      {previewMedia && (
+        <VideoPreviewModal 
+          media={previewMedia} 
+          onClose={() => setPreviewMedia(null)} 
+          onEdit={(item) => {
+            setPreviewMedia(null);
+            openMediaModal(item);
+          }}
+          onDelete={(id) => {
+            setPreviewMedia(null);
+            handleDeleteMedia(id);
+          }}
+        />
+      )}
+
       {isMediaModalOpen && <MediaFormModal media={editingMedia} onClose={closeMediaModal} onSubmit={handleMediaSubmit} currentUser={user}/>}
       {isUserModalOpen && <UserFormModal user={editingUser} onClose={closeUserModal} onSubmit={handleUserSubmit} />}
       {isTalentModalOpen && <TalentFormModal talent={editingTalent} onClose={closeTalentModal} onSubmit={handleTalentSubmit} />}
@@ -407,51 +424,133 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
 
 // --- Sub-components for Tables & Panels ---
 
-const MediaTable = ({ media, onEdit, onDelete, selected, onToggleSelect, onToggleAll }: any) => {
+const MediaTable = ({ media, onView, onEdit, onDelete, selected, onToggleSelect, onToggleAll }: any) => {
   const allSelected = media.length > 0 && media.every((m: MediaItem) => selected.has(m.id));
   return (
     <div>
-      <table className="w-full text-sm text-left text-zinc-400 hidden md:table">
-        <thead className="text-xs text-zinc-400 uppercase bg-[#111]/50">
-          <tr>
-            <th className="px-4 py-3 w-10">
-              <input type="checkbox" checked={allSelected} onChange={(e) => onToggleAll(e.target.checked)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
-            </th>
-            <th className="px-6 py-3">Thumbnail</th>
-            <th className="px-6 py-3">Title</th>
-            <th className="px-6 py-3">Creator</th>
-            <th className="px-6 py-3">Status</th>
-            <th className="px-6 py-3 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {media.map((item: MediaItem) => (
-            <tr key={item.id} className={`border-b border-zinc-800 hover:bg-[#111] ${selected.has(item.id) ? 'bg-yellow-500/5' : ''}`}>
-              <td className="px-4 py-4">
-                <input type="checkbox" checked={selected.has(item.id)} onChange={() => onToggleSelect(item.id)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
-              </td>
-              <td className="px-6 py-4">
-                {item.thumbnailUrl ? (
-                  <img src={item.thumbnailUrl} alt={item.title} className="w-20 h-12 object-cover rounded-md" />
-                ) : (
-                  <div className="w-20 h-12 bg-zinc-800 rounded-md flex items-center justify-center text-zinc-500 text-xs">No media</div>
-                )}
-              </td>
-              <td className="px-6 py-4 font-medium text-white max-w-[200px] truncate">{item.title}</td>
-              <td className="px-6 py-4">{item.creatorName}</td>
-              <td className="px-6 py-4">
-                {item.isPremium
-                  ? <span className="px-2 py-1 text-xs font-medium rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20">Premium</span>
-                  : <span className="px-2 py-1 text-xs font-medium rounded-full bg-zinc-700 text-zinc-300">Free</span>}
-              </td>
-              <td className="px-6 py-4 text-right space-x-2">
-                <button type="button" onClick={() => onEdit(item)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
-                <button type="button" onClick={() => onDelete(item.id)} className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
-              </td>
+      {/* Desktop View */}
+      <div className="hidden md:block overflow-x-auto bg-[#111]/30 rounded-2xl border border-zinc-800/80">
+        <table className="w-full text-sm text-left text-zinc-400">
+          <thead className="text-xs text-zinc-400 uppercase bg-black/40 border-b border-zinc-800/80">
+            <tr>
+              <th className="px-4 py-3 w-10">
+                <input type="checkbox" checked={allSelected} onChange={(e) => onToggleAll(e.target.checked)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
+              </th>
+              <th className="px-6 py-3">Thumbnail</th>
+              <th className="px-6 py-3">Title & Type</th>
+              <th className="px-6 py-3">Mode</th>
+              <th className="px-6 py-3">Creator</th>
+              <th className="px-6 py-3">Price / Tier</th>
+              <th className="px-6 py-3 text-right">Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-zinc-900/60">
+            {media.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-6 py-12 text-center text-zinc-500">
+                  <Film className="w-10 h-10 mx-auto mb-2 opacity-30 text-zinc-400" />
+                  No media items found. Click &quot;Add Media&quot; to begin.
+                </td>
+              </tr>
+            ) : (
+              media.map((item: MediaItem) => (
+                <tr key={item.id} className={`hover:bg-zinc-900/40 transition-colors ${selected.has(item.id) ? 'bg-yellow-500/5' : ''}`}>
+                  <td className="px-4 py-4">
+                    <input type="checkbox" checked={selected.has(item.id)} onChange={() => onToggleSelect(item.id)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div onClick={() => onView?.(item)} className="relative w-16 h-10 bg-zinc-950 rounded border border-zinc-800/80 overflow-hidden cursor-pointer flex-shrink-0 group">
+                      {item.thumbnailUrl ? (
+                        <img src={item.thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-zinc-700 text-xs">No preview</div>
+                      )}
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Play className="w-4 h-4 text-white fill-current" />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="font-semibold text-white max-w-[200px] truncate">{item.title}</div>
+                    <div className="text-[10px] text-zinc-500 uppercase font-bold mt-1 tracking-wider">{item.mediaType}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {item.playbackMode === 'external' ? (
+                      <span className="inline-flex items-center text-amber-400 text-xs font-medium"><ExternalLink className="w-3.5 h-3.5 mr-1" /> External Link</span>
+                    ) : (
+                      <span className="inline-flex items-center text-blue-400 text-xs font-medium"><HardDrive className="w-3.5 h-3.5 mr-1" /> Local Stream</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-xs font-medium text-zinc-300">{item.creatorName}</td>
+                  <td className="px-6 py-4">
+                    {item.isPremium ? (
+                      <span className="text-xs font-bold text-amber-400 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30">R {item.price}</span>
+                    ) : (
+                      <span className="text-xs font-medium text-emerald-400 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">Free</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button type="button" onClick={() => onView?.(item)} className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded transition-colors"><Eye className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => onEdit(item)} className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded transition-colors"><Edit className="w-4 h-4" /></button>
+                      <button type="button" onClick={() => onDelete(item.id)} className="p-1.5 hover:bg-red-500/10 text-zinc-400 hover:text-red-400 rounded transition-colors"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile-First Layout */}
+      <div className="md:hidden divide-y divide-zinc-800/60 bg-[#111]/30 rounded-2xl border border-zinc-800/80 overflow-hidden">
+        {media.length === 0 ? (
+          <div className="p-8 text-center text-zinc-500">
+            <Film className="w-10 h-10 mx-auto mb-2 opacity-30 text-zinc-400" />
+            No media found.
+          </div>
+        ) : (
+          media.map((item: MediaItem) => (
+            <div key={item.id} className={`p-4 space-y-3 transition-colors ${selected.has(item.id) ? 'bg-yellow-500/5' : ''}`}>
+              <div className="flex items-start gap-3">
+                <input type="checkbox" checked={selected.has(item.id)} onChange={() => onToggleSelect(item.id)} className="w-4 h-4 accent-yellow-500 rounded mt-1 cursor-pointer flex-shrink-0" />
+                <div onClick={() => onView?.(item)} className="relative w-20 h-12 bg-zinc-950 border border-zinc-800/80 rounded overflow-hidden flex-shrink-0 cursor-pointer">
+                  {item.thumbnailUrl ? <img src={item.thumbnailUrl} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-700">No img</div>}
+                  <div className="absolute bottom-1 right-1 bg-black/80 text-[9px] font-mono px-1 rounded text-zinc-300">{item.duration}</div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-white truncate cursor-pointer hover:text-yellow-400" onClick={() => onView?.(item)}>{item.title}</div>
+                  <div className="text-[10px] text-zinc-400 font-medium mt-0.5">{item.creatorName}</div>
+                  <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                    {item.isPremium ? (
+                      <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">R {item.price}</span>
+                    ) : (
+                      <span className="text-[10px] font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">Free</span>
+                    )}
+                    {item.playbackMode === 'external' ? (
+                      <span className="text-[10px] text-amber-400 flex items-center bg-zinc-900/80 px-2 py-0.5 rounded border border-zinc-800"><ExternalLink className="w-3 h-3 mr-1" /> External</span>
+                    ) : (
+                      <span className="text-[10px] text-blue-400 flex items-center bg-zinc-900/80 px-2 py-0.5 rounded border border-zinc-800"><HardDrive className="w-3 h-3 mr-1" /> Local</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-1 border-t border-zinc-900/40">
+                <button type="button" onClick={() => onView?.(item)} className="flex-1 py-1.5 px-3 bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 border border-zinc-800 transition-colors">
+                  <Eye className="w-3.5 h-3.5" /> View
+                </button>
+                <button type="button" onClick={() => onEdit(item)} className="flex-1 py-1.5 px-3 bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 border border-zinc-800 transition-colors">
+                  <Edit className="w-3.5 h-3.5" /> Edit
+                </button>
+                <button type="button" onClick={() => onDelete(item.id)} className="py-1.5 px-2 bg-red-500/5 hover:bg-red-500/10 text-red-400 hover:text-red-300 rounded-lg transition-colors border border-red-500/10">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 };
@@ -460,35 +559,62 @@ const UserTable = ({ users, onEdit, onDelete, selected, onToggleSelect, onToggle
   const allSelected = users.length > 0 && users.every((u: User) => selected.has(u.id));
   return (
     <div>
-      <table className="w-full text-sm text-left text-zinc-400 hidden md:table">
-        <thead className="text-xs text-zinc-400 uppercase bg-[#111]/50">
-          <tr>
-            <th className="px-4 py-3 w-10">
-              <input type="checkbox" checked={allSelected} onChange={(e) => onToggleAll(e.target.checked)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
-            </th>
-            <th className="px-6 py-3">Name</th>
-            <th className="px-6 py-3">Email</th>
-            <th className="px-6 py-3">Role</th>
-            <th className="px-6 py-3 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((user: User) => (
-            <tr key={user.id} className={`border-b border-zinc-800 hover:bg-[#111] ${selected.has(user.id) ? 'bg-yellow-500/5' : ''}`}>
-              <td className="px-4 py-4">
-                <input type="checkbox" checked={selected.has(user.id)} onChange={() => onToggleSelect(user.id)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
-              </td>
-              <td className="px-6 py-4 font-medium text-white">{user.name}</td>
-              <td className="px-6 py-4">{user.email}</td>
-              <td className="px-6 py-4"><span className="px-2 py-1 text-xs font-semibold rounded bg-zinc-800 text-zinc-300">{user.role}</span></td>
-              <td className="px-6 py-4 text-right space-x-2">
-                <button type="button" onClick={() => onEdit(user)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
-                <button type="button" onClick={() => onDelete(user.id)} className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
-              </td>
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full text-sm text-left text-zinc-400">
+          <thead className="text-xs text-zinc-400 uppercase bg-[#111]/80 border-b border-zinc-800">
+            <tr>
+              <th className="px-4 py-3 w-10">
+                <input type="checkbox" checked={allSelected} onChange={(e) => onToggleAll(e.target.checked)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
+              </th>
+              <th className="px-6 py-3">Name</th>
+              <th className="px-6 py-3">Email</th>
+              <th className="px-6 py-3">Role</th>
+              <th className="px-6 py-3 text-right">Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-zinc-800/60">
+            {users.map((user: User) => (
+              <tr key={user.id} className={`hover:bg-zinc-900/60 transition-colors ${selected.has(user.id) ? 'bg-yellow-500/10' : ''}`}>
+                <td className="px-4 py-4">
+                  <input type="checkbox" checked={selected.has(user.id)} onChange={() => onToggleSelect(user.id)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
+                </td>
+                <td className="px-6 py-4 font-semibold text-white">{user.name}</td>
+                <td className="px-6 py-4">{user.email}</td>
+                <td className="px-6 py-4">
+                  <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${user.role === 'admin' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'bg-zinc-800 text-zinc-300 border-zinc-700'}`}>
+                    {user.role}
+                  </span>
+                </td>
+                <td className="px-6 py-4 text-right space-x-2">
+                  <button type="button" onClick={() => onEdit(user)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
+                  <button type="button" onClick={() => onDelete(user.id)} className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="md:hidden divide-y divide-zinc-800">
+        {users.map((user: User) => (
+          <div key={user.id} className={`p-4 space-y-2 ${selected.has(user.id) ? 'bg-yellow-500/10' : ''}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <input type="checkbox" checked={selected.has(user.id)} onChange={() => onToggleSelect(user.id)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
+                <span className="text-white font-semibold text-sm">{user.name}</span>
+              </div>
+              <span className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${user.role === 'admin' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'bg-zinc-800 text-zinc-300 border-zinc-700'}`}>
+                {user.role}
+              </span>
+            </div>
+            <p className="text-xs text-zinc-400 pl-6">{user.email}</p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => onEdit(user)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg"><Edit className="w-4 h-4" /></button>
+              <button type="button" onClick={() => onDelete(user.id)} className="p-2 bg-red-500/10 text-red-400 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -497,35 +623,56 @@ const TalentTable = ({ talent, onEdit, onDelete, selected, onToggleSelect, onTog
   const allSelected = talent.length > 0 && talent.every((t: TalentProfile) => selected.has(t.id));
   return (
     <div>
-      <table className="w-full text-sm text-left text-zinc-400 hidden md:table">
-        <thead className="text-xs text-zinc-400 uppercase bg-[#111]/50">
-          <tr>
-            <th className="px-4 py-3 w-10">
-              <input type="checkbox" checked={allSelected} onChange={(e) => onToggleAll(e.target.checked)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
-            </th>
-            <th className="px-6 py-3">Name</th>
-            <th className="px-6 py-3">Category</th>
-            <th className="px-6 py-3">Rate</th>
-            <th className="px-6 py-3 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {talent.map((item: TalentProfile) => (
-            <tr key={item.id} className={`border-b border-zinc-800 hover:bg-[#111] ${selected.has(item.id) ? 'bg-yellow-500/5' : ''}`}>
-              <td className="px-4 py-4">
-                <input type="checkbox" checked={selected.has(item.id)} onChange={() => onToggleSelect(item.id)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
-              </td>
-              <td className="px-6 py-4 font-medium text-white">{item.name}</td>
-              <td className="px-6 py-4">{item.category}</td>
-              <td className="px-6 py-4">R {item.hourlyRate}/hr</td>
-              <td className="px-6 py-4 text-right space-x-2">
-                <button type="button" onClick={() => onEdit(item)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
-                <button type="button" onClick={() => onDelete(item.id)} className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
-              </td>
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full text-sm text-left text-zinc-400">
+          <thead className="text-xs text-zinc-400 uppercase bg-[#111]/80 border-b border-zinc-800">
+            <tr>
+              <th className="px-4 py-3 w-10">
+                <input type="checkbox" checked={allSelected} onChange={(e) => onToggleAll(e.target.checked)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
+              </th>
+              <th className="px-6 py-3">Name</th>
+              <th className="px-6 py-3">Category</th>
+              <th className="px-6 py-3">Rate</th>
+              <th className="px-6 py-3 text-right">Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-zinc-800/60">
+            {talent.map((item: TalentProfile) => (
+              <tr key={item.id} className={`hover:bg-zinc-900/60 transition-colors ${selected.has(item.id) ? 'bg-yellow-500/10' : ''}`}>
+                <td className="px-4 py-4">
+                  <input type="checkbox" checked={selected.has(item.id)} onChange={() => onToggleSelect(item.id)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
+                </td>
+                <td className="px-6 py-4 font-semibold text-white">{item.name}</td>
+                <td className="px-6 py-4">{item.category}</td>
+                <td className="px-6 py-4">R {item.hourlyRate}/hr</td>
+                <td className="px-6 py-4 text-right space-x-2">
+                  <button type="button" onClick={() => onEdit(item)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
+                  <button type="button" onClick={() => onDelete(item.id)} className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="md:hidden divide-y divide-zinc-800">
+        {talent.map((item: TalentProfile) => (
+          <div key={item.id} className={`p-4 space-y-2 ${selected.has(item.id) ? 'bg-yellow-500/10' : ''}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <input type="checkbox" checked={selected.has(item.id)} onChange={() => onToggleSelect(item.id)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
+                <span className="text-white font-semibold text-sm">{item.name}</span>
+              </div>
+              <span className="text-xs font-semibold text-yellow-400">R {item.hourlyRate}/hr</span>
+            </div>
+            <p className="text-xs text-zinc-400 pl-6">{item.category}</p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => onEdit(item)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg"><Edit className="w-4 h-4" /></button>
+              <button type="button" onClick={() => onDelete(item.id)} className="p-2 bg-red-500/10 text-red-400 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -756,7 +903,201 @@ const InfoRow: React.FC<{ label: string; value: string }> = ({ label, value }) =
   </div>
 );
 
-// --- Form Modals ---
+// --- Video Preview & Form Modals ---
+
+interface VideoPreviewModalProps {
+  media: MediaItem;
+  onClose: () => void;
+  onEdit?: (media: MediaItem) => void;
+  onDelete?: (id: string) => void;
+}
+
+const VideoPreviewModal: React.FC<VideoPreviewModalProps> = ({ media, onClose, onEdit, onDelete }) => {
+  const [copied, setCopied] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(media.sourceUrl || window.location.href);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+      <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl my-6 animate-in fade-in zoom-in-95 duration-200">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/80 bg-black/40">
+          <div className="flex items-center space-x-3 min-w-0 pr-4">
+            <div className="p-2 rounded-lg bg-yellow-500/10 text-yellow-400">
+              <Film className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-lg font-bold text-white truncate max-w-md">
+                {media.title}
+              </h3>
+              <p className="text-xs text-zinc-400 flex items-center gap-2">
+                <span className="capitalize">{media.mediaType || 'Video'} Preview</span>
+                <span>•</span>
+                <span>ID: {media.id}</span>
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors flex-shrink-0"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Video Player / Media Content */}
+        <div className="relative bg-black aspect-video w-full flex items-center justify-center overflow-hidden border-b border-zinc-800">
+          {media.mediaType === 'image' ? (
+            <img 
+              src={media.sourceUrl || media.thumbnailUrl} 
+              alt={media.title} 
+              className="w-full h-full object-contain"
+            />
+          ) : (
+            <video
+              src={media.sourceUrl}
+              poster={media.thumbnailUrl}
+              controls
+              autoPlay
+              playsInline
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              className="w-full h-full object-contain focus:outline-none"
+            >
+              Your browser does not support HTML5 video streaming.
+            </video>
+          )}
+
+          {/* Quick status overlays */}
+          <div className="absolute top-4 left-4 flex items-center gap-2 pointer-events-none">
+            {media.isPremium ? (
+              <span className="px-3 py-1 text-xs font-bold rounded-full bg-amber-500/90 text-zinc-950 backdrop-blur shadow flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5" />
+                Premium • R {media.price || 0}
+              </span>
+            ) : (
+              <span className="px-3 py-1 text-xs font-semibold rounded-full bg-emerald-500/90 text-zinc-950 backdrop-blur shadow flex items-center gap-1.5">
+                <Unlock className="w-3.5 h-3.5" />
+                Free Content
+              </span>
+            )}
+            {media.duration && (
+              <span className="px-2.5 py-1 text-xs font-mono rounded-full bg-black/70 text-zinc-200 border border-white/10 backdrop-blur flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {media.duration}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Metadata Details & Creator Bar */}
+        <div className="p-6 space-y-5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-zinc-800/80">
+            <div className="flex items-center gap-3">
+              {media.creatorAvatar ? (
+                <img src={media.creatorAvatar} alt="" className="w-10 h-10 rounded-full object-cover border border-zinc-700" />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-yellow-500 border border-zinc-700">
+                  {(media.creatorName || 'A')[0]}
+                </div>
+              )}
+              <div>
+                <p className="text-white font-semibold text-sm">{media.creatorName || 'Admin'}</p>
+                <p className="text-xs text-zinc-400">Content Creator / Model</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="px-3 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-xl text-xs font-semibold border border-zinc-800 flex items-center gap-1.5 transition-colors"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copied ? 'Copied URL!' : 'Copy Stream Link'}</span>
+              </button>
+
+              <a
+                href={media.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-xl text-xs font-semibold border border-zinc-800 flex items-center gap-1.5 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open Raw</span>
+              </a>
+
+              {onEdit && (
+                <button
+                  type="button"
+                  onClick={() => onEdit(media)}
+                  className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-zinc-950 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow"
+                >
+                  <Edit className="w-3.5 h-3.5" />
+                  <span>Edit Media</span>
+                </button>
+              )}
+
+              {onDelete && (
+                <button
+                  type="button"
+                  onClick={() => onDelete(media.id)}
+                  className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Description & Tags */}
+          {media.description && (
+            <div>
+              <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1.5">Description</h4>
+              <p className="text-zinc-300 text-sm leading-relaxed bg-black/40 border border-zinc-900 p-3.5 rounded-xl">
+                {media.description}
+              </p>
+            </div>
+          )}
+
+          {media.tags && media.tags.length > 0 && (
+            <div>
+              <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5" />
+                Tags
+              </h4>
+              <div className="flex flex-wrap gap-1.5">
+                {media.tags.map((tag, idx) => (
+                  <span key={idx} className="px-2.5 py-1 text-xs font-medium rounded-lg bg-zinc-900 text-zinc-300 border border-zinc-800">
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div className="px-6 py-4 bg-black/60 border-t border-zinc-800 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-6 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-sm transition-colors"
+          >
+            Close Preview
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 interface MediaFormModalProps {
   media: MediaItem | null;
@@ -769,12 +1110,18 @@ const MediaFormModal: React.FC<MediaFormModalProps> = ({ media, onClose, onSubmi
   const [title, setTitle] = useState(media?.title || '');
   const [description, setDescription] = useState(media?.description || '');
   const [sourceUrl, setSourceUrl] = useState(media?.sourceUrl || '');
+  const [playbackMode, setPlaybackMode] = useState<'external' | 'local'>(
+    (media as any)?.playbackMode
+    || ((media?.sourceUrl || '').startsWith('/api/files/') ? 'local' : 'external')
+  );
   const [thumbnailUrl, setThumbnailUrl] = useState(media?.thumbnailUrl || '');
   const [mediaType, setMediaType] = useState<'video' | 'image'>(media?.mediaType || 'video');
   const [duration, setDuration] = useState(media?.duration || '');
   const [tags, setTags] = useState(media?.tags ? media.tags.join(', ') : '');
   const [isPremium, setIsPremium] = useState(media?.isPremium || false);
   const [price, setPrice] = useState(media?.price?.toString() || '0');
+  const [creatorName, setCreatorName] = useState(media?.creatorName || currentUser?.name || 'Admin');
+  const [creatorAvatar, setCreatorAvatar] = useState(media?.creatorAvatar || currentUser?.avatarUrl || '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -792,14 +1139,16 @@ const MediaFormModal: React.FC<MediaFormModalProps> = ({ media, onClose, onSubmi
       title: title.trim(),
       description: description.trim(),
       sourceUrl: sourceUrl.trim(),
+      playbackMode,
+      externalUrl: playbackMode === 'external' ? sourceUrl.trim() : undefined,
       thumbnailUrl: thumbnailUrl.trim() || (mediaType === 'video' ? 'https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&q=80&w=600' : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=600'),
       mediaType,
       duration: duration.trim() || '10:00',
       tags: tagArray.length > 0 ? tagArray : ['exclusive', 'hd'],
       isPremium,
       price: isPremium ? Number(price) || 0 : 0,
-      creatorName: media?.creatorName || currentUser?.name || 'Admin',
-      creatorAvatar: media?.creatorAvatar || currentUser?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300',
+      creatorName: creatorName.trim() || 'Admin',
+      creatorAvatar: creatorAvatar.trim() || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300',
     });
   };
 
@@ -807,8 +1156,9 @@ const MediaFormModal: React.FC<MediaFormModalProps> = ({ media, onClose, onSubmi
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
       <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl my-8">
         <div className="flex items-center justify-between p-6 border-b border-zinc-800">
-          <h3 className="text-xl font-bold text-white">
-            {media ? 'Edit Media' : 'Add New Media'}
+          <h3 className="text-xl font-bold text-white flex items-center gap-2">
+            <Film className="w-5 h-5 text-yellow-500" />
+            <span>{media ? 'Edit Video / Media' : 'Add New Video / Media'}</span>
           </h3>
           <button
             type="button"
@@ -822,7 +1172,7 @@ const MediaFormModal: React.FC<MediaFormModalProps> = ({ media, onClose, onSubmi
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <label htmlFor="mediaTitle" className="block mb-2 text-sm font-semibold text-zinc-300">
-              Title
+              Title *
             </label>
             <input
               id="mediaTitle"
@@ -836,7 +1186,7 @@ const MediaFormModal: React.FC<MediaFormModalProps> = ({ media, onClose, onSubmi
           </div>
 
           <div>
-            <label htmlFor="sourceUrl" className="block mb-2 text-sm font-semibold text-zinc-300">Source URL (Video Link)</label>
+            <label htmlFor="sourceUrl" className="block mb-2 text-sm font-semibold text-zinc-300">Source URL (Video Link / Stream URL) *</label>
             <input
               id="sourceUrl"
               type="text"
@@ -848,10 +1198,23 @@ const MediaFormModal: React.FC<MediaFormModalProps> = ({ media, onClose, onSubmi
             />
           </div>
 
+          <div>
+            <label htmlFor="playbackMode" className="block mb-2 text-sm font-semibold text-zinc-300">Playback Mode</label>
+            <select
+              id="playbackMode"
+              value={playbackMode}
+              onChange={(e) => setPlaybackMode(e.target.value as 'external' | 'local')}
+              className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 cursor-pointer"
+            >
+              <option value="external">External Link (Redirects to Tube link / External Site)</option>
+              <option value="local">Local Stream (Plays inside site using GridFS/disk upload)</option>
+            </select>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label htmlFor="thumbnailUrl" className="block mb-2 text-sm font-semibold text-zinc-300">
-                Thumbnail URL
+                Thumbnail Image URL
               </label>
               <input
                 id="thumbnailUrl"
@@ -881,32 +1244,46 @@ const MediaFormModal: React.FC<MediaFormModalProps> = ({ media, onClose, onSubmi
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
+              <label htmlFor="creatorName" className="block mb-2 text-sm font-semibold text-zinc-300">
+                Creator / Model Name
+              </label>
+              <input
+                id="creatorName"
+                type="text"
+                value={creatorName}
+                onChange={(e) => setCreatorName(e.target.value)}
+                placeholder="e.g. Amber Ray"
+                className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+              />
+            </div>
+
+            <div>
               <label htmlFor="duration" className="block mb-2 text-sm font-semibold text-zinc-300">
-                Duration
+                Duration (e.g. 15:30)
               </label>
               <input
                 id="duration"
                 type="text"
                 value={duration}
                 onChange={(e) => setDuration(e.target.value)}
-                placeholder="e.g. 12:45"
+                placeholder="10:00"
                 className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
               />
             </div>
+          </div>
 
-            <div>
-              <label htmlFor="tags" className="block mb-2 text-sm font-semibold text-zinc-300">
-                Tags (comma separated)
-              </label>
-              <input
-                id="tags"
-                type="text"
-                value={tags}
-                onChange={(e) => setTags(e.target.value)}
-                placeholder="exclusive, 4k, glamour"
-                className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
-              />
-            </div>
+          <div>
+            <label htmlFor="tags" className="block mb-2 text-sm font-semibold text-zinc-300">
+              Tags (comma separated)
+            </label>
+            <input
+              id="tags"
+              type="text"
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+              placeholder="exclusive, 4k, glamour, featured"
+              className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+            />
           </div>
 
           <div>
@@ -964,7 +1341,7 @@ const MediaFormModal: React.FC<MediaFormModalProps> = ({ media, onClose, onSubmi
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-bold transition-colors"
+              className="px-6 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-bold transition-colors shadow"
             >
               {media ? 'Update Media' : 'Create Media'}
             </button>
