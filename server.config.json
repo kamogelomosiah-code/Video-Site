@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "mongo": {
+    "uriEnvVar": "MONGODB_URI",
+    "database": "elysian",
+    "gridfsBucket": "uploads",
+    "timeouts": {
+      "serverSelectionMs": 15000,
+      "connectMs": 15000,
+      "socketMs": 45000,
+      "heartbeatMs": 10000
+    },
+    "pool": { "min": 2, "max": 20 },
+    "retry": { "writes": true, "reads": true },
+    "requiredCollections": [
+      "users", "sessions", "media", "talentProfiles",
+      "messages", "notifications", "comments",
+      "activityLogs", "siteSettings"
+    ]
+  },
+  "fallback": {
+    "enabled": true,
+    "dataFile": "data.json",
+    "uploadDir": "uploads"
+  },
+  "startup": {
+    "runSchemaSetup": true,
+    "runSmokeTest": true,
+    "smokeTest": {
+      "collection": "startup_smoke_test",
+      "throwOnFailure": false
+    }
+  },
+  "logging": {
+    "prefix": {
+      "mongo": "[mongo]",
+      "schema": "[schema]",
+      "smoke": "[smoke]",
+      "routes": "[routes]"
+    },
+    "verbose": true
+  }
+}
