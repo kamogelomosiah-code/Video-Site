@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, UserRole, Notification } from '../types';
-import { Search, Bell, Menu, ShieldCheck, LogIn, Database, LogOut, X } from 'lucide-react';
+import { Search, Bell, Menu, ShieldCheck, LogIn, LogOut, X } from 'lucide-react';
 import { api } from '../services/api';
 
 interface NavbarProps {
   user: User;
+  currentPage?: string;
   onVerifyClick: () => void;
   onLoginClick: () => void;
   onAdminClick: () => void;
@@ -14,7 +15,7 @@ interface NavbarProps {
 }
 
 const Navbar: React.FC<NavbarProps> = ({ 
-  user, onVerifyClick, onLoginClick, onAdminClick, onProfileClick, onLogout, onMenuClick
+  user, currentPage, onVerifyClick, onLoginClick, onAdminClick, onProfileClick, onLogout, onMenuClick
 }) => {
   const isGuest = user.id === 'guest';
   const [showNotifications, setShowNotifications] = useState(false);
@@ -145,12 +146,6 @@ const Navbar: React.FC<NavbarProps> = ({
               <Search className="w-5 h-5" />
             </button>
 
-            {user.role === UserRole.ADMIN && (
-              <button type="button" onClick={onAdminClick} className="hidden sm:block p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full" title="Admin Dashboard">
-                <Database className="w-5 h-5" />
-              </button>
-            )}
-            
             {!isGuest && !user.verified && (
               <button type="button" onClick={onVerifyClick} className="hidden md:flex items-center space-x-2 px-3 py-1.5 bg-yellow-500/10 text-yellow-400 rounded-full text-xs font-medium hover:bg-yellow-500/20 border border-yellow-500/20 transition-all">
                 <ShieldCheck className="w-3.5 h-3.5" />
@@ -158,18 +153,21 @@ const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
             
-            <div className="relative" ref={notificationsRef}>
-                <button type="button" aria-label="Toggle notifications" onClick={() => setShowNotifications(!showNotifications)} className="relative p-2 text-zinc-400 hover:text-yellow-400 transition-colors">
-                    <Bell className="w-5 h-5" />
-                    {unreadCount > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-yellow-500 rounded-full border-2 border-zinc-950 animate-pulse"></span>}
-                </button>
-                {showNotifications && (
-                    <div className="absolute right-0 mt-2 w-80 bg-[#111] border border-zinc-800 rounded-2xl shadow-2xl z-50 overflow-hidden">
-                        <div className="p-4 border-b border-zinc-800 flex justify-between items-center bg-black/50 backdrop-blur-sm"><h3 className="font-bold text-white text-sm">Notifications</h3>{unreadCount > 0 && <button type="button" onClick={handleMarkAllRead} className="text-xs text-yellow-400 hover:text-yellow-300 font-medium">Mark all read</button>}</div>
-                        <div className="max-h-80 overflow-y-auto">{notifications.length === 0 ? <div className="p-8 text-center text-zinc-500 text-sm">No notifications yet.</div> : notifications.map(notif => (<div key={notif.id} onClick={() => handleNotificationClick(notif.id)} className={`p-4 border-b border-zinc-800/50 hover:bg-zinc-800 cursor-pointer transition-colors ${!notif.read ? 'bg-yellow-500/5' : ''}`}><div className="flex items-start"><div className={`w-2 h-2 rounded-full mt-2 mr-3 flex-shrink-0 ${!notif.read ? 'bg-yellow-500' : 'bg-transparent'}`}></div><div><p className={`text-sm ${!notif.read ? 'text-white font-medium' : 'text-zinc-400'}`}>{notif.message}</p><p className="text-xs text-zinc-600 mt-1">{notif.createdAt}</p></div></div></div>))}</div>
-                    </div>
-                )}
-            </div>
+            {/* Notifications icon (hidden when in Admin Panel) */}
+            {currentPage !== 'admin-dashboard' && (
+              <div className="relative" ref={notificationsRef}>
+                  <button type="button" aria-label="Toggle notifications" onClick={() => setShowNotifications(!showNotifications)} className="relative p-2 text-zinc-400 hover:text-yellow-400 transition-colors">
+                      <Bell className="w-5 h-5" />
+                      {unreadCount > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-yellow-500 rounded-full border-2 border-zinc-950 animate-pulse"></span>}
+                  </button>
+                  {showNotifications && (
+                      <div className="absolute right-0 mt-2 w-80 bg-[#111] border border-zinc-800 rounded-2xl shadow-2xl z-50 overflow-hidden">
+                          <div className="p-4 border-b border-zinc-800 flex justify-between items-center bg-black/50 backdrop-blur-sm"><h3 className="font-bold text-white text-sm">Notifications</h3>{unreadCount > 0 && <button type="button" onClick={handleMarkAllRead} className="text-xs text-yellow-400 hover:text-yellow-300 font-medium">Mark all read</button>}</div>
+                          <div className="max-h-80 overflow-y-auto">{notifications.length === 0 ? <div className="p-8 text-center text-zinc-500 text-sm">No notifications yet.</div> : notifications.map(notif => (<div key={notif.id} onClick={() => handleNotificationClick(notif.id)} className={`p-4 border-b border-zinc-800/50 hover:bg-zinc-800 cursor-pointer transition-colors ${!notif.read ? 'bg-yellow-500/5' : ''}`}><div className="flex items-start"><div className={`w-2 h-2 rounded-full mt-2 mr-3 flex-shrink-0 ${!notif.read ? 'bg-yellow-500' : 'bg-transparent'}`}></div><div><p className={`text-sm ${!notif.read ? 'text-white font-medium' : 'text-zinc-400'}`}>{notif.message}</p><p className="text-xs text-zinc-600 mt-1">{notif.createdAt}</p></div></div></div>))}</div>
+                      </div>
+                  )}
+              </div>
+            )}
 
             <div className="flex items-center space-x-3 border-l border-zinc-800 pl-2 sm:pl-4">
               {isGuest ? (

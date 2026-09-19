@@ -40,8 +40,9 @@ const App: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     const t = params.get('token');
     const path = window.location.pathname;
-    if (path.includes('reset-password') && t) {
-      setResetToken(t);
+    const pageParam = params.get('page');
+    if (path.includes('reset-password') || pageParam === 'reset-password' || (path === '/' && t)) {
+      if (t) setResetToken(t);
       setCurrentPage('reset-password');
     }
   }, []);
@@ -165,20 +166,31 @@ const App: React.FC = () => {
   if (currentPage === 'auth') {
     return (
       <div className="h-screen bg-black text-zinc-50 font-poppins">
-        <Auth onLogin={handleLogin} onNavigateBack={() => setCurrentPage('media')} />
+        <Auth 
+          onLogin={handleLogin} 
+          onNavigateBack={() => setCurrentPage('media')}
+          onNavigateReset={(token) => {
+            setResetToken(token);
+            setCurrentPage('reset-password');
+          }}
+        />
       </div>
     );
   }
 
-  if (currentPage === 'reset-password' && resetToken) {
+  if (currentPage === 'reset-password') {
     return (
       <div className="h-screen bg-black text-zinc-50 font-poppins">
         <ResetPassword 
-          token={resetToken} 
+          token={resetToken || ''} 
           onNavigateLogin={() => {
             setCurrentPage('auth');
             window.history.replaceState({}, '', window.location.pathname);
-          }} 
+          }}
+          onLoginSuccess={(user) => {
+            handleLogin(user);
+            window.history.replaceState({}, '', '/');
+          }}
         />
       </div>
     );
@@ -205,6 +217,7 @@ const App: React.FC = () => {
       <div className="flex-1 flex flex-col h-full overflow-hidden relative">
         <Navbar 
           user={currentUser} 
+          currentPage={currentPage}
           onVerifyClick={() => setIsVerificationOpen(true)}
           onLoginClick={() => setCurrentPage('auth')}
           onAdminClick={handleAdminNav}

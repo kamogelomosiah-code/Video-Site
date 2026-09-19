@@ -1115,12 +1115,13 @@ async function startServer() {
   app.post("/api/auth/forgot-password", async (req, res) => {
     const { email } = req.body || {};
     if (!email) return res.status(400).json({ error: "email required" });
-    const user = await findOneByField("users", "email", email);
+    const target = String(email).trim();
+    let user: any = await findOneByField("users", "email", target);
+    if (!user) user = await findOneByField("users", "email", target.toLowerCase());
+    if (!user) user = await findOneByField("users", "username", target);
+
+    let resetUrl: string | undefined;
     if (user) {
-      const last = user.resetEmailLastSentAt ? new Date(user.resetEmailLastSentAt).getTime() : 0;
-      if (Date.now() - last < RESET_COOLDOWN_MS) {
-        return res.json({ success: true });
-      }
       const rawToken = generateToken();
       const tokenHash = hashResetToken(rawToken);
       const id = generateId();
@@ -1142,11 +1143,13 @@ async function startServer() {
       });
       user.resetEmailLastSentAt = new Date().toISOString();
       await upsertDoc("users", user);
-      const base = process.env.APP_URL || `http://localhost:${PORT}`;
-      const resetUrl = `${base}/reset-password?token=${rawToken}`;
-      await sendPasswordResetEmail(email, resetUrl);
+
+      const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
+      const base = origin || process.env.APP_URL || `http://localhost:${PORT}`;
+      resetUrl = `${base}/reset-password?token=${rawToken}`;
+      await sendPasswordResetEmail(user.email || target, resetUrl);
     }
-    res.json({ success: true });
+    res.json({ success: true, resetUrl });
   });
 
   app.get("/api/auth/verify-reset-token", async (req, res) => {
@@ -1189,7 +1192,8 @@ async function startServer() {
       await saveJsonDB();
     }
     await logActivity("update", `Password reset for user ${user.id}`, user.id);
-    res.json({ success: true });
+    const sessionToken = await createSession(user.id);
+    res.json({ success: true, user: stripSecrets(user), token: sessionToken });
   });
 
   app.put("/api/auth/profile", requireUser, async (req, res) => {

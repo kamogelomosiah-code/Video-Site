@@ -7,13 +7,15 @@ import { generateAvatar } from '../services/avatar';
 interface AuthProps {
   onLogin: (data: any) => void;
   onNavigateBack: () => void;
+  onNavigateReset?: (token: string) => void;
 }
 
-const Auth: React.FC<AuthProps> = ({ onLogin, onNavigateBack }) => {
+const Auth: React.FC<AuthProps> = ({ onLogin, onNavigateBack, onNavigateReset }) => {
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgotPassword'>('login');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [resetEmailSent, setResetEmailSent] = useState(false);
+  const [resetUrl, setResetUrl] = useState<string | null>(null);
   
   // Form State
   const [email, setEmail] = useState('');
@@ -57,7 +59,10 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigateBack }) => {
     setIsLoading(true);
     setError('');
     try {
-      await api.auth.forgotPassword(email);
+      const res = await api.auth.forgotPassword(email);
+      if (res.resetUrl) {
+        setResetUrl(res.resetUrl);
+      }
       setResetEmailSent(true);
     } catch (err: any) {
       setError(err.message || 'Could not send reset email');
@@ -75,6 +80,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigateBack }) => {
     setPin('');
     setNeedsPin(false);
     setResetEmailSent(false);
+    setResetUrl(null);
   };
 
   const renderAuthForms = () => (
@@ -190,14 +196,65 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigateBack }) => {
     </>
   );
   
-  const renderConfirmation = () => (
-     <div className="text-center">
-        <div className="w-16 h-16 bg-green-600/10 border border-green-600/20 rounded-full flex items-center justify-center mx-auto mb-6"><MailCheck className="w-8 h-8 text-green-500" /></div>
-        <h2 className="text-2xl font-bold text-white">Check your inbox</h2>
-        <p className="mt-2 text-zinc-400">If an account with that email exists, we have sent a password reset link. The link expires in 30 minutes. Check your spam folder if you do not see it.</p>
-        <button onClick={() => resetForm('login')} className="mt-8 w-full bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 rounded-xl transition-colors">Back to Sign In</button>
-    </div>
-  );
+  const renderConfirmation = () => {
+    let tokenFromUrl = '';
+    if (resetUrl) {
+      try {
+        const parsed = new URL(resetUrl);
+        tokenFromUrl = parsed.searchParams.get('token') || '';
+      } catch {
+        const match = resetUrl.match(/[?&]token=([^&#]+)/);
+        if (match) tokenFromUrl = match[1];
+      }
+    }
+
+    return (
+      <div className="text-center space-y-4">
+        <div className="w-16 h-16 bg-green-600/10 border border-green-600/20 rounded-full flex items-center justify-center mx-auto mb-2">
+          <MailCheck className="w-8 h-8 text-green-500" />
+        </div>
+        <h2 className="text-2xl font-bold text-white">Reset Link Sent</h2>
+        <p className="text-zinc-400 text-sm leading-relaxed">
+          If an account exists with <span className="text-white font-medium">{email}</span>, a secure password reset link has been dispatched to your email. The link remains valid for 30 minutes.
+        </p>
+
+        {resetUrl && (
+          <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-left space-y-2 mt-4">
+            <div className="flex items-center space-x-1.5 text-yellow-400 font-semibold text-xs uppercase tracking-wider">
+              <span>Ready to Reset</span>
+            </div>
+            <p className="text-xs text-zinc-300">
+              Click below to proceed to the secure password reset page:
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                if (tokenFromUrl && onNavigateReset) {
+                  onNavigateReset(tokenFromUrl);
+                } else {
+                  window.location.href = resetUrl;
+                }
+              }}
+              className="w-full bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-bold py-2.5 px-4 rounded-xl text-sm transition-colors flex items-center justify-center space-x-2"
+            >
+              <span>Open Reset Password Page</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        <div className="pt-2">
+          <button 
+            type="button" 
+            onClick={() => resetForm('login')} 
+            className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 rounded-xl transition-colors text-sm"
+          >
+            Back to Sign In
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-full flex">

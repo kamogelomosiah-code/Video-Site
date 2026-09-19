@@ -1,5 +1,5 @@
 import React from 'react';
-import { PlayCircle, Users, Settings, Shield, Zap, Database, MessageSquare } from 'lucide-react';
+import { PlayCircle, Users, Settings, Shield, ShieldCheck, Zap, MessageSquare } from 'lucide-react';
 import { User, UserRole } from '../types';
 
 interface SidebarProps {
@@ -54,7 +54,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, activePage, onNavigate, onAdmin
                 activePage === 'admin-dashboard' ? 'bg-yellow-500/10 text-yellow-400' : 'text-zinc-400 hover:bg-[#111] hover:text-zinc-200'
               }`}
             >
-              <Database className={`w-6 h-6 ${activePage === 'admin-dashboard' ? 'stroke-2' : 'stroke-1.5'}`} />
+              <ShieldCheck className={`w-6 h-6 ${activePage === 'admin-dashboard' ? 'stroke-2' : 'stroke-1.5'}`} />
               <span className={`ml-3 font-medium ${activePage === 'admin-dashboard' ? 'font-semibold' : ''}`}>Admin Panel</span>
               {activePage === 'admin-dashboard' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-yellow-500 shadow-[0_0_8px_rgba(220,38,38,0.6)]"></div>}
             </button>
