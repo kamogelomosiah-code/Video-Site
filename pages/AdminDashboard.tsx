@@ -756,4 +756,603 @@ const InfoRow: React.FC<{ label: string; value: string }> = ({ label, value }) =
   </div>
 );
 
+// --- Form Modals ---
+
+interface MediaFormModalProps {
+  media: MediaItem | null;
+  onClose: () => void;
+  onSubmit: (formData: any) => void;
+  currentUser: User;
+}
+
+const MediaFormModal: React.FC<MediaFormModalProps> = ({ media, onClose, onSubmit, currentUser }) => {
+  const [title, setTitle] = useState(media?.title || '');
+  const [description, setDescription] = useState(media?.description || '');
+  const [sourceUrl, setSourceUrl] = useState(media?.sourceUrl || '');
+  const [thumbnailUrl, setThumbnailUrl] = useState(media?.thumbnailUrl || '');
+  const [mediaType, setMediaType] = useState<'video' | 'image'>(media?.mediaType || 'video');
+  const [duration, setDuration] = useState(media?.duration || '');
+  const [tags, setTags] = useState(media?.tags ? media.tags.join(', ') : '');
+  const [isPremium, setIsPremium] = useState(media?.isPremium || false);
+  const [price, setPrice] = useState(media?.price?.toString() || '0');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !sourceUrl.trim()) {
+      alert('Title and Source URL are required');
+      return;
+    }
+
+    const tagArray = tags
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    onSubmit({
+      title: title.trim(),
+      description: description.trim(),
+      sourceUrl: sourceUrl.trim(),
+      thumbnailUrl: thumbnailUrl.trim() || (mediaType === 'video' ? 'https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&q=80&w=600' : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=600'),
+      mediaType,
+      duration: duration.trim() || '10:00',
+      tags: tagArray.length > 0 ? tagArray : ['exclusive', 'hd'],
+      isPremium,
+      price: isPremium ? Number(price) || 0 : 0,
+      creatorName: media?.creatorName || currentUser?.name || 'Admin',
+      creatorAvatar: media?.creatorAvatar || currentUser?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300',
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl my-8">
+        <div className="flex items-center justify-between p-6 border-b border-zinc-800">
+          <h3 className="text-xl font-bold text-white">
+            {media ? 'Edit Media' : 'Add New Media'}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label htmlFor="mediaTitle" className="block mb-2 text-sm font-semibold text-zinc-300">
+              Title
+            </label>
+            <input
+              id="mediaTitle"
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Exclusive Video Title"
+              required
+              className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="sourceUrl" className="block mb-2 text-sm font-semibold text-zinc-300">Source URL (Video Link)</label>
+            <input
+              id="sourceUrl"
+              type="text"
+              value={sourceUrl}
+              onChange={(e) => setSourceUrl(e.target.value)}
+              placeholder="https://... or /api/files/..."
+              required
+              className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="thumbnailUrl" className="block mb-2 text-sm font-semibold text-zinc-300">
+                Thumbnail URL
+              </label>
+              <input
+                id="thumbnailUrl"
+                type="text"
+                value={thumbnailUrl}
+                onChange={(e) => setThumbnailUrl(e.target.value)}
+                placeholder="https://... or /api/files/..."
+                className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="mediaType" className="block mb-2 text-sm font-semibold text-zinc-300">
+                Media Type
+              </label>
+              <select
+                id="mediaType"
+                value={mediaType}
+                onChange={(e) => setMediaType(e.target.value as 'video' | 'image')}
+                className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 cursor-pointer"
+              >
+                <option value="video">Video</option>
+                <option value="image">Image</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="duration" className="block mb-2 text-sm font-semibold text-zinc-300">
+                Duration
+              </label>
+              <input
+                id="duration"
+                type="text"
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                placeholder="e.g. 12:45"
+                className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="tags" className="block mb-2 text-sm font-semibold text-zinc-300">
+                Tags (comma separated)
+              </label>
+              <input
+                id="tags"
+                type="text"
+                value={tags}
+                onChange={(e) => setTags(e.target.value)}
+                placeholder="exclusive, 4k, glamour"
+                className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="mediaDescription" className="block mb-2 text-sm font-semibold text-zinc-300">
+              Description
+            </label>
+            <textarea
+              id="mediaDescription"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              placeholder="Content description and details..."
+              className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+            <div className="flex items-center space-x-3 bg-black/40 border border-zinc-800 rounded-xl p-4">
+              <input
+                id="isPremium"
+                type="checkbox"
+                checked={isPremium}
+                onChange={(e) => setIsPremium(e.target.checked)}
+                className="w-5 h-5 accent-yellow-500 rounded cursor-pointer"
+              />
+              <label htmlFor="isPremium" className="text-sm font-semibold text-zinc-300 cursor-pointer">
+                Premium Content (Paywall)
+              </label>
+            </div>
+
+            {isPremium && (
+              <div>
+                <label htmlFor="mediaPrice" className="block mb-2 text-sm font-semibold text-zinc-300">
+                  Price (ZAR)
+                </label>
+                <input
+                  id="mediaPrice"
+                  type="number"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  placeholder="50"
+                  className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-6 border-t border-zinc-800">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2.5 rounded-xl border border-zinc-700 text-zinc-300 hover:bg-zinc-800 font-semibold transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-6 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-bold transition-colors"
+            >
+              {media ? 'Update Media' : 'Create Media'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+interface UserFormModalProps {
+  user: User | null;
+  onClose: () => void;
+  onSubmit: (formData: any) => void;
+}
+
+const UserFormModal: React.FC<UserFormModalProps> = ({ user, onClose, onSubmit }) => {
+  const [name, setName] = useState(user?.name || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [role, setRole] = useState<UserRole>(user?.role || UserRole.CONSUMER);
+  const [verified, setVerified] = useState(user?.verified || false);
+  const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '');
+  const [password, setPassword] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      alert('Name is required');
+      return;
+    }
+
+    const payload: any = {
+      name: name.trim(),
+      email: email.trim(),
+      role,
+      verified,
+      avatarUrl: avatarUrl.trim() || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300',
+    };
+    if (password) {
+      payload.password = password;
+    }
+
+    onSubmit(payload);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl my-8">
+        <div className="flex items-center justify-between p-6 border-b border-zinc-800">
+          <h3 className="text-xl font-bold text-white">
+            {user ? 'Edit User' : 'Add New User'}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label htmlFor="userName" className="block mb-2 text-sm font-semibold text-zinc-300">
+              Full Name
+            </label>
+            <input
+              id="userName"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Jane Doe"
+              required
+              className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="userEmail" className="block mb-2 text-sm font-semibold text-zinc-300">
+              Email Address
+            </label>
+            <input
+              id="userEmail"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="jane@example.com"
+              className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="userRole" className="block mb-2 text-sm font-semibold text-zinc-300">
+              Role
+            </label>
+            <select
+              id="userRole"
+              value={role}
+              onChange={(e) => setRole(e.target.value as UserRole)}
+              className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 cursor-pointer"
+            >
+              <option value={UserRole.CONSUMER}>Consumer</option>
+              <option value={UserRole.CREATOR}>Creator</option>
+              <option value={UserRole.PROFESSIONAL}>Professional</option>
+              <option value={UserRole.ADMIN}>Admin</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="userAvatar" className="block mb-2 text-sm font-semibold text-zinc-300">
+              Avatar URL
+            </label>
+            <input
+              id="userAvatar"
+              type="text"
+              value={avatarUrl}
+              onChange={(e) => setAvatarUrl(e.target.value)}
+              placeholder="https://images.unsplash.com/..."
+              className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="userPassword" className="block mb-2 text-sm font-semibold text-zinc-300">
+              {user ? 'New Password (leave blank to keep current)' : 'Password'}
+            </label>
+            <input
+              id="userPassword"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+            />
+          </div>
+
+          <div className="flex items-center space-x-3 bg-black/40 border border-zinc-800 rounded-xl p-4">
+            <input
+              id="userVerified"
+              type="checkbox"
+              checked={verified}
+              onChange={(e) => setVerified(e.target.checked)}
+              className="w-5 h-5 accent-yellow-500 rounded cursor-pointer"
+            />
+            <label htmlFor="userVerified" className="text-sm font-semibold text-zinc-300 cursor-pointer">
+              Verified User Badge
+            </label>
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-6 border-t border-zinc-800">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2.5 rounded-xl border border-zinc-700 text-zinc-300 hover:bg-zinc-800 font-semibold transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-6 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-bold transition-colors"
+            >
+              {user ? 'Update User' : 'Create User'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+interface TalentFormModalProps {
+  talent: TalentProfile | null;
+  onClose: () => void;
+  onSubmit: (formData: any) => void;
+}
+
+const TalentFormModal: React.FC<TalentFormModalProps> = ({ talent, onClose, onSubmit }) => {
+  const [name, setName] = useState(talent?.name || '');
+  const [title, setTitle] = useState(talent?.title || '');
+  const [location, setLocation] = useState(talent?.location || 'Johannesburg, SA');
+  const [hourlyRate, setHourlyRate] = useState(talent?.hourlyRate?.toString() || '1500');
+  const [imageUrl, setImageUrl] = useState(talent?.imageUrl || '');
+  const [verified, setVerified] = useState(talent?.verified ?? true);
+  const [online, setOnline] = useState(talent?.online ?? true);
+  const [availability, setAvailability] = useState<'Available Now' | 'This Week' | 'Booked'>(talent?.availability || 'Available Now');
+  const [tags, setTags] = useState(talent?.tags ? talent.tags.join(', ') : 'Model, Actor');
+  const [rating, setRating] = useState(talent?.rating?.toString() || '5.0');
+  const [reviewCount, setReviewCount] = useState(talent?.reviewCount?.toString() || '12');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !title.trim()) {
+      alert('Name and Professional Title are required');
+      return;
+    }
+
+    const tagArray = tags
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    onSubmit({
+      name: name.trim(),
+      title: title.trim(),
+      location: location.trim(),
+      hourlyRate: Number(hourlyRate) || 0,
+      imageUrl: imageUrl.trim() || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=500',
+      verified,
+      online,
+      availability,
+      rating: Number(rating) || 5.0,
+      reviewCount: Number(reviewCount) || 0,
+      tags: tagArray.length > 0 ? tagArray : ['Talent'],
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl my-8">
+        <div className="flex items-center justify-between p-6 border-b border-zinc-800">
+          <h3 className="text-xl font-bold text-white">
+            {talent ? 'Edit Talent Profile' : 'Add New Talent Profile'}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="talentName" className="block mb-2 text-sm font-semibold text-zinc-300">
+                Talent Name
+              </label>
+              <input
+                id="talentName"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Elena Rostova"
+                required
+                className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="talentTitle" className="block mb-2 text-sm font-semibold text-zinc-300">
+                Professional Title / Category
+              </label>
+              <input
+                id="talentTitle"
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Fashion Model & Content Creator"
+                required
+                className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="talentLocation" className="block mb-2 text-sm font-semibold text-zinc-300">
+                Location
+              </label>
+              <input
+                id="talentLocation"
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="Johannesburg, SA"
+                className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="talentHourlyRate" className="block mb-2 text-sm font-semibold text-zinc-300">
+                Hourly Rate (ZAR)
+              </label>
+              <input
+                id="talentHourlyRate"
+                type="number"
+                value={hourlyRate}
+                onChange={(e) => setHourlyRate(e.target.value)}
+                placeholder="1500"
+                className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="talentImageUrl" className="block mb-2 text-sm font-semibold text-zinc-300">
+              Profile Photo URL
+            </label>
+            <input
+              id="talentImageUrl"
+              type="text"
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              placeholder="https://images.unsplash.com/..."
+              className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="talentAvailability" className="block mb-2 text-sm font-semibold text-zinc-300">
+                Availability
+              </label>
+              <select
+                id="talentAvailability"
+                value={availability}
+                onChange={(e) => setAvailability(e.target.value as any)}
+                className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 cursor-pointer"
+              >
+                <option value="Available Now">Available Now</option>
+                <option value="This Week">This Week</option>
+                <option value="Booked">Booked</option>
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="talentTags" className="block mb-2 text-sm font-semibold text-zinc-300">
+                Skills & Tags (comma separated)
+              </label>
+              <input
+                id="talentTags"
+                type="text"
+                value={tags}
+                onChange={(e) => setTags(e.target.value)}
+                placeholder="Model, Actor, Dancer"
+                className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex items-center space-x-3 bg-black/40 border border-zinc-800 rounded-xl p-4">
+              <input
+                id="talentVerified"
+                type="checkbox"
+                checked={verified}
+                onChange={(e) => setVerified(e.target.checked)}
+                className="w-5 h-5 accent-yellow-500 rounded cursor-pointer"
+              />
+              <label htmlFor="talentVerified" className="text-sm font-semibold text-zinc-300 cursor-pointer">
+                Verified Talent Badge
+              </label>
+            </div>
+
+            <div className="flex items-center space-x-3 bg-black/40 border border-zinc-800 rounded-xl p-4">
+              <input
+                id="talentOnline"
+                type="checkbox"
+                checked={online}
+                onChange={(e) => setOnline(e.target.checked)}
+                className="w-5 h-5 accent-yellow-500 rounded cursor-pointer"
+              />
+              <label htmlFor="talentOnline" className="text-sm font-semibold text-zinc-300 cursor-pointer">
+                Currently Online
+              </label>
+            </div>
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-6 border-t border-zinc-800">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2.5 rounded-xl border border-zinc-700 text-zinc-300 hover:bg-zinc-800 font-semibold transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-6 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-bold transition-colors"
+            >
+              {talent ? 'Update Profile' : 'Create Profile'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 export default AdminDashboard;

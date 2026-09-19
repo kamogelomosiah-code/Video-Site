@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { UploadCloud, DownloadCloud, FileJson, Copy, Check, AlertCircle, CheckCircle, Trash2, Video, Image as ImageIcon, Wand2 } from 'lucide-react';
+import { UploadCloud, DownloadCloud, FileJson, Copy, Check, AlertCircle, CheckCircle, Trash2, Video, Image as ImageIcon } from 'lucide-react';
 import { api } from '../services/api';
 import { MediaItem } from '../types';
 
