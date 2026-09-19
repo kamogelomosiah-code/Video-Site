@@ -24,6 +24,7 @@ import serverConfig from "./server.config.json" assert { type: "json" };
 
 import { createHash } from "crypto";
 import { sendPasswordResetEmail } from "./services/email";
+import { GoogleGenAI, Type } from "@google/genai";
 import { checkPassword } from "./utils/password";
 
 dotenv.config({ override: true });
@@ -918,6 +919,10 @@ async function startServer() {
   app.post("/api/upload", requireAdmin, upload.single("file"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
+    if (req.file.mimetype.startsWith("video/")) {
+      return res.status(400).json({ error: "Upload accepts images only. Videos must be added as external links." });
+    }
+
     if (bucket) {
       const readableStream = new Readable();
       readableStream.push(req.file.buffer);
@@ -1354,6 +1359,129 @@ async function startServer() {
   });
 
   // -----------------------------------------------------------------------------
+  // DUPLICATE DETECTION HELPERS & ROUTE
+  // -----------------------------------------------------------------------------
+
+  function checkMediaDuplicate(incoming: any, allMedia: any[]) {
+    const getSha256 = (str: string) => {
+      if (!str) return "";
+      return createHash("sha256").update(str.trim()).digest("hex");
+    };
+
+    const incomingTitle = (incoming.title || "").trim().toLowerCase();
+    const incomingThumbHash = getSha256(incoming.thumbnailUrl || "");
+
+    for (const item of allMedia) {
+      if (item.id === incoming.id) continue;
+
+      // Signal A
+      if (incoming.mediaType === "video" && item.mediaType === "video") {
+        if (incoming.externalUrl && item.externalUrl && incoming.externalUrl === item.externalUrl) {
+          return { duplicate: true, match: { id: item.id, title: item.title, reason: "URL_DUPLICATE" } };
+        }
+      } else if (incoming.mediaType === "image" && item.mediaType === "image") {
+        if (incoming.sourceUrl && item.sourceUrl && incoming.sourceUrl === item.sourceUrl) {
+          return { duplicate: true, match: { id: item.id, title: item.title, reason: "URL_DUPLICATE" } };
+        }
+      }
+
+      // Signal B
+      const itemTitle = (item.title || "").trim().toLowerCase();
+      if (incomingTitle && itemTitle && incomingTitle === itemTitle) {
+        return { duplicate: true, match: { id: item.id, title: item.title, reason: "TITLE_DUPLICATE" } };
+      }
+
+      // Signal C
+      const itemThumbHash = getSha256(item.thumbnailUrl || "");
+      if (incomingThumbHash && itemThumbHash && incomingThumbHash === itemThumbHash) {
+        return { duplicate: true, match: { id: item.id, title: item.title, reason: "THUMB_DUPLICATE" } };
+      }
+    }
+
+    return { duplicate: false, match: null };
+  }
+
+  app.post("/api/media/check-duplicate", requireUser, async (req, res) => {
+    try {
+      const incoming = req.body || {};
+      const allMedia = await listCollection("media");
+      const result = checkMediaDuplicate(incoming, allMedia);
+      res.json(result);
+    } catch (e: any) {
+      console.error("[media] check-duplicate error:", e);
+      res.status(500).json({ error: "Failed to check duplicate" });
+    }
+  });
+
+  // -----------------------------------------------------------------------------
+  // CONTENT ROTATION
+  // -----------------------------------------------------------------------------
+
+  let lastSeedUpdateHour = "";
+
+  async function checkAndRotateSeed() {
+    const currentHour = new Date().toISOString().slice(0, 13); // e.g. "2026-09-19T08"
+    if (lastSeedUpdateHour !== currentHour) {
+      lastSeedUpdateHour = currentHour;
+      const settings = await getSettings();
+      if (!settings.rotationSeed || settings.rotationMode !== "off") {
+        settings.rotationSeed = currentHour;
+        settings.rotationMode = settings.rotationMode || "shuffle";
+        await setSettings(settings);
+      }
+    }
+  }
+
+  function getStableHash(str: string): number {
+    const hash = createHash("sha256").update(str).digest("hex");
+    return parseInt(hash.slice(0, 8), 16);
+  }
+
+  function stableShuffle(items: any[], seed: string): any[] {
+    const prime = 1000000007;
+    return [...items].sort((a, b) => {
+      const hashA = getStableHash(a.id + seed) % prime;
+      const hashB = getStableHash(b.id + seed) % prime;
+      return hashA - hashB;
+    });
+  }
+
+  function rotateArray(arr: any[], offset: number): any[] {
+    if (arr.length === 0) return arr;
+    const shift = offset % arr.length;
+    return [...arr.slice(shift), ...arr.slice(0, shift)];
+  }
+
+  app.get("/api/media/rotated", async (req, res) => {
+    try {
+      await checkAndRotateSeed();
+      const settings = await getSettings();
+      const seed = (req.query.seed as string) || settings.rotationSeed || new Date().toISOString().slice(0, 13);
+      const mode = settings.rotationMode || "off";
+      const limit = parseInt(req.query.limit as string) || 50;
+
+      let items = await listCollection("media");
+
+      if (mode === "shuffle") {
+        items = stableShuffle(items, seed);
+      } else if (mode === "roundRobin") {
+        // sort by upload date descending first
+        items = [...items].sort((a, b) => new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime());
+        const offset = getStableHash(seed) % (items.length || 1);
+        items = rotateArray(items, offset);
+      } else {
+        // off: sort newest first
+        items = [...items].sort((a, b) => new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime());
+      }
+
+      res.json(items.slice(0, limit));
+    } catch (e: any) {
+      console.error("[media] rotated error:", e);
+      res.status(500).json({ error: "Failed to load rotated media" });
+    }
+  });
+
+  // -----------------------------------------------------------------------------
   // BULK OPERATIONS (admin only)
   // -----------------------------------------------------------------------------
 
@@ -1365,9 +1493,38 @@ async function startServer() {
 
     const created: any[] = [];
     const errors: any[] = [];
+    const rejected: any[] = [];
+    const allMedia = await listCollection("media");
+
     for (let i = 0; i < items.length; i++) {
       try {
         const item = items[i];
+
+        // Validation for video type
+        if (item.mediaType === "video" && !item.externalUrl) {
+          rejected.push({
+            index: i,
+            reason: "URL_EMPTY",
+            title: item.title,
+            id: item.id
+          });
+          continue;
+        }
+
+        // Duplicate check
+        const dup = checkMediaDuplicate(item, [...allMedia, ...created]);
+        if (dup.duplicate && dup.match) {
+          rejected.push({
+            index: i,
+            reason: dup.match.reason,
+            title: item.title,
+            id: item.id,
+            conflictingId: dup.match.id,
+            conflictingTitle: dup.match.title
+          });
+          continue;
+        }
+
         const doc: any = {
           ...item,
           id: item.id || generateId(),
@@ -1378,6 +1535,10 @@ async function startServer() {
           uploadedAt: item.uploadedAt || new Date().toISOString(),
           likes: item.likes || [],
           dislikes: item.dislikes || [],
+          playbackMode: item.playbackMode || (item.mediaType === "video" ? "external" : "local"),
+          externalUrl: item.externalUrl || "",
+          uploadedBy: item.uploadedBy || user.id,
+          description: item.description || ""
         };
         await upsertDoc("media", doc);
         created.push(doc);
@@ -1386,7 +1547,7 @@ async function startServer() {
       }
     }
     await logActivity("import", `Bulk created ${created.length} media items`, user.id);
-    res.json({ success: true, created: created.length, errors, items: created });
+    res.json({ success: true, created: created.length, errors, items: created, rejected });
   });
 
   app.post("/api/media/bulk-update", requireUser, async (req, res) => {
@@ -1422,6 +1583,121 @@ async function startServer() {
     }
     await logActivity("delete", `Bulk deleted ${deleted} media items`, user.id);
     res.json({ success: true, deleted });
+  });
+
+  function fallbackCategorize(title: string, description: string): string[] {
+    const content = `${title} ${description}`.toLowerCase();
+    const tags = new Set<string>();
+    
+    if (content.includes("premium") || content.includes("exclusive") || content.includes("vip")) {
+      tags.add("exclusive");
+    }
+    if (content.includes("4k") || content.includes("hd") || content.includes("ultra")) {
+      tags.add("4k");
+    }
+    if (content.includes("glamour") || content.includes("model") || content.includes("beauty")) {
+      tags.add("glamour");
+    }
+    if (content.includes("behind") || content.includes("scene") || content.includes("bts")) {
+      tags.add("bts");
+    }
+    if (content.includes("swimwear") || content.includes("bikini") || content.includes("pool")) {
+      tags.add("swimwear");
+    }
+    if (content.includes("fashion") || content.includes("style") || content.includes("shoot")) {
+      tags.add("fashion");
+    }
+    
+    if (tags.size === 0) {
+      tags.add("featured");
+      tags.add("hd");
+    }
+    
+    return Array.from(tags);
+  }
+
+  app.post("/api/media/auto-categorize", requireUser, async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
+    const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids : [];
+    if (ids.length === 0) return res.status(400).json({ error: "No ids provided" });
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    let mode: "gemini" | "fallback" = "gemini";
+    let geminiError: string | null = null;
+    let updated = 0;
+
+    let ai: any = null;
+    if (apiKey) {
+      try {
+        ai = new GoogleGenAI({
+          apiKey,
+          httpOptions: {
+            headers: {
+              "User-Agent": "aistudio-build",
+            },
+          },
+        });
+      } catch (err: any) {
+        console.error("Failed to initialize GoogleGenAI:", err);
+        mode = "fallback";
+        geminiError = err.message;
+      }
+    } else {
+      mode = "fallback";
+      geminiError = "GEMINI_API_KEY environment variable is not defined";
+    }
+
+    for (const id of ids) {
+      const existing: any = await findOneByField("media", "id", id);
+      if (!existing) continue;
+
+      let tags: string[] = [];
+      if (mode === "gemini" && ai) {
+        try {
+          const prompt = `Analyze this video's metadata and generate a list of 3 to 6 highly specific, professional, and relevant tagging categories (in lowercase) for it. Keep them single-word or short hyphenated terms, e.g., "glamour", "lifestyle", "swimwear", "4k", "exclusive", "fashion", "behind-the-scenes".
+Title: ${existing.title}
+Description: ${existing.description || ""}`;
+
+          const response = await ai.models.generateContent({
+            model: "gemini-3.8-flash",
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.STRING,
+                },
+              },
+            },
+          });
+
+          const resultText = response.text?.trim() || "";
+          tags = JSON.parse(resultText);
+          if (!Array.isArray(tags)) {
+            throw new Error("Gemini response is not an array");
+          }
+        } catch (err: any) {
+          console.error(`Gemini categorization failed for item ${id}, falling back:`, err);
+          // Keep mode as gemini if other items might succeed, or set fallback if it was a total key/quota fail
+          if (err.message?.includes("quota") || err.message?.includes("exhausted") || err.message?.includes("key")) {
+            mode = "fallback";
+          }
+          geminiError = err.message;
+          tags = fallbackCategorize(existing.title, existing.description || "");
+        }
+      } else {
+        tags = fallbackCategorize(existing.title, existing.description || "");
+      }
+
+      const cleanTags = Array.from(new Set(tags.map(t => t.toLowerCase().trim()).filter(Boolean)));
+      await upsertDoc("media", { ...existing, tags: cleanTags, id });
+      updated++;
+    }
+
+    await logActivity("update", `Auto-categorized ${updated} media items (${mode} mode)`, user.id);
+    res.json({ success: true, updated, mode, error: geminiError });
   });
 
   app.post("/api/users/bulk-update", requireUser, async (req, res) => {
@@ -1496,6 +1772,12 @@ async function startServer() {
     if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
     const files = (req.files as Express.Multer.File[]) || [];
     if (files.length === 0) return res.status(400).json({ error: "No files uploaded" });
+
+    // Check if any file is a video
+    const hasVideo = files.some(file => file.mimetype.startsWith("video/"));
+    if (hasVideo) {
+      return res.status(400).json({ error: "Batch upload accepts images only" });
+    }
 
     const results: any[] = [];
     for (const file of files) {
@@ -1576,6 +1858,185 @@ async function startServer() {
     }
   });
 
+  // --- Chat Portal API ---
+
+  app.post("/api/chat/open", requireUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const { talentId } = req.body || {};
+      if (!talentId) return res.status(400).json({ error: "talentId required" });
+
+      const talentUser = await findOneByField("users", "id", talentId);
+      if (!talentUser) return res.status(404).json({ error: "Talent user not found" });
+
+      // If they explicitly disabled chat
+      if (talentUser.acceptsChat === false) {
+        return res.status(403).json({ error: "This user has disabled chat" });
+      }
+
+      const allThreads = await listCollection("chatThreads");
+      let thread = allThreads.find(t => t.userId === user.id && t.talentId === talentId);
+
+      if (!thread) {
+        thread = {
+          id: generateId(),
+          userId: user.id,
+          talentId,
+          status: "opened",
+          userMessageCount: 0,
+          messages: [],
+          selectedProductId: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        await upsertDoc("chatThreads", thread);
+      }
+
+      res.json(thread);
+    } catch (e: any) {
+      console.error("[chat] open error:", e);
+      res.status(500).json({ error: "Failed to open chat thread" });
+    }
+  });
+
+  app.get("/api/chat/threads", requireUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const allThreads = await listCollection("chatThreads");
+      const filtered = allThreads.filter(t => t.userId === user.id || t.talentId === user.id);
+      res.json(filtered);
+    } catch (e: any) {
+      res.status(500).json({ error: "Failed to load chat threads" });
+    }
+  });
+
+  app.get("/api/chat/thread/:id", requireUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const thread = await findOneByField("chatThreads", "id", req.params.id);
+      if (!thread) return res.status(404).json({ error: "Thread not found" });
+      if (thread.userId !== user.id && thread.talentId !== user.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      res.json(thread);
+    } catch (e: any) {
+      res.status(500).json({ error: "Failed to load thread" });
+    }
+  });
+
+  app.post("/api/chat/thread/:id/send", requireUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const thread = await findOneByField("chatThreads", "id", req.params.id);
+      if (!thread) return res.status(404).json({ error: "Thread not found" });
+      if (thread.userId !== user.id && thread.talentId !== user.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const isConsumer = thread.userId === user.id;
+
+      if (thread.status === "declined") {
+        return res.status(403).json({ error: "This chat has been declined" });
+      }
+
+      if (thread.status === "opened" && isConsumer) {
+        if (thread.userMessageCount >= 4) {
+          return res.status(429).json({ error: "Waiting for talent to accept" });
+        }
+      }
+
+      const text = String(req.body?.text || "").trim();
+      if (!text) return res.status(400).json({ error: "Message text is required" });
+
+      const newMessage = {
+        id: generateId(),
+        senderId: user.id,
+        text,
+        createdAt: new Date().toISOString()
+      };
+
+      thread.messages = [...(thread.messages || []), newMessage];
+      if (isConsumer && thread.status === "opened") {
+        thread.userMessageCount = (thread.userMessageCount || 0) + 1;
+      }
+      thread.updatedAt = new Date().toISOString();
+
+      await upsertDoc("chatThreads", thread);
+      res.json(thread);
+    } catch (e: any) {
+      res.status(500).json({ error: "Failed to send message" });
+    }
+  });
+
+  app.post("/api/chat/thread/:id/accept", requireUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const thread = await findOneByField("chatThreads", "id", req.params.id);
+      if (!thread) return res.status(404).json({ error: "Thread not found" });
+      if (thread.talentId !== user.id) {
+        return res.status(403).json({ error: "Only the talent can accept this thread" });
+      }
+      thread.status = "accepted";
+      thread.updatedAt = new Date().toISOString();
+      await upsertDoc("chatThreads", thread);
+      res.json(thread);
+    } catch (e: any) {
+      res.status(500).json({ error: "Failed to accept thread" });
+    }
+  });
+
+  app.post("/api/chat/thread/:id/decline", requireUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const thread = await findOneByField("chatThreads", "id", req.params.id);
+      if (!thread) return res.status(404).json({ error: "Thread not found" });
+      if (thread.talentId !== user.id) {
+        return res.status(403).json({ error: "Only the talent can decline this thread" });
+      }
+      thread.status = "declined";
+      thread.updatedAt = new Date().toISOString();
+      await upsertDoc("chatThreads", thread);
+      res.json(thread);
+    } catch (e: any) {
+      res.status(500).json({ error: "Failed to decline thread" });
+    }
+  });
+
+  app.post("/api/chat/thread/:id/select-product", requireUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const { productId } = req.body || {};
+      const thread = await findOneByField("chatThreads", "id", req.params.id);
+      if (!thread) return res.status(404).json({ error: "Thread not found" });
+      if (thread.userId !== user.id) {
+        return res.status(403).json({ error: "Only the consumer can select a product" });
+      }
+      if (thread.status !== "accepted") {
+        return res.status(400).json({ error: "Thread must be accepted to select a product" });
+      }
+
+      thread.selectedProductId = productId;
+      thread.updatedAt = new Date().toISOString();
+      await upsertDoc("chatThreads", thread);
+
+      // Fetch the talent's details
+      const talentUser = await findOneByField("users", "id", thread.talentId);
+      const talentProf = await findOneByField("talentProfiles", "userId", thread.talentId);
+
+      res.json({
+        success: true,
+        thread,
+        contactDetails: {
+          whatsapp: talentUser?.whatsapp || talentProf?.whatsapp || "",
+          telegram: talentUser?.telegram || talentProf?.telegram || "",
+          email: talentUser?.email || ""
+        }
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: "Failed to select product" });
+    }
+  });
+
   // --- Site Settings ---
 
   app.get("/api/siteSettings", async (_req, res) => {
@@ -1629,6 +2090,7 @@ async function startServer() {
     "notifications",
     "comments",
     "activityLogs",
+    "chatThreads",
   ] as const;
 
   const OWNER_FIELD: Record<string, string> = {
@@ -1638,6 +2100,7 @@ async function startServer() {
     notifications: "userId",
     comments: "userId",
     activityLogs: "userId",
+    chatThreads: "userId",
   };
 
   for (const name of CRUD_COLLECTIONS) {
@@ -1677,6 +2140,22 @@ async function startServer() {
         const doc: any = { ...req.body, id: req.body.id || generateId() };
 
         if (name === "media") {
+          if (doc.mediaType === "video" && !doc.externalUrl) {
+            return res.status(400).json({ error: "Video must specify an external destination URL." });
+          }
+
+          // Duplicate check
+          const allMedia = await listCollection("media");
+          const dup = checkMediaDuplicate(doc, allMedia);
+          if (dup.duplicate && dup.match) {
+            return res.status(409).json({
+              error: "Conflict: duplicate item found",
+              id: dup.match.id,
+              title: dup.match.title,
+              reason: dup.match.reason
+            });
+          }
+
           doc.userId = user.id;
           doc.creatorName = doc.creatorName || user.name;
           doc.creatorAvatar = doc.creatorAvatar || user.avatarUrl;
@@ -1684,6 +2163,10 @@ async function startServer() {
           doc.uploadedAt = doc.uploadedAt || "Just now";
           doc.likes = doc.likes || [];
           doc.dislikes = doc.dislikes || [];
+          doc.playbackMode = doc.playbackMode || (doc.mediaType === "video" ? "external" : "local");
+          doc.externalUrl = doc.externalUrl || "";
+          doc.uploadedBy = doc.uploadedBy || user.id;
+          doc.description = doc.description || "";
         } else if (name === "messages") {
           doc.senderId = user.id;
         } else if (name === "comments") {

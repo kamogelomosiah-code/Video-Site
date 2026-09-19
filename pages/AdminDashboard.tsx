@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, MediaItem, UserRole, TalentProfile, ActivityLog } from '../types';
 import { api } from '../services/api';
-import { ShieldCheck, Video, Users, PlusCircle, Edit, Trash2, X, Save, Settings, Star, MapPin, UploadCloud, Menu, ChevronDown, RefreshCw, Upload, FileJson, Briefcase, Activity, Server, DollarSign, Play, Eye, ExternalLink, HardDrive, Film, Copy, Check, Lock, Unlock, Clock, Tag } from 'lucide-react';
+import { ShieldCheck, Video, Users, PlusCircle, Edit, Trash2, X, Save, Settings, Star, MapPin, UploadCloud, Menu, ChevronDown, RefreshCw, Upload, FileJson, Briefcase, Activity, Server, DollarSign, Play, Eye, ExternalLink, HardDrive, Film, Copy, Check, Lock, Unlock, Clock, Tag, Shuffle } from 'lucide-react';
 import AdminBulkUpload from '../components/AdminBulkUpload';
 import AdminBulkImport from '../components/AdminBulkImport';
 import AdminAds from '../components/AdminAds';
@@ -36,6 +36,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   // UI state
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isAutoCategorizing, setIsAutoCategorizing] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
   
   // Modal visibility states
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
@@ -108,27 +121,42 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   // --- Delete Handlers ---
 
   const handleDeleteMedia = async (id: string) => { 
-      if (window.confirm('Are you sure you want to delete this media?')) { 
+      setConfirmDialog({
+        isOpen: true,
+        title: 'Delete Media Item',
+        message: 'Are you sure you want to delete this media item? This action is irreversible.',
+        onConfirm: async () => {
           await api.media.delete(id); 
           fetchData(); 
-      } 
+        }
+      });
   };
   
   const handleDeleteTalent = async (id: string) => { 
-      if (window.confirm('Are you sure you want to delete this talent profile?')) { 
+      setConfirmDialog({
+        isOpen: true,
+        title: 'Delete Talent Profile',
+        message: 'Are you sure you want to delete this talent profile? This action is irreversible.',
+        onConfirm: async () => {
           await api.talent.delete(id); 
           fetchData(); 
-      } 
+        }
+      });
   };
   
   const handleDeleteUser = async (id: string) => { 
       if (id === user.id) { alert("Cannot delete your own admin account."); return; } 
-      if (window.confirm('Are you sure you want to delete this user?')) { 
+      setConfirmDialog({
+        isOpen: true,
+        title: 'Delete User Account',
+        message: 'Are you sure you want to delete this user account? This action is irreversible.',
+        onConfirm: async () => {
           try {
             await api.users.delete(id);
             fetchData();
           } catch (e) { alert('Operation failed'); }
-      } 
+        }
+      });
   };
   
   // --- Modal Toggle Helpers ---
@@ -160,7 +188,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const getFilteredData = () => {
       const term = searchTerm.toLowerCase();
       switch(activeTab) {
-          case 'media': return media.filter(m => m.title.toLowerCase().includes(term));
+          case 'media': return media.filter(m => 
+            m.title.toLowerCase().includes(term) ||
+            (m.description || '').toLowerCase().includes(term) ||
+            (m.tags || []).some((t: string) => t.toLowerCase().includes(term))
+          );
           case 'users': return users.filter(u => u.name.toLowerCase().includes(term) || u.email?.toLowerCase().includes(term));
           case 'talent': return talent.filter(t => t.name.toLowerCase().includes(term));
           default: return [];
@@ -311,10 +343,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                   onEdit={openMediaModal} 
                   onDelete={handleDeleteMedia} 
                   selected={selectedMedia}
-                  onToggleSelect={(id: string) => {
-                    const next = new Set(selectedMedia);
-                    if (next.has(id)) next.delete(id); else next.add(id);
-                    setSelectedMedia(next);
+                  onToggleSelect={(id: string, customSet?: Set<string>) => {
+                    if (customSet) {
+                      setSelectedMedia(customSet);
+                    } else {
+                      const next = new Set(selectedMedia);
+                      if (next.has(id)) next.delete(id); else next.add(id);
+                      setSelectedMedia(next);
+                    }
                   }}
                   onToggleAll={(checked: boolean) => {
                     if (checked) setSelectedMedia(new Set(filteredData.map(m => m.id)));
@@ -328,10 +364,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                   onEdit={openUserModal} 
                   onDelete={handleDeleteUser}
                   selected={selectedUsers}
-                  onToggleSelect={(id: string) => {
-                    const next = new Set(selectedUsers);
-                    if (next.has(id)) next.delete(id); else next.add(id);
-                    setSelectedUsers(next);
+                  onToggleSelect={(id: string, customSet?: Set<string>) => {
+                    if (customSet) {
+                      setSelectedUsers(customSet);
+                    } else {
+                      const next = new Set(selectedUsers);
+                      if (next.has(id)) next.delete(id); else next.add(id);
+                      setSelectedUsers(next);
+                    }
                   }}
                   onToggleAll={(checked: boolean) => {
                     if (checked) setSelectedUsers(new Set(filteredData.map(u => u.id)));
@@ -345,10 +385,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                   onEdit={openTalentModal} 
                   onDelete={handleDeleteTalent}
                   selected={selectedTalent}
-                  onToggleSelect={(id: string) => {
-                    const next = new Set(selectedTalent);
-                    if (next.has(id)) next.delete(id); else next.add(id);
-                    setSelectedTalent(next);
+                  onToggleSelect={(id: string, customSet?: Set<string>) => {
+                    if (customSet) {
+                      setSelectedTalent(customSet);
+                    } else {
+                      const next = new Set(selectedTalent);
+                      if (next.has(id)) next.delete(id); else next.add(id);
+                      setSelectedTalent(next);
+                    }
                   }}
                   onToggleAll={(checked: boolean) => {
                     if (checked) setSelectedTalent(new Set(filteredData.map(t => t.id)));
@@ -370,19 +414,99 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
 
       {/* --- Bulk Action Bar & Modals --- */}
       <BulkActionBar
-        count={selectedMedia.size + selectedUsers.size + selectedTalent.size}
-        onClear={() => { setSelectedMedia(new Set()); setSelectedUsers(new Set()); setSelectedTalent(new Set()); }}
+        count={
+          activeTab === 'media' ? selectedMedia.size :
+          activeTab === 'users' ? selectedUsers.size :
+          activeTab === 'talent' ? selectedTalent.size : 0
+        }
+        onClear={() => {
+          if (activeTab === 'media') setSelectedMedia(new Set());
+          if (activeTab === 'users') setSelectedUsers(new Set());
+          if (activeTab === 'talent') setSelectedTalent(new Set());
+        }}
         onEdit={() => {
-          if (selectedMedia.size) { setBulkEntity('media'); setBulkEditOpen(true); }
-          else if (selectedUsers.size) { setBulkEntity('users'); setBulkEditOpen(true); }
-          else if (selectedTalent.size) { setBulkEntity('talent'); setBulkEditOpen(true); }
+          if (activeTab === 'media') { setBulkEntity('media'); setBulkEditOpen(true); }
+          else if (activeTab === 'users') { setBulkEntity('users'); setBulkEditOpen(true); }
+          else if (activeTab === 'talent') { setBulkEntity('talent'); setBulkEditOpen(true); }
         }}
-        onDelete={async () => {
-          if (selectedMedia.size) { await api.media.bulkDelete([...selectedMedia]); setSelectedMedia(new Set()); fetchData(); }
-          else if (selectedUsers.size) { await api.users.bulkDelete([...selectedUsers]); setSelectedUsers(new Set()); fetchData(); }
-          else if (selectedTalent.size) { await api.talent.bulkDelete([...selectedTalent]); setSelectedTalent(new Set()); fetchData(); }
+        onDelete={() => {
+          const selectedCount = activeTab === 'media' ? selectedMedia.size :
+                                activeTab === 'users' ? selectedUsers.size :
+                                activeTab === 'talent' ? selectedTalent.size : 0;
+          if (selectedCount === 0) return;
+          setConfirmDialog({
+            isOpen: true,
+            title: `Delete Selected Items`,
+            message: `Are you sure you want to delete the ${selectedCount} selected item(s)? This action is irreversible.`,
+            onConfirm: async () => {
+              setIsBulkDeleting(true);
+              try {
+                if (activeTab === 'media' && selectedMedia.size) { 
+                  await api.media.bulkDelete([...selectedMedia]); 
+                  setSelectedMedia(new Set()); 
+                } else if (activeTab === 'users' && selectedUsers.size) { 
+                  await api.users.bulkDelete([...selectedUsers]); 
+                  setSelectedUsers(new Set()); 
+                } else if (activeTab === 'talent' && selectedTalent.size) { 
+                  await api.talent.bulkDelete([...selectedTalent]); 
+                  setSelectedTalent(new Set()); 
+                }
+                await fetchData();
+              } catch (err) {
+                console.error("Bulk delete failed", err);
+                alert("Bulk delete failed");
+              } finally {
+                setIsBulkDeleting(false);
+              }
+            }
+          });
         }}
+        totalInLibrary={
+          activeTab === 'media' ? media.length :
+          activeTab === 'users' ? users.length :
+          activeTab === 'talent' ? talent.length : 0
+        }
+        onSelectAll={
+          activeTab === 'media' ? () => setSelectedMedia(new Set(media.map(m => m.id))) :
+          activeTab === 'users' ? () => setSelectedUsers(new Set(users.map(u => u.id))) :
+          activeTab === 'talent' ? () => setSelectedTalent(new Set(talent.map(t => t.id))) : undefined
+        }
+        onAutoCategorize={
+          activeTab === 'media' && selectedMedia.size > 0
+            ? async () => {
+                setIsAutoCategorizing(true);
+                try {
+                  const res = await api.media.autoCategorize([...selectedMedia]);
+                  if (res.success) {
+                    setSelectedMedia(new Set());
+                    await fetchData();
+                    if (res.mode === 'fallback') {
+                      alert(`Successfully auto-categorized ${res.updated} items using rule-based tags (Gemini was unavailable: ${res.error || 'quota exceeded'}).`);
+                    } else {
+                      alert(`Successfully auto-categorized ${res.updated} items using Gemini AI!`);
+                    }
+                  } else {
+                    alert('Failed to auto-categorize media items.');
+                  }
+                } catch (err: any) {
+                  console.error('Error auto-categorizing media:', err);
+                  alert(`Error auto-categorizing: ${err.message}`);
+                } finally {
+                  setIsAutoCategorizing(false);
+                }
+              }
+            : undefined
+        }
+        isAutoCategorizing={isAutoCategorizing}
       />
+
+      {isBulkDeleting && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-[100]">
+          <div className="w-16 h-16 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin mb-4 shadow-[0_0_20px_rgba(234,179,8,0.3)]"></div>
+          <p className="text-xl font-bold text-white tracking-wide">Executing Bulk Operation...</p>
+          <p className="text-zinc-500 text-sm mt-2">Updating repository and database records...</p>
+        </div>
+      )}
 
       <BulkEditModal
         isOpen={bulkEditOpen}
@@ -415,9 +539,39 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
         />
       )}
 
-      {isMediaModalOpen && <MediaFormModal media={editingMedia} onClose={closeMediaModal} onSubmit={handleMediaSubmit} currentUser={user}/>}
+       {isMediaModalOpen && <MediaFormModal media={editingMedia} onClose={closeMediaModal} onSubmit={handleMediaSubmit} currentUser={user}/>}
       {isUserModalOpen && <UserFormModal user={editingUser} onClose={closeUserModal} onSubmit={handleUserSubmit} />}
       {isTalentModalOpen && <TalentFormModal talent={editingTalent} onClose={closeTalentModal} onSubmit={handleTalentSubmit} />}
+
+      {confirmDialog.isOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl p-6 space-y-6 animate-fade-in-up">
+            <div className="space-y-2">
+              <h3 className="text-lg font-bold text-white">{confirmDialog.title}</h3>
+              <p className="text-sm text-zinc-400 leading-relaxed">{confirmDialog.message}</p>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-xl text-xs font-semibold border border-zinc-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                  confirmDialog.onConfirm();
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition-colors shadow-lg shadow-red-900/20"
+              >
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -425,7 +579,31 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
 // --- Sub-components for Tables & Panels ---
 
 const MediaTable = ({ media, onView, onEdit, onDelete, selected, onToggleSelect, onToggleAll }: any) => {
+  const [lastSelectedIndex, setLastSelectedIndex] = React.useState<number | null>(null);
   const allSelected = media.length > 0 && media.every((m: MediaItem) => selected.has(m.id));
+
+  const handleCheckboxClick = (index: number, id: string, e: React.MouseEvent<HTMLInputElement>) => {
+    if (e.shiftKey && lastSelectedIndex !== null) {
+      const start = Math.min(lastSelectedIndex, index);
+      const end = Math.max(lastSelectedIndex, index);
+      const sliceIds = media.slice(start, end + 1).map((m: MediaItem) => m.id);
+      const shouldSelect = !selected.has(id);
+      
+      const nextSelected = new Set(selected);
+      sliceIds.forEach((sid: string) => {
+        if (shouldSelect) {
+          nextSelected.add(sid);
+        } else {
+          nextSelected.delete(sid);
+        }
+      });
+      onToggleSelect(id, nextSelected);
+    } else {
+      onToggleSelect(id);
+    }
+    setLastSelectedIndex(index);
+  };
+
   return (
     <div>
       {/* Desktop View */}
@@ -453,10 +631,16 @@ const MediaTable = ({ media, onView, onEdit, onDelete, selected, onToggleSelect,
                 </td>
               </tr>
             ) : (
-              media.map((item: MediaItem) => (
+              media.map((item: MediaItem, index: number) => (
                 <tr key={item.id} className={`hover:bg-zinc-900/40 transition-colors ${selected.has(item.id) ? 'bg-yellow-500/5' : ''}`}>
                   <td className="px-4 py-4">
-                    <input type="checkbox" checked={selected.has(item.id)} onChange={() => onToggleSelect(item.id)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
+                    <input 
+                      type="checkbox" 
+                      checked={selected.has(item.id)} 
+                      onClick={(e) => handleCheckboxClick(index, item.id, e as any)}
+                      onChange={() => {}}
+                      className="w-4 h-4 accent-yellow-500 cursor-pointer" 
+                    />
                   </td>
                   <td className="px-6 py-4">
                     <div onClick={() => onView?.(item)} className="relative w-16 h-10 bg-zinc-950 rounded border border-zinc-800/80 overflow-hidden cursor-pointer flex-shrink-0 group">
@@ -511,10 +695,16 @@ const MediaTable = ({ media, onView, onEdit, onDelete, selected, onToggleSelect,
             No media found.
           </div>
         ) : (
-          media.map((item: MediaItem) => (
+          media.map((item: MediaItem, index: number) => (
             <div key={item.id} className={`p-4 space-y-3 transition-colors ${selected.has(item.id) ? 'bg-yellow-500/5' : ''}`}>
               <div className="flex items-start gap-3">
-                <input type="checkbox" checked={selected.has(item.id)} onChange={() => onToggleSelect(item.id)} className="w-4 h-4 accent-yellow-500 rounded mt-1 cursor-pointer flex-shrink-0" />
+                <input 
+                  type="checkbox" 
+                  checked={selected.has(item.id)} 
+                  onClick={(e) => handleCheckboxClick(index, item.id, e as any)}
+                  onChange={() => {}}
+                  className="w-4 h-4 accent-yellow-500 rounded mt-1 cursor-pointer flex-shrink-0" 
+                />
                 <div onClick={() => onView?.(item)} className="relative w-20 h-12 bg-zinc-950 border border-zinc-800/80 rounded overflow-hidden flex-shrink-0 cursor-pointer">
                   {item.thumbnailUrl ? <img src={item.thumbnailUrl} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-700">No img</div>}
                   <div className="absolute bottom-1 right-1 bg-black/80 text-[9px] font-mono px-1 rounded text-zinc-300">{item.duration}</div>
@@ -738,6 +928,34 @@ const SiteSettingsPanel = ({ media, settings, onSettingsChange, onSaveSettings }
             placeholder="150"
             className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500"
           />
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-zinc-300 mb-2">Smart Rotate Content Mode</label>
+          <select
+            name="rotationMode"
+            value={settings.rotationMode || 'off'}
+            onChange={onSettingsChange}
+            className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 cursor-pointer"
+          >
+            <option value="off">Off - standard listing</option>
+            <option value="shuffle">Shuffle - random dynamic sorting</option>
+            <option value="roundRobin">Round-robin - sequential chronological offset</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-zinc-300 mb-2">Manual Content Shuffle</label>
+          <button
+            type="button"
+            onClick={() => {
+              const newSeed = Math.random().toString(36).substring(2, 15);
+              onSettingsChange({ target: { name: 'rotationSeed', value: newSeed } } as any);
+              alert("Content seed shuffled! Be sure to click 'Save Global Settings' to save this seed.");
+            }}
+            className="w-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl px-4 py-3 text-yellow-500 font-semibold transition-colors flex items-center justify-center space-x-2"
+          >
+            <Shuffle className="w-5 h-5 animate-spin-slow" />
+            <span>Shuffle Content Now</span>
+          </button>
         </div>
         <div className="md:col-span-2">
           <label className="block text-sm font-semibold text-zinc-300 mb-2">Featured Hero Video</label>

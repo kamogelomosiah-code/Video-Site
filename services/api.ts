@@ -5,7 +5,8 @@ import {
   TalentProfile,
   Notification,
   Message,
-  ActivityLog
+  ActivityLog,
+  ChatThread
 } from '../types';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -170,6 +171,8 @@ export const api = {
 
     bulkDelete: (ids: string[]) => request<{ success: boolean; deleted: number }>('/api/media/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) }),
 
+    autoCategorize: (ids: string[]) => request<{ success: boolean; updated: number; mode: string; error?: string }>('/api/media/auto-categorize', { method: 'POST', body: JSON.stringify({ ids }) }),
+
     batchUpload: (formData: FormData) => request<{ success: boolean; results: any[] }>('/api/upload/batch', { method: 'POST', body: formData }),
 
     rate: (mediaId: string, _userId: string, isLike: boolean): Promise<{ likes: number; dislikes: number }> =>
@@ -177,6 +180,15 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ like: isLike }),
       }),
+
+    checkDuplicate: (item: Partial<MediaItem>): Promise<{ duplicate: boolean; match: { id: string; title: string; reason: string } | null }> =>
+      request<{ duplicate: boolean; match: { id: string; title: string; reason: string } | null }>('/api/media/check-duplicate', {
+        method: 'POST',
+        body: JSON.stringify(item),
+      }),
+
+    getRotated: (limit = 50, seed?: string): Promise<MediaItem[]> =>
+      request<MediaItem[]>(`/api/media/rotated?limit=${limit}${seed ? `&seed=${encodeURIComponent(seed)}` : ''}`),
   },
 
   users: {
@@ -279,6 +291,42 @@ export const api = {
           receiverId,
           text,
         }),
+      }),
+  },
+
+  chat: {
+    open: (talentId: string): Promise<ChatThread> =>
+      request<ChatThread>('/api/chat/open', {
+        method: 'POST',
+        body: JSON.stringify({ talentId }),
+      }),
+
+    getThreads: (): Promise<ChatThread[]> =>
+      request<ChatThread[]>('/api/chat/threads'),
+
+    getThread: (id: string): Promise<ChatThread> =>
+      request<ChatThread>(`/api/chat/thread/${id}`),
+
+    sendMessage: (id: string, text: string): Promise<ChatThread> =>
+      request<ChatThread>(`/api/chat/thread/${id}/send`, {
+        method: 'POST',
+        body: JSON.stringify({ text }),
+      }),
+
+    accept: (id: string): Promise<ChatThread> =>
+      request<ChatThread>(`/api/chat/thread/${id}/accept`, {
+        method: 'POST',
+      }),
+
+    decline: (id: string): Promise<ChatThread> =>
+      request<ChatThread>(`/api/chat/thread/${id}/decline`, {
+        method: 'POST',
+      }),
+
+    selectProduct: (id: string, productId: string): Promise<{ success: boolean; thread: ChatThread; contactDetails: { whatsapp?: string; telegram?: string; email?: string } }> =>
+      request<{ success: boolean; thread: ChatThread; contactDetails: { whatsapp?: string; telegram?: string; email?: string } }>(`/api/chat/thread/${id}/select-product`, {
+        method: 'POST',
+        body: JSON.stringify({ productId }),
       }),
   },
 

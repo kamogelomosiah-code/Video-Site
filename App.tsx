@@ -31,6 +31,9 @@ const GUEST_USER: User = {
 const App: React.FC = () => {
   // Persistence Logic for GitHub Pages / Static Hosting Refresh Support
   const [currentPage, setCurrentPage] = useState<'auth' | 'media' | 'directory' | 'messages' | 'profile' | 'view' | 'admin-dashboard' | 'reset-password'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pageParam = params.get('page');
+    if (pageParam) return pageParam as any;
     return (localStorage.getItem('elysian_current_page') as any) || 'media';
   });
   
@@ -48,10 +51,16 @@ const App: React.FC = () => {
   }, []);
 
   const [selectedMediaId, setSelectedMediaId] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const mediaIdParam = params.get('mediaId');
+    if (mediaIdParam) return mediaIdParam;
     return localStorage.getItem('elysian_media_id');
   });
   
   const [viewingUserId, setViewingUserId] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const userIdParam = params.get('userId');
+    if (userIdParam) return userIdParam;
     return localStorage.getItem('elysian_viewing_user_id');
   });
 
@@ -83,7 +92,21 @@ const App: React.FC = () => {
     initSession();
   }, []);
 
-  // Save navigation state
+  // Sync browser back/forward buttons with local page navigation
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const state = event.state;
+      if (state) {
+        if (state.currentPage) setCurrentPage(state.currentPage);
+        if (state.selectedMediaId !== undefined) setSelectedMediaId(state.selectedMediaId);
+        if (state.viewingUserId !== undefined) setViewingUserId(state.viewingUserId);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Save navigation state & history push
   useEffect(() => {
     localStorage.setItem('elysian_current_page', currentPage);
     if (selectedMediaId) localStorage.setItem('elysian_media_id', selectedMediaId);
@@ -91,6 +114,19 @@ const App: React.FC = () => {
     
     if (viewingUserId) localStorage.setItem('elysian_viewing_user_id', viewingUserId);
     else localStorage.removeItem('elysian_viewing_user_id');
+
+    // Update URL query params & browser history state for back button navigation
+    const params = new URLSearchParams();
+    params.set('page', currentPage);
+    if (selectedMediaId) params.set('mediaId', selectedMediaId);
+    if (viewingUserId) params.set('userId', viewingUserId);
+    
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    const currentState = window.history.state;
+    
+    if (!currentState || currentState.currentPage !== currentPage || currentState.selectedMediaId !== selectedMediaId || currentState.viewingUserId !== viewingUserId) {
+      window.history.pushState({ currentPage, selectedMediaId, viewingUserId }, '', newUrl);
+    }
   }, [currentPage, selectedMediaId, viewingUserId]);
 
   // Auth guard: redirect guests away from protected views

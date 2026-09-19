@@ -2,5 +2,7 @@
   "name": "Elysian",
   "description": "A premier, secure destination for exclusive media content and professional talent discovery. Features a dual-service architecture for high-resolution media streaming and a verified professional directory.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

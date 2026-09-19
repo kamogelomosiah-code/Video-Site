@@ -46,10 +46,12 @@ const UploadMedia: React.FC<UploadMediaProps> = ({ user, onCancel, onUploadCompl
   };
 
   const handleFile = (file: File) => {
-    if (file.type.startsWith('video/') || file.type.startsWith('image/')) {
+    if (file.type.startsWith('image/')) {
       setFile(file);
       setTitle(file.name.replace(/\.[^/.]+$/, "")); // Remove extension for title
       simulateUpload();
+    } else {
+      alert('Local file uploads are restricted to image files only. Videos must be added as external links.');
     }
   };
 
@@ -74,10 +76,31 @@ const UploadMedia: React.FC<UploadMediaProps> = ({ user, onCancel, onUploadCompl
     
     setIsPublishing(true);
 
+    const mediaType: 'image' | 'video' = uploadMode === 'file' ? 'image' : 'video';
+
+    // Part 4: Duplicate Detection check BEFORE publish
+    try {
+      const checkPayload = {
+        title,
+        mediaType,
+        externalUrl: mediaType === 'video' ? externalUrl : '',
+        sourceUrl: mediaType === 'image' ? '' : externalUrl,
+        thumbnailUrl: mediaType === 'video' ? thumbnailUrl : '',
+      };
+      
+      const dupRes = await api.media.checkDuplicate(checkPayload);
+      if (dupRes.duplicate && dupRes.match) {
+        alert(`Upload Rejected: An existing item with title "${dupRes.match.title}" matches this upload (Reason: ${dupRes.match.reason}).`);
+        setIsPublishing(false);
+        return;
+      }
+    } catch (checkErr) {
+      console.error("Duplicate check failed, continuing...", checkErr);
+    }
+
     try {
         let sourceUrl = '';
         let finalThumbnailUrl = thumbnailUrl;
-        let mediaType: 'image' | 'video' = 'video';
         
         if (uploadMode === 'file' && file) {
             try {
@@ -86,7 +109,6 @@ const UploadMedia: React.FC<UploadMediaProps> = ({ user, onCancel, onUploadCompl
               console.error("Upload failed, falling back", uploadErr);
               sourceUrl = URL.createObjectURL(file);
             }
-            mediaType = file.type.startsWith('image/') ? 'image' : 'video';
             if (mediaType === 'image') finalThumbnailUrl = sourceUrl;
         } else {
             sourceUrl = externalUrl;
@@ -107,6 +129,7 @@ const UploadMedia: React.FC<UploadMediaProps> = ({ user, onCancel, onUploadCompl
             description,
             mediaType,
             sourceUrl,
+            externalUrl: mediaType === 'video' ? externalUrl : undefined,
             redirectUrl: uploadMode === 'link' ? externalUrl : undefined,
             thumbnailUrl: finalThumbnailUrl,
             duration: mediaType === 'video' ? '00:15' : undefined,
@@ -114,7 +137,8 @@ const UploadMedia: React.FC<UploadMediaProps> = ({ user, onCancel, onUploadCompl
             creatorAvatar: user.avatarUrl,
             tags,
             isPremium,
-            price: isPremium ? parseFloat(price) : undefined
+            price: isPremium ? parseFloat(price) : undefined,
+            playbackMode: mediaType === 'video' ? 'external' : 'local'
         });
 
         onUploadComplete();
@@ -146,13 +170,13 @@ const UploadMedia: React.FC<UploadMediaProps> = ({ user, onCancel, onUploadCompl
                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${uploadMode === 'file' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-white'}`}
                onClick={() => setUploadMode('file')}
              >
-               File Upload
+               Upload Image/Photo
              </button>
              <button 
                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${uploadMode === 'link' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-white'}`}
                onClick={() => setUploadMode('link')}
              >
-               External Link
+               Add Video Link
              </button>
           </div>
           
@@ -201,11 +225,11 @@ const UploadMedia: React.FC<UploadMediaProps> = ({ user, onCancel, onUploadCompl
                 <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mb-4">
                   <Upload className="w-8 h-8 text-zinc-400" />
                 </div>
-                <p className="text-white font-medium mb-1">Drag & Drop Media</p>
-                <p className="text-xs text-zinc-500 mb-6">Video or Images up to 2GB</p>
+                <p className="text-white font-medium mb-1">Drag & Drop Image</p>
+                <p className="text-xs text-zinc-500 mb-6">Images up to 10MB</p>
                 <label className="bg-white text-zinc-900 px-6 py-2 rounded-full font-semibold text-sm hover:bg-zinc-200 transition-colors cursor-pointer">
-                  Select Files
-                  <input type="file" className="hidden" accept="video/*,image/*" onChange={(e) => e.target.files && handleFile(e.target.files[0])} />
+                  Select Image
+                  <input type="file" className="hidden" accept="image/*" onChange={(e) => e.target.files && handleFile(e.target.files[0])} />
                 </label>
               </>
             )}

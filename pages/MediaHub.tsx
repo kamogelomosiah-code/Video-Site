@@ -28,7 +28,7 @@ const MediaHub: React.FC<MediaHubProps> = ({ onMediaClick }) => {
     const fetchData = async () => {
         try {
             const [items, talent, settings] = await Promise.all([
-                api.media.getAll(),
+                api.media.getRotated(),
                 api.talent.getAll(),
                 api.settings.get()
             ]);

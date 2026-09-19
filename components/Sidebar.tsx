@@ -1,5 +1,5 @@
 import React from 'react';
-import { PlayCircle, Users, Settings, Shield, ShieldCheck, Zap, MessageSquare } from 'lucide-react';
+import { PlayCircle, Users, Settings, Shield, ShieldCheck, Zap, MessageSquare, X } from 'lucide-react';
 import { User, UserRole } from '../types';
 
 interface SidebarProps {
@@ -22,13 +22,24 @@ const Sidebar: React.FC<SidebarProps> = ({ user, activePage, onNavigate, onAdmin
   const SidebarContent = () => (
     <div className="w-64 bg-black border-r border-zinc-900 flex flex-col justify-between h-full safe-area-pb">
       <div>
-        <div className="h-16 flex items-center justify-start px-6 border-b border-zinc-900">
-          <div className="w-8 h-8 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-lg flex items-center justify-center shadow-lg shadow-yellow-500/20">
-            <Zap className="text-white w-5 h-5" fill="currentColor" />
+        <div className="h-16 flex items-center justify-between px-6 border-b border-zinc-900">
+          <div className="flex items-center">
+            <div className="w-8 h-8 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-lg flex items-center justify-center shadow-lg shadow-yellow-500/20">
+              <Zap className="text-white w-5 h-5" fill="currentColor" />
+            </div>
+            <span className="ml-3 font-bold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400">
+              Elysian
+            </span>
           </div>
-          <span className="ml-3 font-bold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400">
-            Elysian
-          </span>
+          {/* Mobile Close Button */}
+          <button 
+            type="button" 
+            onClick={onClose} 
+            className="md:hidden text-zinc-400 hover:text-white p-1 rounded-lg bg-zinc-900/50 border border-zinc-800"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
         <nav className="mt-6 px-4 space-y-2">
           {navItems.map((item) => (

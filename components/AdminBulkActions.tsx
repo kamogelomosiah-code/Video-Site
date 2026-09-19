@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Edit3, Trash2, X, CheckSquare } from 'lucide-react';
+import { Edit3, Trash2, X, CheckSquare, Sparkles } from 'lucide-react';
 
 export interface BulkActionBarProps {
   count: number;
@@ -7,6 +7,10 @@ export interface BulkActionBarProps {
   onEdit: () => void;
   onDelete: () => void;
   accentLabel?: string;
+  onSelectAll?: () => void;
+  totalInLibrary?: number;
+  onAutoCategorize?: () => void;
+  isAutoCategorizing?: boolean;
 }
 
 export const BulkActionBar: React.FC<BulkActionBarProps> = ({
@@ -15,26 +19,53 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
   onEdit,
   onDelete,
   accentLabel,
+  onSelectAll,
+  totalInLibrary,
+  onAutoCategorize,
+  isAutoCategorizing,
 }) => {
   if (count === 0) return null;
+  const showSelectAllButton = onSelectAll && totalInLibrary && count < totalInLibrary;
   return (
     <div className="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-50 animate-fade-in-up">
-      <div className="bg-zinc-950 border border-yellow-500/30 rounded-full shadow-[0_20px_50px_rgba(0,0,0,0.9)] px-5 py-3 flex items-center space-x-4 backdrop-blur-lg">
-        <div className="flex items-center space-x-2 pr-4 border-r border-zinc-800">
+      <div className="bg-zinc-950 border border-yellow-500/30 rounded-lg shadow-[0_20px_50px_rgba(0,0,0,0.9)] px-5 py-3 flex flex-col md:flex-row items-center md:space-x-4 space-y-2 md:space-y-0 backdrop-blur-lg">
+        <div className="flex items-center space-x-2 md:pr-4 md:border-r md:border-zinc-800">
           <CheckSquare className="w-4 h-4 text-yellow-500" />
-          <span className="text-sm font-bold text-white">
+          <span className="text-sm font-bold text-white whitespace-nowrap">
             {count} selected{accentLabel ? <span className="ml-1 text-zinc-500">· {accentLabel}</span> : null}
           </span>
         </div>
-        <button type="button" onClick={onEdit} className="flex items-center text-sm font-semibold text-zinc-200 hover:text-yellow-400 transition-colors">
-          <Edit3 className="w-4 h-4 mr-1.5" /> Edit
-        </button>
-        <button type="button" onClick={onDelete} className="flex items-center text-sm font-semibold text-red-400 hover:text-red-300 transition-colors">
-          <Trash2 className="w-4 h-4 mr-1.5" /> Delete
-        </button>
-        <button type="button" onClick={onClear} className="text-zinc-500 hover:text-white transition-colors">
-          <X className="w-4 h-4" />
-        </button>
+        {showSelectAllButton && (
+          <button 
+            type="button" 
+            onClick={onSelectAll} 
+            className="text-xs font-bold text-yellow-400 hover:underline px-2.5 py-1 rounded-lg bg-yellow-400/10 border border-yellow-400/20 transition-all whitespace-nowrap"
+          >
+            Select all {totalInLibrary} items in library
+          </button>
+        )}
+        <div className="flex items-center space-x-4">
+          {onAutoCategorize && (
+            <button
+              type="button"
+              disabled={isAutoCategorizing}
+              onClick={onAutoCategorize}
+              className="flex items-center text-sm font-semibold text-yellow-500 hover:text-yellow-400 transition-colors disabled:opacity-50"
+            >
+              <Sparkles className="w-4 h-4 mr-1.5 animate-pulse" />
+              {isAutoCategorizing ? 'Categorizing...' : 'Auto Categorize'}
+            </button>
+          )}
+          <button type="button" onClick={onEdit} className="flex items-center text-sm font-semibold text-zinc-200 hover:text-yellow-400 transition-colors">
+            <Edit3 className="w-4 h-4 mr-1.5" /> Edit
+          </button>
+          <button type="button" onClick={onDelete} className="flex items-center text-sm font-semibold text-red-400 hover:text-red-300 transition-colors">
+            <Trash2 className="w-4 h-4 mr-1.5" /> Delete
+          </button>
+          <button type="button" onClick={onClear} className="text-zinc-500 hover:text-white transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   );
