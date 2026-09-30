@@ -112,15 +112,13 @@ const UploadMedia: React.FC<UploadMediaProps> = ({ user, onCancel, onUploadCompl
             if (mediaType === 'image') finalThumbnailUrl = sourceUrl;
         } else {
             sourceUrl = externalUrl;
+            finalThumbnailUrl = thumbnailUrl;
         }
-        
-        const generateBlankImage = (text: string) => {
-          const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400"><rect width="600" height="400" fill="#27272a" /><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="24" font-family="sans-serif" fill="#71717a">${text}</text></svg>`;
-          return `data:image/svg+xml;base64,${btoa(svg)}`;
-        };
 
-        if (!finalThumbnailUrl) {
-            finalThumbnailUrl = generateBlankImage('Video Thumbnail Hidden');
+        if (!finalThumbnailUrl || !finalThumbnailUrl.trim()) {
+            alert("Upload Error: Media items require an image or thumbnail URL before publishing.");
+            setIsPublishing(false);
+            return;
         }
 
         await api.media.create({

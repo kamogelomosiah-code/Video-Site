@@ -116,7 +116,7 @@ const AdminAds: React.FC<Props> = ({ settings, onChange, onSave }) => {
           </div>
           <div>
             <h3 className="font-bold text-white text-base">Advertising & Sponsorship Center</h3>
-            <p className="text-xs text-zinc-400">Manage internal sponsor banners, native slot tracking, and Google AdSense.</p>
+            <p className="text-xs text-zinc-400">Manage internal sponsor banners, native slot tracking, and AdSense.</p>
           </div>
         </div>
 
@@ -138,7 +138,7 @@ const AdminAds: React.FC<Props> = ({ settings, onChange, onSave }) => {
               activeTab === 'adsense' ? 'bg-yellow-500 text-zinc-950 shadow' : 'text-zinc-400 hover:text-white'
             }`}
           >
-            Google AdSense & ads.txt
+            AdSense & ads.txt
           </button>
         </div>
       </div>
@@ -290,7 +290,7 @@ const AdminAds: React.FC<Props> = ({ settings, onChange, onSave }) => {
         <div className="bg-[#111]/40 border border-zinc-800/80 rounded-2xl p-6 space-y-6">
           <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
             <div>
-              <h4 className="font-bold text-white">Google AdSense Configuration</h4>
+              <h4 className="font-bold text-white">AdSense Configuration</h4>
               <p className="text-xs text-zinc-400">Configure fallback programmatic advertising tags and automatic crawler ads.txt verification.</p>
             </div>
             <div className="flex items-center space-x-3">
@@ -314,7 +314,7 @@ const AdminAds: React.FC<Props> = ({ settings, onChange, onSave }) => {
           {/* Toggle Ads Enabled */}
           <div className="flex items-center justify-between p-4 bg-black/40 border border-zinc-900 rounded-xl">
             <div>
-              <h4 className="font-bold text-white">Enable Google AdSense Fallback</h4>
+              <h4 className="font-bold text-white">Enable AdSense Fallback</h4>
               <p className="text-xs text-zinc-400 mt-0.5">Render AdSense blocks when no direct custom ad is booked for that slot.</p>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">

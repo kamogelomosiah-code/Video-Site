@@ -29,6 +29,7 @@ const DEFAULT_CATEGORIES: Array<{ id: string; name: string; slug: string }> = [
 const MediaHub: React.FC<MediaHubProps> = ({ onMediaClick, onTalentClick }) => {
   const [categories, setCategories] = useState<Array<{ id: string; name: string; slug: string }>>(DEFAULT_CATEGORIES);
   const [activeCategorySlug, setActiveCategorySlug] = useState('all');
+  const [sortBy, setSortBy] = useState<'newest' | 'views' | 'rating' | 'title'>('newest');
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [featuredItem, setFeaturedItem] = useState<MediaItem | null>(null);
   const [topTalent, setTopTalent] = useState<TalentProfile[]>([]);
@@ -48,7 +49,8 @@ const MediaHub: React.FC<MediaHubProps> = ({ onMediaClick, onTalentClick }) => {
         ]);
 
         if (Array.isArray(cats) && cats.length > 0) {
-          setCategories([{ id: 'all', name: 'All', slug: 'all' }, ...cats]);
+          const uniqueCats = cats.filter(c => c.slug !== 'all' && c.name.toLowerCase() !== 'all');
+          setCategories([{ id: 'all', name: 'All', slug: 'all' }, ...uniqueCats]);
         }
 
         setTopTalent(Array.isArray(talent) ? talent.slice(0, 8) : []);
@@ -123,18 +125,33 @@ const MediaHub: React.FC<MediaHubProps> = ({ onMediaClick, onTalentClick }) => {
 
   const filteredMediaItems = useMemo(() => {
     const targetTags = CATEGORY_TAG_MAP[activeCategorySlug] ?? (activeCategorySlug === 'all' ? [] : [activeCategorySlug]);
-    if (!targetTags || targetTags.length === 0) return mediaItems;
-    return mediaItems.filter(item => {
-      const tags = (Array.isArray(item.tags) ? item.tags : []).map(t => String(t).toLowerCase());
-      const cat = (item.category || '').toLowerCase();
-      const title = (item.title || '').toLowerCase();
-      const desc = (item.description || '').toLowerCase();
-      return targetTags.some(t => {
-        const lower = t.toLowerCase();
-        return tags.includes(lower) || cat.includes(lower) || title.includes(lower) || desc.includes(lower);
+    let items = mediaItems;
+    if (targetTags && targetTags.length > 0) {
+      items = items.filter(item => {
+        const tags = (Array.isArray(item.tags) ? item.tags : []).map(t => String(t).toLowerCase());
+        const cat = (item.category || '').toLowerCase();
+        const title = (item.title || '').toLowerCase();
+        const desc = (item.description || '').toLowerCase();
+        return targetTags.some(t => {
+          const lower = t.toLowerCase();
+          return tags.includes(lower) || cat.includes(lower) || title.includes(lower) || desc.includes(lower);
+        });
       });
+    }
+
+    return [...items].sort((a, b) => {
+      if (sortBy === 'newest') {
+        return new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime();
+      } else if (sortBy === 'views') {
+        return (Number(b.views) || 0) - (Number(a.views) || 0);
+      } else if (sortBy === 'rating') {
+        return (Number(b.rating) || 0) - (Number(a.rating) || 0);
+      } else if (sortBy === 'title') {
+        return (a.title || '').localeCompare(b.title || '');
+      }
+      return 0;
     });
-  }, [mediaItems, activeCategorySlug]);
+  }, [mediaItems, activeCategorySlug, sortBy]);
 
   const recommendedItems = useMemo(() => filteredMediaItems.slice(0, 12), [filteredMediaItems]);
   const newArrivalsItems = useMemo(() => filteredMediaItems.slice(12), [filteredMediaItems]);
@@ -297,12 +314,27 @@ const MediaHub: React.FC<MediaHubProps> = ({ onMediaClick, onTalentClick }) => {
 
       {/* Main Algorithmic Feed Grid */}
       <section className="space-y-6">
-        <div className="flex items-center justify-between px-1">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-1">
           <h2 className="text-lg md:text-2xl font-bold text-white flex items-center">
             <span className="w-1 md:w-1.5 h-6 md:h-8 bg-yellow-500 rounded-full mr-3 shadow-[0_0_15px_rgba(234,179,8,0.4)]"></span>
             {activeCategorySlug === 'all' ? 'Recommended Releases' : `${categories.find(c => c.slug === activeCategorySlug)?.name || 'Filtered'} Releases`}
           </h2>
-          <span className="text-xs text-zinc-500">{filteredMediaItems.length} videos</span>
+          <div className="flex items-center space-x-3 self-end sm:self-auto">
+            <div className="flex items-center space-x-2 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5">
+              <span className="text-xs text-zinc-400">Sort by:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="bg-transparent text-xs font-medium text-white focus:outline-none cursor-pointer"
+              >
+                <option value="newest" className="bg-zinc-900 text-white">Newest</option>
+                <option value="views" className="bg-zinc-900 text-white">Most Viewed</option>
+                <option value="rating" className="bg-zinc-900 text-white">Highest Rated</option>
+                <option value="title" className="bg-zinc-900 text-white">Title (A-Z)</option>
+              </select>
+            </div>
+            <span className="text-xs text-zinc-500">{filteredMediaItems.length} videos</span>
+          </div>
         </div>
 
         {isLoading ? (

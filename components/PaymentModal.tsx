@@ -67,7 +67,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ creatorName, price, onClose
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
-      <div className="bg-black border border-zinc-800 w-full max-w-md rounded-3xl shadow-2xl relative overflow-hidden flex flex-col max-h-[calc(100vh-2rem)]">
+      <div className="bg-[#111] border border-zinc-800 w-full max-w-md rounded-3xl shadow-2xl relative overflow-hidden flex flex-col max-h-[calc(100vh-2rem)]">
         
         {/* Header */}
         <div className="p-6 border-b border-zinc-800 flex justify-between items-center bg-[#111]/50">

@@ -204,7 +204,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const navItems = [
       { id: 'media', label: 'Media Library', icon: Video },
       { id: 'users', label: 'Users', icon: Users },
-      { id: 'ads', label: 'Google Ads', icon: DollarSign },
+      { id: 'ads', label: 'Ads', icon: DollarSign },
       { id: 'bulk-upload', label: 'Bulk Upload', icon: Upload },
       { id: 'talent', label: 'Talent', icon: Briefcase },
       { id: 'settings', label: 'Site Settings', icon: Settings },

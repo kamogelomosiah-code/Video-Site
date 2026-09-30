@@ -7,32 +7,63 @@
     <link rel="icon" href="peach-svgrepo-com.svg">
     <title>Elysian | Premium Media & Talent Hub</title>
     <meta name="description" content="Discover verified creator profiles, premium exclusive adult media, and book virtual services on Elysian. Bank-grade ID verified creators, high-resolution media discovery, and custom virtual chat bookings." />
+    <meta name="keywords" content="verified creators, adult media hub, elite models, exclusive video streaming, VIP booking, high resolution media, creator talent directory" />
+    <meta name="author" content="Elysian Media Hub" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="canonical" href="https://elysian.app" />
     
     <!-- OpenGraph Social Cards -->
     <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://elysian.app" />
     <meta property="og:title" content="Elysian | Premium Media & Creator Talent Discovery" />
     <meta property="og:description" content="Discover verified creator profiles, premium exclusive adult media, and book virtual services on Elysian. Bank-grade ID verified creators, high-resolution media discovery, and custom virtual chat bookings." />
     <meta property="og:site_name" content="Elysian" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:image" content="https://elysian.app/peach-svgrepo-com.svg" />
     
     <!-- Twitter Social Cards -->
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@ElysianHub" />
     <meta name="twitter:title" content="Elysian | Premium Media & Creator Talent Discovery" />
     <meta name="twitter:description" content="Discover verified creator profiles, premium exclusive adult media, and book virtual services on Elysian. Bank-grade ID verified creators, high-resolution media discovery, and custom virtual chat bookings." />
+    <meta name="twitter:image" content="https://elysian.app/peach-svgrepo-com.svg" />
 
-    <!-- Schema.org Structured Data (JSON-LD WebApplication) -->
+    <!-- Schema.org Structured Data (JSON-LD Organization & WebApplication) -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "WebApplication",
-      "name": "Elysian",
-      "applicationCategory": "SocialMediaApplication",
-      "operatingSystem": "All",
-      "description": "Discover verified creator profiles, premium exclusive adult media, and book virtual services on Elysian. Features high-resolution media discovery and a bank-grade ID verified creator directory.",
-      "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "ZAR"
-      }
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://elysian.app/#organization",
+          "name": "Elysian",
+          "url": "https://elysian.app",
+          "logo": "https://elysian.app/peach-svgrepo-com.svg"
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://elysian.app/#website",
+          "url": "https://elysian.app",
+          "name": "Elysian Media & Talent Hub",
+          "publisher": {
+            "@id": "https://elysian.app/#organization"
+          }
+        },
+        {
+          "@type": "WebApplication",
+          "@id": "https://elysian.app/#webapp",
+          "name": "Elysian",
+          "url": "https://elysian.app",
+          "applicationCategory": "SocialMediaApplication",
+          "operatingSystem": "All",
+          "description": "Discover verified creator profiles, premium exclusive adult media, and book virtual services on Elysian. Features high-resolution media discovery and a bank-grade ID verified creator directory.",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "ZAR"
+          }
+        }
+      ]
     }
     </script>
     <!-- AdSense Verification Meta Tag -->

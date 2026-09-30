@@ -2366,11 +2366,35 @@ Description: ${existing.description || ""}`;
   app.post("/api/chat/open", requireUser, async (req, res) => {
     try {
       const user = (req as any).user;
-      const { talentId } = req.body || {};
+      let { talentId } = req.body || {};
       if (!talentId) return res.status(400).json({ error: "talentId required" });
 
-      const talentUser = await findOneByField("users", "id", talentId);
-      if (!talentUser) return res.status(404).json({ error: "Talent user not found" });
+      let talentUser = await findOneByField("users", "id", talentId);
+      if (!talentUser) {
+        const talentProfile = (await findOneByField("talentProfiles", "id", talentId)) || (await findOneByField("talentProfiles", "userId", talentId));
+        if (talentProfile) {
+          const resolvedUserId = talentProfile.userId || talentProfile.id;
+          talentUser = await findOneByField("users", "id", resolvedUserId);
+          if (!talentUser) {
+            talentUser = {
+              id: resolvedUserId,
+              name: talentProfile.name || "Talent Creator",
+              email: `${resolvedUserId}@creator.elysian.internal`,
+              role: "CREATOR",
+              verified: true,
+              avatarUrl: talentProfile.imageUrl || "",
+              bio: talentProfile.title || "",
+              subscriptions: [],
+              acceptsChat: talentProfile.chatOnline !== false,
+              createdAt: new Date().toISOString()
+            };
+            await upsertDoc("users", talentUser);
+          }
+          talentId = resolvedUserId;
+        } else {
+          return res.status(404).json({ error: "Talent user not found" });
+        }
+      }
 
       // If they explicitly disabled chat
       if (talentUser.acceptsChat === false) {
