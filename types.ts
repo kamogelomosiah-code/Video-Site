@@ -142,10 +142,73 @@ export interface AdUnit {
   adsenseClientId?: string;
   adsenseSlotId?: string;
   imageUrl?: string;
+  targetUrl?: string;
   htmlSnippet?: string;
   weight: number;
   impressions: number;
   clicks: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  icon?: string;
+  description?: string;
+  order: number;
+  active: boolean;
+  tags?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AnalyticsEvent {
+  id: string;
+  eventType: 'page_view' | 'video_view' | 'video_click' | 'ad_impression' | 'ad_click' | 'search' | 'profile_view' | 'subscribe';
+  path?: string;
+  entityId?: string;
+  entityType?: 'media' | 'talent' | 'ad' | 'category';
+  viewerKey: string;
+  referrer?: string;
+  device?: 'mobile' | 'tablet' | 'desktop';
+  metadata?: Record<string, any>;
+  createdAt: string;
+}
+
+export interface AnalyticsSummary {
+  periodDays: number;
+  totalPageViews: number;
+  uniqueVisitors: number;
+  totalVideoViews: number;
+  totalAdImpressions: number;
+  totalAdClicks: number;
+  adCtr: number;
+  topMedia: Array<{ id: string; title: string; views: number }>;
+  topSearches: Array<{ query: string; count: number }>;
+  topReferrers: Array<{ referrer: string; count: number }>;
+  deviceBreakdown: { mobile: number; tablet: number; desktop: number };
+  dailyViews: Array<{ date: string; views: number; visitors: number }>;
+}
+
+export interface SearchResultMediaItem extends MediaItem {
+  score?: number;
+  matchReasons?: string[];
+  matchedField?: string;
+}
+
+export interface SearchResultTalentProfile extends TalentProfile {
+  score?: number;
+  matchReasons?: string[];
+  matchedField?: string;
+}
+
+export interface SearchResponse {
+  media: SearchResultMediaItem[];
+  talent: SearchResultTalentProfile[];
+  total: number;
+  tookMs: number;
+  query: string;
+  suggestions?: string[];
 }

@@ -113,7 +113,7 @@ const MediaGrid: React.FC<MediaGridProps> = ({ items, onItemClick, showPremiumBa
               key={item.id}
               href={url}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className={className}
             >
               {cardContent}

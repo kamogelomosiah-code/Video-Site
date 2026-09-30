@@ -14,6 +14,7 @@ import AgeGate from './components/AgeGate';
 import BottomNav from './components/BottomNav';
 import { generateAvatar } from './services/avatar';
 import { api } from './services/api';
+import SearchResults from './pages/SearchResults';
 
 import { useScrollTop } from './hooks/useScrollTop';
 
@@ -27,16 +28,26 @@ const GUEST_USER: User = {
   name: 'Guest',
   role: UserRole.CONSUMER,
   verified: false,
-  avatarUrl: generateAvatar('Guest')
+  avatarUrl: generateAvatar('Guest'),
+  bio: '',
+  wallpaperUrl: '',
+  acceptsChat: false,
+  chatEnabled: false,
+  hasChosenChatPreference: false,
 };
 
 const App: React.FC = () => {
   // Persistence Logic for GitHub Pages / Static Hosting Refresh Support
-  const [currentPage, setCurrentPage] = useState<'auth' | 'media' | 'directory' | 'messages' | 'profile' | 'view' | 'admin-dashboard' | 'reset-password'>(() => {
+  const [currentPage, setCurrentPage] = useState<'auth' | 'media' | 'directory' | 'messages' | 'profile' | 'view' | 'admin-dashboard' | 'reset-password' | 'search'>(() => {
     const params = new URLSearchParams(window.location.search);
     const pageParam = params.get('page');
     if (pageParam) return pageParam as any;
     return (localStorage.getItem('elysian_current_page') as any) || 'media';
+  });
+
+  const [searchQuery, setSearchQuery] = useState<string>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('q') || '';
   });
   
   useScrollTop(currentPage);
@@ -77,8 +88,19 @@ const App: React.FC = () => {
   
   // Auth State
   const [currentUser, setCurrentUser] = useState<User>(GUEST_USER);
+  const [selectedChatTalentId, setSelectedChatTalentId] = useState<string | undefined>(undefined);
 
   const [isInitializing, setIsInitializing] = useState(true);
+
+  // Global 401 session expired listener
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      setCurrentUser(GUEST_USER);
+      setCurrentPage('media');
+    };
+    window.addEventListener('elysian_session_expired', handleSessionExpired);
+    return () => window.removeEventListener('elysian_session_expired', handleSessionExpired);
+  }, []);
 
   useEffect(() => {
     const initSession = async () => {
@@ -102,6 +124,7 @@ const App: React.FC = () => {
       const state = event.state;
       if (state) {
         if (state.currentPage) setCurrentPage(state.currentPage);
+        if (state.searchQuery !== undefined) setSearchQuery(state.searchQuery);
         if (state.selectedMediaId !== undefined) setSelectedMediaId(state.selectedMediaId);
         if (state.viewingUserId !== undefined) setViewingUserId(state.viewingUserId);
       }
@@ -122,16 +145,17 @@ const App: React.FC = () => {
     // Update URL query params & browser history state for back button navigation
     const params = new URLSearchParams();
     params.set('page', currentPage);
+    if (currentPage === 'search' && searchQuery) params.set('q', searchQuery);
     if (selectedMediaId) params.set('mediaId', selectedMediaId);
     if (viewingUserId) params.set('userId', viewingUserId);
     
     const newUrl = `${window.location.pathname}?${params.toString()}`;
     const currentState = window.history.state;
     
-    if (!currentState || currentState.currentPage !== currentPage || currentState.selectedMediaId !== selectedMediaId || currentState.viewingUserId !== viewingUserId) {
-      window.history.pushState({ currentPage, selectedMediaId, viewingUserId }, '', newUrl);
+    if (!currentState || currentState.currentPage !== currentPage || currentState.selectedMediaId !== selectedMediaId || currentState.viewingUserId !== viewingUserId || currentState.searchQuery !== searchQuery) {
+      window.history.pushState({ currentPage, selectedMediaId, viewingUserId, searchQuery }, '', newUrl);
     }
-  }, [currentPage, selectedMediaId, viewingUserId]);
+  }, [currentPage, selectedMediaId, viewingUserId, searchQuery]);
 
   // Auth guard: redirect guests away from protected views
   useEffect(() => {
@@ -173,7 +197,7 @@ const App: React.FC = () => {
     setIsSidebarOpen(false);
   };
 
-  const handleNavigate = (page: 'media' | 'directory' | 'messages' | 'profile', userId?: string) => {
+  const handleNavigate = (page: 'media' | 'directory' | 'messages' | 'profile' | 'search', userId?: string) => {
     if (page === 'profile' || page === 'messages') {
       if (currentUser.id === 'guest' && !userId) {
         setCurrentPage('auth');
@@ -187,6 +211,14 @@ const App: React.FC = () => {
     
     setCurrentPage(page);
     setSelectedMediaId(null);
+    setIsSidebarOpen(false);
+  };
+
+  const handleSearchSubmit = (query: string) => {
+    setSearchQuery(query);
+    setCurrentPage('search');
+    setSelectedMediaId(null);
+    setViewingUserId(null);
     setIsSidebarOpen(false);
   };
 
@@ -264,17 +296,65 @@ const App: React.FC = () => {
           onProfileClick={() => handleNavigate('profile')}
           onLogout={handleLogout}
           onMenuClick={() => setIsSidebarOpen(true)}
+          onSelectMedia={(id) => {
+            setSelectedMediaId(id);
+            setCurrentPage('view');
+          }}
+          onSelectTalent={(id) => {
+            setViewingUserId(id);
+            setCurrentPage('profile');
+          }}
+          onSearchSubmit={handleSearchSubmit}
+          initialSearchQuery={searchQuery}
         />
         
         {/* Added pb-24 to account for mobile BottomNav */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 scroll-smooth">
           <div className="max-w-7xl mx-auto">
-             {currentPage === 'media' && <MediaHub onMediaClick={handleMediaClick} />}
+             {currentPage === 'search' && (
+               <SearchResults
+                 initialQuery={searchQuery}
+                 currentUser={currentUser}
+                 onMediaClick={handleMediaClick}
+                 onTalentClick={(id) => {
+                   setViewingUserId(id);
+                   setCurrentPage('profile');
+                 }}
+                 onMessageClick={(talentId) => {
+                   setSelectedChatTalentId(talentId);
+                   setCurrentPage('messages');
+                 }}
+                 onSearchChange={(q) => setSearchQuery(q)}
+               />
+             )}
+             {currentPage === 'media' && (
+               <MediaHub 
+                 onMediaClick={handleMediaClick} 
+                 onTalentClick={(id) => {
+                   setViewingUserId(id);
+                   setCurrentPage('profile');
+                 }}
+               />
+             )}
              {currentPage === 'view' && selectedMediaId && (
                <MediaView mediaId={selectedMediaId} currentUser={currentUser} onBack={() => setCurrentPage('media')} onRelatedClick={handleMediaClick} />
              )}
-             {currentPage === 'directory' && <TalentDirectory />}
-             {currentPage === 'messages' && <MessagesPage currentUser={currentUser} onBack={() => setCurrentPage('media')} />}
+             {currentPage === 'directory' && (
+               <TalentDirectory
+                 onNavigateMessages={(talentId) => {
+                   setSelectedChatTalentId(talentId);
+                   setCurrentPage('messages');
+                 }}
+                 onNavigateSearch={handleSearchSubmit}
+               />
+             )}
+             {currentPage === 'messages' && (
+               <MessagesPage
+                 currentUser={currentUser}
+                 initialTalentId={selectedChatTalentId}
+                 onBack={() => setCurrentPage('media')}
+               />
+             )}
              {currentPage === 'profile' && (
                <UserProfile 
                 userId={viewingUserId || currentUser.id} 

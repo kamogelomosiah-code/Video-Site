@@ -1,15 +1,16 @@
 import React from 'react';
-import { PlayCircle, Users, Settings, Menu, MessageSquare } from 'lucide-react';
+import { PlayCircle, Users, Settings, MessageSquare, Search } from 'lucide-react';
 
 interface BottomNavProps {
   activePage: string;
-  onNavigate: (page: 'media' | 'directory' | 'messages' | 'profile') => void;
+  onNavigate: (page: 'media' | 'directory' | 'messages' | 'profile' | 'search') => void;
   onMenuClick: () => void;
 }
 
 const BottomNav: React.FC<BottomNavProps> = ({ activePage, onNavigate, onMenuClick }) => {
   const navItems = [
     { id: 'media', label: 'Media', icon: PlayCircle, action: () => onNavigate('media') },
+    { id: 'search', label: 'Search', icon: Search, action: () => onNavigate('search') },
     { id: 'directory', label: 'Talent', icon: Users, action: () => onNavigate('directory') },
     { id: 'messages', label: 'Chat', icon: MessageSquare, action: () => onNavigate('messages') },
     { id: 'profile', label: 'Profile', icon: Settings, action: () => onNavigate('profile') },
@@ -26,17 +27,10 @@ const BottomNav: React.FC<BottomNavProps> = ({ activePage, onNavigate, onMenuCli
               activePage === item.id ? 'text-yellow-400' : 'text-zinc-500 hover:text-zinc-300'
             }`}
           >
-            <item.icon className={`w-6 h-6 ${activePage === item.id ? 'stroke-2' : ''}`} />
+            <item.icon className={`w-5 h-5 ${activePage === item.id ? 'stroke-2 text-yellow-400' : ''}`} />
             <span className="text-[10px] font-medium">{item.label}</span>
           </button>
         ))}
-        <button
-            onClick={onMenuClick}
-            className="flex flex-col items-center justify-center w-full h-full space-y-1 text-zinc-500 hover:text-zinc-300 active:scale-95 transition-transform"
-        >
-            <Menu className="w-6 h-6" />
-            <span className="text-[10px] font-medium">Menu</span>
-        </button>
       </div>
     </div>
   );

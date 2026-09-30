@@ -26,6 +26,7 @@ import { createHash } from "crypto";
 import { sendPasswordResetEmail } from "./services/email";
 import { GoogleGenAI, Type } from "@google/genai";
 import { checkPassword } from "./utils/password";
+import { executeSearch } from "./services/searchAlgorithm";
 
 dotenv.config({ override: true });
 dotenv.config({ path: ".env.local", override: true });
@@ -82,6 +83,9 @@ async function loadJsonDB(): Promise<any> {
     comments: [],
     activityLogs: [],
     sessions: [],
+    categories: [],
+    ads: [],
+    analyticsEvents: [],
     siteSettings: { _id: "site", featuredMediaId: null }
   };
   try {
@@ -282,6 +286,214 @@ async function seedAdmin(): Promise<void> {
   await upsertDoc("users", admin);
   console.log("[seed] Admin created — username: admin, PIN: 225533");
 }
+
+async function seedDefaults(): Promise<void> {
+  try {
+    const categories = await listCollection("categories");
+    if (categories.length === 0) {
+      const DEFAULT_CATEGORIES = [
+        { id: "cat_all", slug: "all", name: "All", icon: "Grid", description: "Explore all high resolution media", order: 0, active: true, tags: [], createdAt: new Date().toISOString() },
+        { id: "cat_exclusive", slug: "exclusive", name: "Exclusive", icon: "Star", description: "Premier studio-grade originals", order: 1, active: true, tags: ["exclusive"], createdAt: new Date().toISOString() },
+        { id: "cat_bts", slug: "bts", name: "Behind The Scenes", icon: "Camera", description: "Unfiltered backstages and production outtakes", order: 2, active: true, tags: ["bts", "behind-the-scenes"], createdAt: new Date().toISOString() },
+        { id: "cat_4k", slug: "4k", name: "4K UHD", icon: "Film", description: "Crystal clear ultra-high-definition productions", order: 3, active: true, tags: ["4k", "uhd", "hd"], createdAt: new Date().toISOString() },
+        { id: "cat_vr", slug: "vr", name: "VR 360°", icon: "View", description: "Immersive spatial and panoramic content", order: 4, active: true, tags: ["vr", "360"], createdAt: new Date().toISOString() },
+        { id: "cat_glamour", slug: "glamour", name: "Glamour", icon: "Sparkles", description: "High-fashion, aesthetic modeling and artistry", order: 5, active: true, tags: ["glamour", "fashion"], createdAt: new Date().toISOString() },
+        { id: "cat_lifestyle", slug: "lifestyle", name: "Lifestyle", icon: "Heart", description: "Intimate and authentic creator journals", order: 6, active: true, tags: ["lifestyle"], createdAt: new Date().toISOString() }
+      ];
+      for (const cat of DEFAULT_CATEGORIES) {
+        await upsertDoc("categories", cat);
+      }
+      console.log(`[seed] Seeded ${DEFAULT_CATEGORIES.length} default categories`);
+    }
+
+    const ads = await listCollection("ads");
+    if (ads.length === 0) {
+      const DEFAULT_ADS = [
+        {
+          id: "ad_home_top",
+          name: "Home Header Spotlight",
+          slot: "home_top",
+          type: "image",
+          enabled: true,
+          imageUrl: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=1200&h=180&q=80",
+          targetUrl: "/?page=directory",
+          weight: 10,
+          impressions: 48,
+          clicks: 3,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        },
+        {
+          id: "ad_home_mid",
+          name: "Discovery Mid-Banner",
+          slot: "home_mid",
+          type: "image",
+          enabled: true,
+          imageUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&h=180&q=80",
+          targetUrl: "/?page=directory",
+          weight: 10,
+          impressions: 36,
+          clicks: 2,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        },
+        {
+          id: "ad_media_sidebar",
+          name: "Media Player Sidebar Sponsor",
+          slot: "media_sidebar",
+          type: "image",
+          enabled: true,
+          imageUrl: "https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&w=600&h=300&q=80",
+          targetUrl: "/?page=directory",
+          weight: 10,
+          impressions: 24,
+          clicks: 1,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      ];
+      for (const ad of DEFAULT_ADS) {
+        await upsertDoc("ads", ad);
+      }
+      console.log(`[seed] Seeded ${DEFAULT_ADS.length} default ad units`);
+    }
+
+    const talentProfiles = await listCollection("talentProfiles");
+    if (talentProfiles.length === 0) {
+      const DEFAULT_TALENT = [
+        {
+          id: "talent_thandiwe",
+          userId: "user_thandiwe",
+          name: "Thandiwe Khumalo",
+          title: "Elite Glamour & High-Fashion Model",
+          location: "Cape Town, Western Cape",
+          rating: 4.95,
+          reviewCount: 84,
+          hourlyRate: 2800,
+          imageUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80",
+          verified: true,
+          online: true,
+          chatOnline: true,
+          tags: ["glamour", "cape town", "exclusive", "fashion", "parties", "events", "4k"],
+          availability: "Available Now",
+          products: [
+            { id: "p1", name: "VIP Party Hosting & Appearance", description: "Exclusive evening host for luxury private functions and VIP events in Cape Town", price: 6500, imageUrl: "", contactUrl: "" },
+            { id: "p2", name: "High-Fashion 4K Studio Shoot", description: "Commercial editorial modeling session with full styling", price: 4200, imageUrl: "", contactUrl: "" }
+          ],
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: "talent_lerato",
+          userId: "user_lerato",
+          name: "Lerato Mokoena",
+          title: "Sensual Fitness & Swimwear Creator",
+          location: "Sandton, Johannesburg",
+          rating: 4.88,
+          reviewCount: 112,
+          hourlyRate: 2400,
+          imageUrl: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=800&q=80",
+          verified: true,
+          online: true,
+          chatOnline: true,
+          tags: ["fitness", "johannesburg", "sandton", "swimwear", "4k", "bts", "exclusive"],
+          availability: "Available Now",
+          products: [
+            { id: "p3", name: "Exclusive Fitness Collaboration", description: "Brand shoot & feature content for fitness & swimwear campaigns", price: 5000, imageUrl: "", contactUrl: "" }
+          ],
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: "talent_chloe",
+          userId: "user_chloe",
+          name: "Chloe Van Der Merwe",
+          title: "Lingerie & Editorial Runway Performer",
+          location: "Camps Bay, Cape Town",
+          rating: 4.92,
+          reviewCount: 67,
+          hourlyRate: 3200,
+          imageUrl: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=800&q=80",
+          verified: true,
+          online: false,
+          chatOnline: true,
+          tags: ["lingerie", "cape town", "camps bay", "runway", "parties", "exclusive", "vr"],
+          availability: "This Week",
+          products: [
+            { id: "p4", name: "Private Lingerie Lookbook Session", description: "Bespoke studio photography session in Camps Bay penthouse", price: 7500, imageUrl: "", contactUrl: "" }
+          ],
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: "talent_ayanda",
+          userId: "user_ayanda",
+          name: "Ayanda Zulu",
+          title: "Curvy Glamour & Coastal Brand Ambassador",
+          location: "Umhlanga, Durban",
+          rating: 4.85,
+          reviewCount: 53,
+          hourlyRate: 2100,
+          imageUrl: "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?auto=format&fit=crop&w=800&q=80",
+          verified: true,
+          online: true,
+          chatOnline: false,
+          tags: ["curvy", "durban", "umhlanga", "glamour", "beach", "lifestyle", "events"],
+          availability: "Available Now",
+          products: [
+            { id: "p5", name: "Coastal Brand Shoot", description: "High-resolution sunrise coastal shoot in Durban Umhlanga", price: 3800, imageUrl: "", contactUrl: "" }
+          ],
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: "talent_melony",
+          userId: "user_melony",
+          name: "Melony Melons",
+          title: "Top Bestselling Creator & Performer",
+          location: "Johannesburg, Gauteng",
+          rating: 4.98,
+          reviewCount: 340,
+          hourlyRate: 3500,
+          imageUrl: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=800&q=80",
+          verified: true,
+          online: true,
+          chatOnline: true,
+          tags: ["featured", "johannesburg", "4k", "exclusive", "stepmom", "milf", "bts"],
+          availability: "Available Now",
+          products: [
+            { id: "p6", name: "1-on-1 VIP Video Call & Consultation", description: "Private dedicated video call and creative discussion", price: 2500, imageUrl: "", contactUrl: "" },
+            { id: "p7", name: "Custom Video Production", description: "Exclusive custom 4K production tailored to your concept", price: 8000, imageUrl: "", contactUrl: "" }
+          ],
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: "talent_koda",
+          userId: "user_koda",
+          name: "Koda Monroe",
+          title: "Sensual Therapist & Cinematic Actress",
+          location: "Pretoria, Gauteng",
+          rating: 4.91,
+          reviewCount: 89,
+          hourlyRate: 2600,
+          imageUrl: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=800&q=80",
+          verified: true,
+          online: false,
+          chatOnline: true,
+          tags: ["cinematic", "pretoria", "therapist", "exclusive", "4k", "bts"],
+          availability: "This Week",
+          products: [
+            { id: "p8", name: "Cinematic Roleplay Workshop", description: "Acting and script reading collaboration", price: 4000, imageUrl: "", contactUrl: "" }
+          ],
+          createdAt: new Date().toISOString()
+        }
+      ];
+      for (const t of DEFAULT_TALENT) {
+        await upsertDoc("talentProfiles", t);
+      }
+      console.log(`[seed] Seeded ${DEFAULT_TALENT.length} default verified talent profiles`);
+    }
+  } catch (err: any) {
+    console.error("[seed] seedDefaults failed:", err.message);
+  }
+}
+
 
 async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   // Check X-Admin-Key header
@@ -645,6 +857,22 @@ async function ensureSchema(): Promise<void> {
       { key: { userId: 1, timestamp: -1 }, options: { name: "user_recent" } },
       { key: { actionType: 1 }, options: { name: "by_action" } },
     ]},
+    { name: "viewDedup", indexes: [
+      { key: { dedupeKey: 1 }, options: { unique: true, name: "uniq_dedupeKey" } },
+      { key: { createdAt: 1 }, options: { expireAfterSeconds: 86400, name: "ttl_viewDedup" } },
+    ]},
+    { name: "categories", indexes: [
+      { key: { id: 1 }, options: { unique: true, name: "uniq_id" } },
+      { key: { slug: 1 }, options: { unique: true, name: "uniq_slug" } },
+      { key: { order: 1 }, options: { name: "by_order" } },
+    ]},
+    { name: "analyticsEvents", indexes: [
+      { key: { ts: -1 }, options: { name: "by_ts" } },
+      { key: { type: 1, ts: -1 }, options: { name: "by_type_ts" } },
+      { key: { mediaId: 1, ts: -1 }, options: { name: "by_mediaId_ts" } },
+      { key: { sessionId: 1, ts: -1 }, options: { name: "by_sessionId_ts" } },
+      { key: { ts: 1 }, options: { expireAfterSeconds: 400 * 86400, name: "ttl_analyticsEvents" } },
+    ]},
     { name: "siteSettings", indexes: [] },
     { name: "passwordResetTokens", indexes: [
       { key: { id: 1 }, options: { unique: true, name: "uniq_id" } },
@@ -777,6 +1005,7 @@ async function startServer() {
 
   await loadJsonDB();
   await seedAdmin();
+  await seedDefaults();
 
   // Middleware to parse JSON payloads with 50mb body limit
   app.use(express.json({ limit: "50mb", strict: false }));
@@ -1307,17 +1536,76 @@ async function startServer() {
   });
 
   app.post("/api/users/:id/subscribe", requireUser, async (req, res) => {
-    const user = (req as any).user;
-    const targetId = req.params.id;
-    if (user.id === targetId) {
-      return res.status(400).json({ error: "Cannot subscribe to yourself" });
+    try {
+      const user = (req as any).user;
+      const targetId = req.params.id;
+      if (user.id === targetId) {
+        return res.status(400).json({ error: "Cannot subscribe to yourself" });
+      }
+      const currentSubs = Array.isArray(user.subscriptions) ? user.subscriptions : [];
+      const set = new Set(currentSubs);
+      const isNewSub = !set.has(targetId);
+      set.add(targetId);
+      user.subscriptions = Array.from(set);
+      await upsertDoc("users", user);
+
+      if (isNewSub) {
+        const creatorUser = await findOneByField("users", "id", targetId);
+        if (creatorUser) {
+          creatorUser.subscriberCount = (creatorUser.subscriberCount || 0) + 1;
+          await upsertDoc("users", creatorUser);
+        }
+        const creatorProfile = (await findOneByField("talentProfiles", "userId", targetId)) || (await findOneByField("talentProfiles", "id", targetId));
+        if (creatorProfile) {
+          creatorProfile.subscriberCount = (creatorProfile.subscriberCount || 0) + 1;
+          await upsertDoc("talentProfiles", creatorProfile);
+        }
+        await logActivity("subscribe", `Subscribed to creator ${targetId}`, user.id);
+        await upsertDoc("analyticsEvents", {
+          id: generateId(),
+          eventType: "subscribe",
+          entityId: targetId,
+          entityType: "talent",
+          viewerKey: (req.headers["x-viewer-key"] as string) || user.id,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      res.json({ user: stripSecrets(user), subscribed: true });
+    } catch (e: any) {
+      res.status(500).json({ error: "Failed to subscribe" });
     }
-    const currentSubs = Array.isArray(user.subscriptions) ? user.subscriptions : [];
-    const set = new Set(currentSubs);
-    set.add(targetId);
-    user.subscriptions = Array.from(set);
-    await upsertDoc("users", user);
-    res.json({ user: stripSecrets(user) });
+  });
+
+  app.post("/api/users/:id/unsubscribe", requireUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const targetId = req.params.id;
+      const currentSubs = Array.isArray(user.subscriptions) ? user.subscriptions : [];
+      const set = new Set(currentSubs);
+      const wasSubbed = set.has(targetId);
+      set.delete(targetId);
+      user.subscriptions = Array.from(set);
+      await upsertDoc("users", user);
+
+      if (wasSubbed) {
+        const creatorUser = await findOneByField("users", "id", targetId);
+        if (creatorUser && creatorUser.subscriberCount) {
+          creatorUser.subscriberCount = Math.max(0, creatorUser.subscriberCount - 1);
+          await upsertDoc("users", creatorUser);
+        }
+        const creatorProfile = (await findOneByField("talentProfiles", "userId", targetId)) || (await findOneByField("talentProfiles", "id", targetId));
+        if (creatorProfile && creatorProfile.subscriberCount) {
+          creatorProfile.subscriberCount = Math.max(0, creatorProfile.subscriberCount - 1);
+          await upsertDoc("talentProfiles", creatorProfile);
+        }
+        await logActivity("subscribe", `Unsubscribed from creator ${targetId}`, user.id);
+      }
+
+      res.json({ user: stripSecrets(user), subscribed: false });
+    } catch (e: any) {
+      res.status(500).json({ error: "Failed to unsubscribe" });
+    }
   });
 
   // --- Media rating & Bulk Import ---
@@ -1478,6 +1766,237 @@ async function startServer() {
     } catch (e: any) {
       console.error("[media] rotated error:", e);
       res.status(500).json({ error: "Failed to load rotated media" });
+    }
+  });
+
+  const viewerMediaViews = new Map<string, number>();
+
+  // POST /api/media/:id/view — record view with daily viewerKey deduplication
+  app.post("/api/media/:id/view", async (req, res) => {
+    try {
+      const mediaId = req.params.id;
+      const media = await findOneByField("media", "id", mediaId);
+      if (!media) return res.status(404).json({ error: "Media not found" });
+
+      const viewerKey = (req.headers["x-viewer-key"] as string) || (req.body?.viewerKey as string) || req.ip || "anon";
+      const today = new Date().toISOString().slice(0, 10);
+      const dedupeKey = `${mediaId}:${today}:${viewerKey}`;
+
+      let deduped = false;
+
+      if (mongo) {
+        try {
+          const col = mongo.collection("viewDedup");
+          const existing = await col.findOne({ dedupeKey });
+          if (existing) {
+            deduped = true;
+          } else {
+            await col.insertOne({ dedupeKey, createdAt: new Date() });
+          }
+        } catch (mErr: any) {
+          if (mErr.code === 11000) {
+            deduped = true;
+          }
+        }
+      } else {
+        if (viewerMediaViews.has(dedupeKey)) {
+          deduped = true;
+        } else {
+          viewerMediaViews.set(dedupeKey, Date.now());
+          if (viewerMediaViews.size > 5000) {
+            const yesterday = Date.now() - 86400000;
+            for (const [k, v] of viewerMediaViews.entries()) {
+              if (v < yesterday) viewerMediaViews.delete(k);
+            }
+          }
+        }
+      }
+
+      if (!deduped) {
+        media.views = (Number(media.views) || 0) + 1;
+        await upsertDoc("media", media);
+
+        // Record non-blocking analytics event
+        upsertDoc("analyticsEvents", {
+          id: generateId(),
+          type: "view",
+          path: `/media/${mediaId}`,
+          mediaId,
+          sessionId: viewerKey,
+          referrer: (req.headers["referer"] as string) || "",
+          device: (req.headers["user-agent"] || "").includes("Mobi") ? "mobile" : "desktop",
+          metadata: { title: media.title, category: media.category || "" },
+          ts: new Date(),
+          createdAt: new Date().toISOString(),
+        }).catch(() => {});
+      }
+
+      res.json({ views: media.views, deduped });
+    } catch (err: any) {
+      console.error("[media] view record error:", err);
+      res.status(500).json({ error: "Failed to record view" });
+    }
+  });
+
+  // POST /api/media/bulk-validate — admin-only bulk media validation and duplicate checking
+  app.post("/api/media/bulk-validate", requireUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
+      const rawItems: any[] = Array.isArray(req.body?.items) ? req.body.items : Array.isArray(req.body) ? req.body : [];
+      const allMedia = await listCollection("media");
+      const results: Array<{ index: number; ok: boolean; issues: string[]; preview: any }> = [];
+
+      for (let i = 0; i < rawItems.length; i++) {
+        const it = rawItems[i];
+        const issues: string[] = [];
+        if (!it || typeof it !== "object") {
+          issues.push("Invalid item: not an object");
+        } else {
+          if (!it.title || typeof it.title !== "string" || !it.title.trim()) {
+            issues.push("title is required");
+          }
+          const mType = it.mediaType || "video";
+          if (mType === "video") {
+            const dest = it.externalUrl || it.redirectUrl || it.sourceUrl || it.videoUrl;
+            if (!dest || typeof dest !== "string" || !dest.trim()) {
+              issues.push("video requires externalUrl or videoUrl");
+            }
+          } else if (mType === "image") {
+            const src = it.sourceUrl || it.imageUrl || it.thumbnailUrl;
+            if (!src || typeof src !== "string" || !src.trim()) {
+              issues.push("image requires sourceUrl");
+            }
+          }
+
+          // Duplicate detection via checkMediaDuplicate
+          const dup = checkMediaDuplicate(it, allMedia);
+          if (dup.duplicate && dup.match) {
+            issues.push(`Duplicate detected: matches existing item "${dup.match.title}" (${dup.match.reason})`);
+          }
+        }
+
+        results.push({
+          index: i,
+          ok: issues.length === 0,
+          issues,
+          preview: it,
+        });
+      }
+
+      res.json({ results, total: rawItems.length });
+    } catch (e: any) {
+      console.error("[media] bulk-validate error:", e);
+      res.status(500).json({ error: "Validation failed" });
+    }
+  });
+
+  app.get("/api/search", async (req, res) => {
+    try {
+      const query = String(req.query.q || "").trim();
+      const type = (req.query.type as any) || "all";
+      const sort = (req.query.sort as any) || "relevance";
+      const category = (req.query.category as string) || undefined;
+      const location = (req.query.location as string) || undefined;
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
+      const minRating = req.query.minRating ? parseFloat(req.query.minRating as string) : undefined;
+      const verifiedOnly = req.query.verifiedOnly === "true";
+
+      const allMedia = await listCollection("media");
+      const allTalent = await listCollection("talentProfiles");
+
+      const result = executeSearch(allMedia, allTalent, query, {
+        type,
+        sort,
+        category,
+        location,
+        limit,
+        minRating,
+        verifiedOnly
+      });
+
+      const viewerKey = (req.headers["x-viewer-key"] as string) || req.ip || "anon";
+      if (query) {
+        upsertDoc("analyticsEvents", {
+          id: generateId(),
+          eventType: "search",
+          viewerKey,
+          metadata: { query, resultsCount: result.total, tookMs: result.tookMs },
+          createdAt: new Date().toISOString(),
+        }).catch(() => {});
+      }
+
+      res.json(result);
+    } catch (err: any) {
+      console.error("[search] Error:", err);
+      res.status(500).json({ error: "Search failed" });
+    }
+  });
+
+  app.get("/api/media/feed", async (req, res) => {
+    try {
+      const page = Math.max(1, parseInt(req.query.page as string) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 24));
+      const categorySlug = String(req.query.category || "all").toLowerCase();
+      const seed = (req.query.seed as string) || new Date().toISOString().slice(0, 13);
+
+      let items = await listCollection("media");
+
+      if (categorySlug && categorySlug !== "all") {
+        const categories = await listCollection("categories");
+        const matchedCat = categories.find((c: any) => c.slug === categorySlug);
+        const tagsToMatch = matchedCat?.tags?.length ? matchedCat.tags.map((t: string) => t.toLowerCase()) : [categorySlug];
+
+        items = items.filter((item: any) => {
+          if (item.category && item.category.toLowerCase() === categorySlug) return true;
+          const itemTags = Array.isArray(item.tags) ? item.tags.map((t: string) => String(t).toLowerCase()) : [];
+          return tagsToMatch.some((t: string) => itemTags.includes(t) || (item.title && item.title.toLowerCase().includes(t)));
+        });
+      }
+
+      const token = getToken(req);
+      const currentUser = token ? await getSessionUser(token) : null;
+      const subscribedCreatorIds = new Set<string>(Array.isArray(currentUser?.subscriptions) ? currentUser.subscriptions : []);
+
+      if (subscribedCreatorIds.size > 0) {
+        const subItems = items.filter((m: any) => subscribedCreatorIds.has(m.userId) || subscribedCreatorIds.has(m.creatorId));
+        const nonSubItems = items.filter((m: any) => !subscribedCreatorIds.has(m.userId) && !subscribedCreatorIds.has(m.creatorId));
+
+        const shuffledSubs = stableShuffle(subItems, seed + "_subs");
+        const shuffledNon = stableShuffle(nonSubItems, seed + "_nons");
+
+        const combined: any[] = [];
+        let subIdx = 0;
+        let nonIdx = 0;
+
+        while (subIdx < shuffledSubs.length || nonIdx < shuffledNon.length) {
+          if (combined.length % 3 === 0 && subIdx < shuffledSubs.length) {
+            combined.push(shuffledSubs[subIdx++]);
+          } else if (nonIdx < shuffledNon.length) {
+            combined.push(shuffledNon[nonIdx++]);
+          } else if (subIdx < shuffledSubs.length) {
+            combined.push(shuffledSubs[subIdx++]);
+          }
+        }
+        items = combined;
+      } else {
+        items = stableShuffle(items, seed);
+      }
+
+      const total = items.length;
+      const startIndex = (page - 1) * limit;
+      const paginated = items.slice(startIndex, startIndex + limit);
+
+      res.json({
+        items: paginated,
+        total,
+        page,
+        limit,
+        hasMore: startIndex + limit < total,
+      });
+    } catch (e: any) {
+      console.error("[feed] feed error:", e);
+      res.status(500).json({ error: "Failed to generate feed" });
     }
   });
 
@@ -1660,7 +2179,7 @@ Title: ${existing.title}
 Description: ${existing.description || ""}`;
 
           const response = await ai.models.generateContent({
-            model: "gemini-3.8-flash",
+            model: "gemini-2.5-flash",
             contents: prompt,
             config: {
               responseMimeType: "application/json",
@@ -1824,23 +2343,7 @@ Description: ${existing.description || ""}`;
     res.json({ success: true, results });
   });
 
-  // --- Conversations & Notifications ---
-
-  app.get("/api/messages/conversation/:userId", requireUser, async (req, res) => {
-    const user = (req as any).user;
-    const targetId = req.params.userId;
-    const all = await listCollection("messages");
-    const conversation = all.filter(
-      (m: any) =>
-        (m.senderId === user.id && m.receiverId === targetId) ||
-        (m.senderId === targetId && m.receiverId === user.id)
-    );
-    conversation.sort(
-      (a: any, b: any) =>
-        new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
-    );
-    res.json(conversation);
-  });
+  // --- Notifications ---
 
   app.get("/api/notifications/mine", requireUser, async (req, res) => {
     const user = (req as any).user;
@@ -2082,25 +2585,345 @@ Description: ${existing.description || ""}`;
     }
   });
 
+  // --- SEO & Compliance Endpoints ---
+
+  app.get("/sitemap.xml", async (req, res) => {
+    try {
+      const host = req.headers.host || "localhost:3000";
+      const proto = req.headers["x-forwarded-proto"] || "http";
+      const baseUrl = `${proto}://${host}`;
+
+      const media = await listCollection("media");
+      const talent = await listCollection("talentProfiles");
+
+      const staticRoutes = ["", "media", "directory", "2257", "dmca", "privacy", "terms"];
+
+      let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+
+      for (const route of staticRoutes) {
+        xml += `  <url>\n    <loc>${baseUrl}/${route ? `?page=${route}` : ""}</loc>\n    <changefreq>daily</changefreq>\n    <priority>${route === "" ? "1.0" : "0.8"}</priority>\n  </url>\n`;
+      }
+
+      for (const m of media) {
+        xml += `  <url>\n    <loc>${baseUrl}/?page=view&amp;id=${encodeURIComponent(m.id)}</loc>\n    <lastmod>${(m.updatedAt || m.uploadedAt || new Date().toISOString()).slice(0, 10)}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
+      }
+
+      for (const t of talent) {
+        xml += `  <url>\n    <loc>${baseUrl}/?page=profile&amp;id=${encodeURIComponent(t.id)}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.6</priority>\n  </url>\n`;
+      }
+
+      xml += `</urlset>`;
+      res.header("Content-Type", "application/xml").send(xml);
+    } catch (e: any) {
+      res.status(500).send("Error generating sitemap");
+    }
+  });
+
+  app.get("/robots.txt", (req, res) => {
+    const host = req.headers.host || "localhost:3000";
+    const proto = req.headers["x-forwarded-proto"] || "http";
+    const content = `User-agent: *\nAllow: /\nDisallow: /admin-dashboard\nDisallow: /api/\n\nSitemap: ${proto}://${host}/sitemap.xml\n`;
+    res.type("text/plain").send(content);
+  });
+
+  // --- Ad Management Tracking ---
+
+  app.post("/api/ads/:id/impression", async (req, res) => {
+    try {
+      const ad = await findOneByField("ads", "id", req.params.id);
+      if (!ad) return res.status(404).json({ error: "Ad not found" });
+      ad.impressions = (ad.impressions || 0) + 1;
+      ad.updatedAt = new Date().toISOString();
+      await upsertDoc("ads", ad);
+
+      const viewerKey = (req.headers["x-viewer-key"] as string) || req.ip || "anon";
+      upsertDoc("analyticsEvents", {
+        id: generateId(),
+        eventType: "ad_impression",
+        entityId: ad.id,
+        entityType: "ad",
+        viewerKey,
+        metadata: { slot: ad.slot, name: ad.name },
+        createdAt: new Date().toISOString(),
+      }).catch(() => {});
+
+      res.json({ success: true, impressions: ad.impressions });
+    } catch {
+      res.status(500).json({ error: "Failed to log impression" });
+    }
+  });
+
+  app.post("/api/ads/:id/click", async (req, res) => {
+    try {
+      const ad = await findOneByField("ads", "id", req.params.id);
+      if (!ad) return res.status(404).json({ error: "Ad not found" });
+      ad.clicks = (ad.clicks || 0) + 1;
+      ad.updatedAt = new Date().toISOString();
+      await upsertDoc("ads", ad);
+
+      const viewerKey = (req.headers["x-viewer-key"] as string) || req.ip || "anon";
+      upsertDoc("analyticsEvents", {
+        id: generateId(),
+        eventType: "ad_click",
+        entityId: ad.id,
+        entityType: "ad",
+        viewerKey,
+        metadata: { slot: ad.slot, targetUrl: ad.targetUrl },
+        createdAt: new Date().toISOString(),
+      }).catch(() => {});
+
+      res.json({ success: true, clicks: ad.clicks });
+    } catch {
+      res.status(500).json({ error: "Failed to log ad click" });
+    }
+  });
+
+  // --- Analytics & Insights System ---
+
+  app.post("/api/analytics/track", async (req, res) => {
+    try {
+      const { eventType, path, entityId, entityType, viewerKey, referrer, device, metadata } = req.body || {};
+      if (!eventType) return res.status(400).json({ error: "eventType required" });
+
+      const event = {
+        id: generateId(),
+        eventType,
+        path: path || "",
+        entityId: entityId || "",
+        entityType: entityType || "",
+        viewerKey: viewerKey || (req.headers["x-viewer-key"] as string) || req.ip || "anon",
+        referrer: referrer || (req.headers["referer"] as string) || "",
+        device: device || ((req.headers["user-agent"] || "").includes("Mobi") ? "mobile" : "desktop"),
+        metadata: metadata || {},
+        createdAt: new Date().toISOString(),
+      };
+
+      await upsertDoc("analyticsEvents", event);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: "Failed to track analytics" });
+    }
+  });
+
+  app.get("/api/analytics/summary", async (req, res) => {
+    try {
+      const days = Math.max(1, parseInt(req.query.days as string) || 30);
+      const sinceDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      const allEvents = await listCollection("analyticsEvents");
+      const recentEvents = allEvents.filter((ev: any) => new Date(ev.createdAt) >= sinceDate);
+
+      const pageViews = recentEvents.filter((e: any) => e.eventType === "page_view" || e.eventType === "view");
+      const videoViews = recentEvents.filter((e: any) => e.eventType === "video_view");
+      const adImpressions = recentEvents.filter((e: any) => e.eventType === "ad_impression");
+      const adClicks = recentEvents.filter((e: any) => e.eventType === "ad_click");
+
+      const uniqueVisitors = new Set(recentEvents.map((e: any) => e.viewerKey)).size;
+
+      const dailyMap: Record<string, { views: number; visitors: Set<string> }> = {};
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        dailyMap[d] = { views: 0, visitors: new Set() };
+      }
+
+      for (const ev of recentEvents) {
+        const d = (ev.createdAt || "").slice(0, 10);
+        if (dailyMap[d]) {
+          dailyMap[d].views++;
+          if (ev.viewerKey) dailyMap[d].visitors.add(ev.viewerKey);
+        }
+      }
+
+      const dailyViews = Object.entries(dailyMap).map(([date, data]) => ({
+        date,
+        views: data.views,
+        visitors: data.visitors.size,
+      }));
+
+      const searchCounts: Record<string, number> = {};
+      recentEvents
+        .filter((e: any) => e.eventType === "search" && e.metadata?.query)
+        .forEach((e: any) => {
+          const q = String(e.metadata.query).trim().toLowerCase();
+          searchCounts[q] = (searchCounts[q] || 0) + 1;
+        });
+
+      const topSearches = Object.entries(searchCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([query, count]) => ({ query, count }));
+
+      const mediaCounts: Record<string, number> = {};
+      recentEvents
+        .filter((e: any) => e.eventType === "video_view" && e.entityId)
+        .forEach((e: any) => {
+          mediaCounts[e.entityId] = (mediaCounts[e.entityId] || 0) + 1;
+        });
+
+      const allMedia = await listCollection("media");
+      const topMedia = Object.entries(mediaCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([id, views]) => {
+          const item = allMedia.find((m: any) => m.id === id);
+          return {
+            id,
+            title: item?.title || "Unknown Media",
+            views,
+            thumbnailUrl: item?.thumbnailUrl || "",
+          };
+        });
+
+      const devices = {
+        mobile: recentEvents.filter((e: any) => e.device === "mobile").length,
+        tablet: recentEvents.filter((e: any) => e.device === "tablet").length,
+        desktop: recentEvents.filter((e: any) => e.device === "desktop" || !e.device).length,
+      };
+
+      const adCtr = adImpressions.length > 0 ? Number(((adClicks.length / adImpressions.length) * 100).toFixed(2)) : 0;
+
+      res.json({
+        totalPageViews: pageViews.length + videoViews.length,
+        uniqueVisitors: Math.max(1, uniqueVisitors),
+        totalVideoViews: videoViews.length,
+        totalAdImpressions: adImpressions.length,
+        totalAdClicks: adClicks.length,
+        adCtr,
+        topMedia,
+        topSearches,
+        deviceBreakdown: devices,
+        dailyViews,
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: "Failed to generate analytics summary" });
+    }
+  });
+
+  // --- Admin Diagnostics Engine ---
+
+  app.get("/api/admin/diagnostics/run", requireUser, async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
+
+    const tests: Array<{ id: string; name: string; status: "pass" | "fail" | "warn"; message: string; details?: any }> = [];
+
+    // Test 1: Database
+    try {
+      if (mongo) {
+        await mongo.command({ ping: 1 });
+        tests.push({ id: "db_ping", name: "Database Connectivity", status: "pass", message: "MongoDB connection active and ping successful." });
+      } else {
+        const dbInst = await loadJsonDB();
+        tests.push({ id: "db_ping", name: "Database Connectivity", status: "pass", message: `Running on data.json fallback (${Object.keys(dbInst).length} collections).` });
+      }
+    } catch (e: any) {
+      tests.push({ id: "db_ping", name: "Database Connectivity", status: "fail", message: `Database check failed: ${e.message}` });
+    }
+
+    // Test 2: Site Settings
+    try {
+      const s = await getSettings();
+      if (s) {
+        tests.push({ id: "site_settings", name: "Site Configuration", status: "pass", message: `Settings loaded: siteName="${s.siteName || "Elysian"}", adsEnabled=${!!s.adsEnabled}` });
+      } else {
+        tests.push({ id: "site_settings", name: "Site Configuration", status: "warn", message: "siteSettings document empty or not found." });
+      }
+    } catch (e: any) {
+      tests.push({ id: "site_settings", name: "Site Configuration", status: "fail", message: `Settings check error: ${e.message}` });
+    }
+
+    // Test 3: Categories
+    try {
+      const categories = await listCollection("categories");
+      if (categories.length >= 5) {
+        tests.push({ id: "categories", name: "Content Categories", status: "pass", message: `${categories.length} categories active.` });
+      } else if (categories.length > 0) {
+        tests.push({ id: "categories", name: "Content Categories", status: "warn", message: `Only ${categories.length} categories configured.` });
+      } else {
+        tests.push({ id: "categories", name: "Content Categories", status: "fail", message: "No categories found in database." });
+      }
+    } catch (e: any) {
+      tests.push({ id: "categories", name: "Content Categories", status: "fail", message: e.message });
+    }
+
+    // Test 4: Ad Units
+    try {
+      const ads = await listCollection("ads");
+      const activeAds = ads.filter((a: any) => a.enabled);
+      if (activeAds.length >= 2) {
+        tests.push({ id: "ads", name: "Sponsorship & Ad Units", status: "pass", message: `${activeAds.length} active ad slots running.` });
+      } else {
+        tests.push({ id: "ads", name: "Sponsorship & Ad Units", status: "warn", message: `${activeAds.length} active ad units found.` });
+      }
+    } catch (e: any) {
+      tests.push({ id: "ads", name: "Sponsorship & Ad Units", status: "fail", message: e.message });
+    }
+
+    // Test 5: Media URLs & Integrity
+    try {
+      const media = await listCollection("media");
+      const videoItems = media.filter((m: any) => m.mediaType === "video");
+      const missingDest = videoItems.filter((m: any) => !m.externalUrl && !m.redirectUrl && !m.sourceUrl);
+      if (missingDest.length === 0) {
+        tests.push({ id: "media_urls", name: "Media URLs & Link Integrity", status: "pass", message: `All ${videoItems.length} videos have valid destinations.` });
+      } else {
+        tests.push({ id: "media_urls", name: "Media URLs & Link Integrity", status: "warn", message: `${missingDest.length} videos missing destination URLs.`, details: missingDest.map((m: any) => m.title).slice(0, 5) });
+      }
+    } catch (e: any) {
+      tests.push({ id: "media_urls", name: "Media URLs & Link Integrity", status: "fail", message: e.message });
+    }
+
+    // Test 6: AI / Gemini API
+    const hasGeminiKey = !!process.env.GEMINI_API_KEY;
+    tests.push({
+      id: "ai_readiness",
+      name: "Gemini Auto-Tagging Engine",
+      status: hasGeminiKey ? "pass" : "warn",
+      message: hasGeminiKey ? "GEMINI_API_KEY detected and configured." : "GEMINI_API_KEY not set. Fallback keyword tagging will be used.",
+    });
+
+    const allPassed = tests.every((t) => t.status === "pass");
+    res.json({ allPassed, timestamp: new Date().toISOString(), tests });
+  });
+
+  app.post("/api/admin/diagnostics/fix", requireUser, async (req, res) => {
+    const user = (req as any).user;
+    if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
+
+    await seedDefaults();
+
+    const settings = await getSettings();
+    if (!settings.siteName) {
+      await setSettings({ siteName: "Elysian", adsEnabled: true });
+    }
+
+    await logActivity("update", "Applied system diagnostic automated repairs", user.id);
+    res.json({ success: true, message: "Default categories, ad units, and settings repaired successfully." });
+  });
+
   // --- Per-entity CRUD routes ---
   const CRUD_COLLECTIONS = [
     "media",
     "talentProfiles",
-    "messages",
     "notifications",
     "comments",
     "activityLogs",
     "chatThreads",
+    "categories",
+    "ads",
+    "analyticsEvents",
   ] as const;
 
   const OWNER_FIELD: Record<string, string> = {
     media: "userId",
     talentProfiles: "id",
-    messages: "senderId",
     notifications: "userId",
     comments: "userId",
     activityLogs: "userId",
     chatThreads: "userId",
+    categories: "userId",
+    ads: "userId",
+    analyticsEvents: "userId",
   };
 
   for (const name of CRUD_COLLECTIONS) {
@@ -2167,8 +2990,6 @@ Description: ${existing.description || ""}`;
           doc.externalUrl = doc.externalUrl || "";
           doc.uploadedBy = doc.uploadedBy || user.id;
           doc.description = doc.description || "";
-        } else if (name === "messages") {
-          doc.senderId = user.id;
         } else if (name === "comments") {
           doc.userId = user.id;
           doc.userName = user.name;

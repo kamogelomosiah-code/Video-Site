@@ -20,6 +20,7 @@ const MediaView: React.FC<MediaViewProps> = ({ mediaId, currentUser, onBack, onR
   const [isDisliked, setIsDisliked] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [showFullDesc, setShowFullDesc] = useState(false);
+  const [isSubscribing, setIsSubscribing] = useState(false);
 
   useEffect(() => {
     // Reset state
@@ -33,6 +34,15 @@ const MediaView: React.FC<MediaViewProps> = ({ mediaId, currentUser, onBack, onR
                 setMedia(item);
                 setIsLiked(item.likes?.includes(currentUser.id) || false);
                 setIsDisliked(item.dislikes?.includes(currentUser.id) || false);
+                
+                // Record view
+                api.media.recordView(mediaId).catch(() => {});
+
+                // Check subscription status
+                const creatorId = (item as any).talentId || item.userId;
+                if (creatorId && currentUser.id) {
+                    setIsSubscribed(currentUser.subscriptions?.includes(creatorId) || false);
+                }
                 
                 const relatedItems = await api.media.getRelated(mediaId);
                 setRelated(relatedItems);
@@ -51,6 +61,29 @@ const MediaView: React.FC<MediaViewProps> = ({ mediaId, currentUser, onBack, onR
 
     fetchMediaData();
   }, [mediaId, currentUser.id]);
+
+  const handleToggleSubscribe = async () => {
+    if (!media || isSubscribing) return;
+    const creatorId = media.talentId || media.userId;
+    if (!creatorId) return;
+
+    setIsSubscribing(true);
+    const nextSubscribed = !isSubscribed;
+    setIsSubscribed(nextSubscribed);
+
+    try {
+      if (nextSubscribed) {
+        await api.users.subscribe(currentUser.id, creatorId);
+      } else {
+        await api.users.unsubscribe(currentUser.id, creatorId);
+      }
+    } catch (err) {
+      console.error('Subscription update failed', err);
+      setIsSubscribed(!nextSubscribed);
+    } finally {
+      setIsSubscribing(false);
+    }
+  };
 
   const handleRate = async (type: 'like' | 'dislike') => {
       if (!media) return;
@@ -153,7 +186,10 @@ const MediaView: React.FC<MediaViewProps> = ({ mediaId, currentUser, onBack, onR
                                     ? 'external'
                                     : 'local');
                                 if (mode === 'external') {
-                                    window.open(media.externalUrl || media.redirectUrl || media.sourceUrl, '_blank');
+                                    const targetUrl = media.externalUrl || media.redirectUrl || media.sourceUrl;
+                                    if (targetUrl) {
+                                        window.open(targetUrl, '_blank', 'noopener,noreferrer');
+                                    }
                                 } else {
                                     setIsPlaying(true);
                                 }
@@ -260,8 +296,9 @@ const MediaView: React.FC<MediaViewProps> = ({ mediaId, currentUser, onBack, onR
             {media.userId !== 'admin-user' && (
               <button 
                   type="button"
-                  onClick={() => setIsSubscribed(!isSubscribed)}
-                  className={`flex items-center justify-center space-x-2 px-6 py-2.5 rounded-full font-semibold transition-all w-full sm:w-auto ${
+                  disabled={isSubscribing}
+                  onClick={handleToggleSubscribe}
+                  className={`flex items-center justify-center space-x-2 px-6 py-2.5 rounded-full font-semibold transition-all w-full sm:w-auto disabled:opacity-50 ${
                       isSubscribed 
                       ? 'bg-[#111] text-zinc-300 border border-zinc-800 hover:bg-zinc-800' 
                       : 'bg-white text-zinc-900 hover:bg-zinc-100 hover:text-yellow-500'
@@ -269,7 +306,7 @@ const MediaView: React.FC<MediaViewProps> = ({ mediaId, currentUser, onBack, onR
               >
                   {isSubscribed ? (
                       <>
-                          <Bell className="w-4 h-4" />
+                          <Bell className="w-4 h-4 text-yellow-400" />
                           <span>Subscribed</span>
                       </>
                   ) : (
@@ -291,12 +328,17 @@ const MediaView: React.FC<MediaViewProps> = ({ mediaId, currentUser, onBack, onR
                   </button>
               </div>
           </div>
+
+          {/* Video Page Native Ad Slot */}
+          <div className="pt-2">
+            <AdBanner slot="video-page" />
+          </div>
         </div>
       </div>
 
       {/* Sidebar: Related Videos */}
       <div className="lg:col-span-1 space-y-6">
-        <AdBanner type="rectangle" />
+        <AdBanner slot="sidebar" />
         
         <div>
             <h3 className="text-lg font-bold text-white mb-4">Up Next</h3>
@@ -306,8 +348,9 @@ const MediaView: React.FC<MediaViewProps> = ({ mediaId, currentUser, onBack, onR
                     key={video.id} 
                     className="flex space-x-3 group cursor-pointer"
                     onClick={() => {
-                        if (video.sourceUrl && (video.sourceUrl.startsWith('http://') || video.sourceUrl.startsWith('https://'))) {
-                            window.open(video.sourceUrl, '_blank');
+                        const extUrl = video.externalUrl || video.redirectUrl || ((video.sourceUrl && (video.sourceUrl.startsWith('http://') || video.sourceUrl.startsWith('https://')) && !video.sourceUrl.includes('/api/files/')) ? video.sourceUrl : null);
+                        if (extUrl) {
+                            window.open(extUrl, '_blank', 'noopener,noreferrer');
                         } else {
                             onRelatedClick(video.id);
                         }

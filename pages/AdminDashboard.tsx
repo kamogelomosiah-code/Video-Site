@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, MediaItem, UserRole, TalentProfile, ActivityLog } from '../types';
 import { api } from '../services/api';
-import { ShieldCheck, Video, Users, PlusCircle, Edit, Trash2, X, Save, Settings, Star, MapPin, UploadCloud, Menu, ChevronDown, RefreshCw, Upload, FileJson, Briefcase, Activity, Server, DollarSign, Play, Eye, ExternalLink, HardDrive, Film, Copy, Check, Lock, Unlock, Clock, Tag, Shuffle } from 'lucide-react';
+import { ShieldCheck, Video, Users, PlusCircle, Edit, Trash2, X, Save, Settings, Star, MapPin, UploadCloud, Menu, ChevronDown, RefreshCw, Upload, FileJson, Briefcase, Activity, Server, DollarSign, Play, Eye, ExternalLink, HardDrive, Film, Copy, Check, Lock, Unlock, Clock, Tag, Shuffle, Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import AdminBulkUpload from '../components/AdminBulkUpload';
 import AdminBulkImport from '../components/AdminBulkImport';
 import AdminAds from '../components/AdminAds';
@@ -987,22 +987,215 @@ const SiteSettingsPanel = ({ media, settings, onSettingsChange, onSaveSettings }
   );
 };
 
-const ActivityLogPanel = ({ logs }: { logs: ActivityLog[] }) => (
-  <div className="bg-[#111]/40 border border-zinc-800/80 rounded-2xl p-6 space-y-4">
-    <h3 className="text-lg font-bold text-white">Activity Log</h3>
-    <div className="space-y-2 max-h-[600px] overflow-y-auto">
-      {logs.map((log) => (
-        <div key={log.id} className="bg-black/40 border border-zinc-900 rounded-xl p-4 flex justify-between items-center text-sm">
-          <div>
-            <span className="font-semibold text-white uppercase text-xs px-2 py-0.5 rounded bg-zinc-800 mr-3">{log.action}</span>
-            <span className="text-zinc-300">{log.details}</span>
-          </div>
-          <span className="text-xs text-zinc-500">{new Date(log.timestamp).toLocaleString()}</span>
+const ActivityLogPanel = ({ logs }: { logs: ActivityLog[] }) => {
+  const [actionFilter, setActionFilter] = useState<string>('all');
+  const [dateRange, setDateRange] = useState<'all' | '24h' | '7d' | '30d'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
+
+  // Filter logs based on actionType, date range, and search text
+  const filteredLogs = React.useMemo(() => {
+    const now = Date.now();
+    return logs.filter((log) => {
+      const action = String(log.actionType || (log as any).action || '').toLowerCase();
+      if (actionFilter !== 'all' && action !== actionFilter.toLowerCase()) {
+        return false;
+      }
+
+      if (dateRange !== 'all') {
+        const logTime = new Date(log.timestamp).getTime();
+        const diffMs = now - logTime;
+        if (dateRange === '24h' && diffMs > 24 * 60 * 60 * 1000) return false;
+        if (dateRange === '7d' && diffMs > 7 * 24 * 60 * 60 * 1000) return false;
+        if (dateRange === '30d' && diffMs > 30 * 24 * 60 * 60 * 1000) return false;
+      }
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const details = String(log.details || '').toLowerCase();
+        const uid = String(log.userId || '').toLowerCase();
+        if (!details.includes(q) && !uid.includes(q) && !action.includes(q)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [logs, actionFilter, dateRange, searchQuery]);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [actionFilter, dateRange, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedLogs = filteredLogs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const getActionBadgeColor = (action: string) => {
+    switch (action.toLowerCase()) {
+      case 'create':
+      case 'signup':
+      case 'upload':
+        return 'bg-green-500/20 text-green-400 border-green-500/30';
+      case 'delete':
+      case 'error':
+        return 'bg-red-500/20 text-red-400 border-red-500/30';
+      case 'update':
+      case 'settings':
+        return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      case 'login':
+      case 'logout':
+        return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+      case 'import':
+        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+      default:
+        return 'bg-zinc-800 text-zinc-300 border-zinc-700';
+    }
+  };
+
+  return (
+    <div className="bg-[#111]/40 border border-zinc-800/80 rounded-2xl p-6 space-y-5">
+      {/* Header and Controls */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+            <Activity className="w-5 h-5 text-yellow-500" />
+            Audit & Activity Logs
+          </h3>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Showing {filteredLogs.length} total recorded administrative and system events
+          </p>
         </div>
-      ))}
+
+        {/* Action, Date, and Search Filters */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="relative">
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search details or user..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-yellow-500 w-44 md:w-56"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1">
+            <Filter className="w-3.5 h-3.5 text-zinc-400" />
+            <select
+              value={actionFilter}
+              onChange={(e) => setActionFilter(e.target.value)}
+              className="bg-transparent text-xs text-zinc-300 focus:outline-none cursor-pointer"
+            >
+              <option value="all" className="bg-zinc-900 text-white">All Actions</option>
+              <option value="create" className="bg-zinc-900 text-white">Create</option>
+              <option value="update" className="bg-zinc-900 text-white">Update</option>
+              <option value="delete" className="bg-zinc-900 text-white">Delete</option>
+              <option value="login" className="bg-zinc-900 text-white">Login</option>
+              <option value="logout" className="bg-zinc-900 text-white">Logout</option>
+              <option value="signup" className="bg-zinc-900 text-white">Signup</option>
+              <option value="upload" className="bg-zinc-900 text-white">Upload</option>
+              <option value="import" className="bg-zinc-900 text-white">Import</option>
+              <option value="rating" className="bg-zinc-900 text-white">Rating</option>
+              <option value="subscribe" className="bg-zinc-900 text-white">Subscribe</option>
+              <option value="settings" className="bg-zinc-900 text-white">Settings</option>
+              <option value="error" className="bg-zinc-900 text-white">Error</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1">
+            <Clock className="w-3.5 h-3.5 text-zinc-400" />
+            <select
+              value={dateRange}
+              onChange={(e) => setDateRange(e.target.value as any)}
+              className="bg-transparent text-xs text-zinc-300 focus:outline-none cursor-pointer"
+            >
+              <option value="all" className="bg-zinc-900 text-white">All Time</option>
+              <option value="24h" className="bg-zinc-900 text-white">Last 24h</option>
+              <option value="7d" className="bg-zinc-900 text-white">Last 7 Days</option>
+              <option value="30d" className="bg-zinc-900 text-white">Last 30 Days</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Log List */}
+      <div className="space-y-2 min-h-[300px] max-h-[600px] overflow-y-auto pr-1">
+        {paginatedLogs.length === 0 ? (
+          <div className="text-center py-16 bg-black/40 border border-zinc-900 rounded-xl text-zinc-500 text-xs">
+            No activity logs match the selected filters.
+          </div>
+        ) : (
+          paginatedLogs.map((log) => {
+            const action = log.actionType || (log as any).action || 'unknown';
+            return (
+              <div
+                key={log.id}
+                className="bg-black/40 border border-zinc-900/80 hover:border-zinc-800 transition-colors rounded-xl p-3.5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 text-sm"
+              >
+                <div className="flex items-start sm:items-center gap-3">
+                  <span
+                    className={`font-semibold uppercase text-[10px] px-2.5 py-1 rounded border tracking-wider flex-shrink-0 ${getActionBadgeColor(
+                      action
+                    )}`}
+                  >
+                    {action}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-zinc-200 text-xs leading-relaxed break-words">{log.details}</p>
+                    {log.userId && (
+                      <p className="text-[11px] text-zinc-500 mt-0.5 font-mono">
+                        User ID: <span className="text-zinc-400">{log.userId}</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <span className="text-[11px] text-zinc-500 font-mono whitespace-nowrap self-end sm:self-auto flex-shrink-0">
+                  {new Date(log.timestamp).toLocaleString()}
+                </span>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-3 border-t border-zinc-900 text-xs text-zinc-400">
+          <div>
+            Showing {(currentPage - 1) * pageSize + 1} to{' '}
+            {Math.min(currentPage * pageSize, filteredLogs.length)} of {filteredLogs.length}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={currentPage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed border border-zinc-800 text-white flex items-center gap-1 transition-colors"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              Prev
+            </button>
+            <span className="px-2 text-zinc-400">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              type="button"
+              disabled={currentPage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed border border-zinc-800 text-white flex items-center gap-1 transition-colors"
+            >
+              Next
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 const MongoStatusBadge: React.FC = () => {
   const [status, setStatus] = React.useState<any>(null);
@@ -1066,6 +1259,9 @@ const MongoStatusBadge: React.FC = () => {
 
 const SystemStatusPanel: React.FC = () => {
   const [status, setStatus] = React.useState<any>(null);
+  const [selfTest, setSelfTest] = React.useState<any>(null);
+  const [runningSelfTest, setRunningSelfTest] = React.useState(false);
+
   React.useEffect(() => {
     const load = () => api.system.getStatus().then(setStatus).catch(() => {});
     load();
@@ -1073,43 +1269,126 @@ const SystemStatusPanel: React.FC = () => {
     return () => clearInterval(t);
   }, []);
 
+  const handleRunSelfTest = async () => {
+    setRunningSelfTest(true);
+    try {
+      const res = await api.system.runSelfTest();
+      setSelfTest(res);
+    } catch (err: any) {
+      console.error('Self test execution failed', err);
+      setSelfTest({
+        allPassed: false,
+        results: {
+          error: { status: 'fail', message: err.message || 'Self-test execution failed' }
+        }
+      });
+    } finally {
+      setRunningSelfTest(false);
+    }
+  };
+
   if (!status) return <div className="p-8 text-zinc-500">Loading system status...</div>;
 
   const ok = status.mongo?.connected;
   return (
-    <div className="p-6 space-y-6 bg-[#111]/40 border border-zinc-800/80 rounded-2xl">
-      <div className="flex items-center space-x-3">
-        <span className={`w-3 h-3 rounded-full ${ok ? "bg-green-500 animate-pulse" : "bg-red-500"}`} />
-        <h3 className="text-lg font-bold text-white">
-          {ok ? "MongoDB Online" : "MongoDB Offline"}
-        </h3>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <InfoRow label="Database Host" value={status.mongo?.host || "—"} />
-        <InfoRow label="Database Name" value={status.mongo?.database || "—"} />
-        <InfoRow label="Ping Time" value={status.mongo?.pingMs != null ? `${status.mongo.pingMs}ms` : "—"} />
-        <InfoRow label="Storage Mode" value={status.storage?.mode || "—"} />
-        <InfoRow label="GridFS Uplink" value={status.storage?.gridfs ? "Active" : "Inactive"} />
-        <InfoRow label="Admin Access Guard" value={status.adminGuard ? "Strict PIN Verification" : "PIN-free Development Mode"} />
-        <InfoRow label="System Uptime" value={`${status.uptime} seconds`} />
+    <div className="space-y-6">
+      {/* Self-Test Execution Header Card */}
+      <div className="p-6 bg-[#111]/60 border border-zinc-800/90 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+            <Server className="w-5 h-5 text-yellow-500" />
+            <span>Platform Infrastructure & Self-Testing</span>
+          </h3>
+          <p className="text-xs text-zinc-400 mt-1">
+            Run automated end-to-end self-tests across database, storage, auth, advertising, and AI subsystems.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          disabled={runningSelfTest}
+          onClick={handleRunSelfTest}
+          className="bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-bold px-5 py-2.5 rounded-xl transition-all flex items-center space-x-2 text-xs disabled:opacity-50 shadow-lg shadow-yellow-500/10 active:scale-95 flex-shrink-0"
+        >
+          <RefreshCw className={`w-4 h-4 ${runningSelfTest ? 'animate-spin' : ''}`} />
+          <span>{runningSelfTest ? 'Running Diagnostics...' : 'Run System Self-Test'}</span>
+        </button>
       </div>
 
-      {status.schema?.collections && (
-        <div className="space-y-3">
-          <h4 className="text-sm font-bold text-zinc-400">Database Schema Verification</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {status.schema.collections.map((col: any) => (
-              <div key={col.name} className="flex items-center justify-between bg-black/40 border border-zinc-900 rounded-lg p-3">
-                <span className="text-zinc-300 text-sm font-medium">{col.name}</span>
-                <span className={`text-xs px-2 py-0.5 font-bold rounded-full ${col.exists ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-                  {col.exists ? 'verified' : 'missing'}
-                </span>
-              </div>
-            ))}
+      {/* Self-Test Results Display */}
+      {selfTest && (
+        <div className={`p-6 rounded-2xl border ${selfTest.allPassed ? 'bg-green-950/20 border-green-500/30' : 'bg-red-950/20 border-red-500/30'} space-y-4 animate-fade-in`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <span className={`w-3 h-3 rounded-full ${selfTest.allPassed ? 'bg-green-500' : 'bg-yellow-500'}`} />
+              <h4 className="font-bold text-white text-sm">
+                {selfTest.allPassed ? 'All System Subsystems Operational' : 'Subsystem Warnings or Issues Detected'}
+              </h4>
+            </div>
+            <span className="text-[10px] text-zinc-400 font-mono">
+              Tested at {new Date(selfTest.timestamp || Date.now()).toLocaleTimeString()}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {Object.entries(selfTest.results || {}).map(([key, item]: [string, any]) => {
+              const pass = item.status === 'pass';
+              const warn = item.status === 'warn';
+              return (
+                <div key={key} className="bg-black/50 border border-zinc-800 rounded-xl p-3 flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-bold text-white uppercase tracking-wider">{key}</span>
+                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
+                      pass ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
+                      warn ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
+                      'bg-red-500/10 text-red-400 border border-red-500/20'
+                    }`}>
+                      {item.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-300 font-mono mt-1 break-words">{item.message}</p>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
+
+      {/* Main Status Metrics */}
+      <div className="p-6 space-y-6 bg-[#111]/40 border border-zinc-800/80 rounded-2xl">
+        <div className="flex items-center space-x-3">
+          <span className={`w-3 h-3 rounded-full ${ok ? "bg-green-500 animate-pulse" : "bg-red-500"}`} />
+          <h3 className="text-lg font-bold text-white">
+            {ok ? "MongoDB Online" : "MongoDB Offline (data.json active)"}
+          </h3>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <InfoRow label="Database Host" value={status.mongo?.host || "—"} />
+          <InfoRow label="Database Name" value={status.mongo?.database || "—"} />
+          <InfoRow label="Ping Time" value={status.mongo?.pingMs != null ? `${status.mongo.pingMs}ms` : "—"} />
+          <InfoRow label="Storage Mode" value={status.storage?.mode || "—"} />
+          <InfoRow label="GridFS Uplink" value={status.storage?.gridfs ? "Active" : "Inactive"} />
+          <InfoRow label="Admin Access Guard" value={status.adminGuard ? "Strict PIN Verification" : "PIN-free Development Mode"} />
+          <InfoRow label="System Uptime" value={`${status.uptime} seconds`} />
+        </div>
+
+        {status.schema?.collections && (
+          <div className="space-y-3">
+            <h4 className="text-sm font-bold text-zinc-400">Database Schema Verification</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {status.schema.collections.map((col: any) => (
+                <div key={col.name} className="flex items-center justify-between bg-black/40 border border-zinc-900 rounded-lg p-3">
+                  <span className="text-zinc-300 text-sm font-medium">{col.name}</span>
+                  <span className={`text-xs px-2 py-0.5 font-bold rounded-full ${col.exists ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                    {col.exists ? 'verified' : 'missing'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

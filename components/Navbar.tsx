@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, UserRole, Notification } from '../types';
-import { Search, Bell, Menu, ShieldCheck, LogIn, LogOut, X } from 'lucide-react';
+import { User, UserRole, MediaItem, TalentProfile } from '../types';
+import { Search, Menu, ShieldCheck, LogIn, LogOut, X, Play, User as UserIcon, Loader2, ArrowRight } from 'lucide-react';
 import { api } from '../services/api';
 
 interface NavbarProps {
@@ -12,70 +12,48 @@ interface NavbarProps {
   onProfileClick: () => void;
   onLogout: () => void;
   onMenuClick: () => void;
+  onSelectMedia?: (id: string) => void;
+  onSelectTalent?: (id: string) => void;
+  onSearchSubmit?: (query: string) => void;
+  initialSearchQuery?: string;
 }
 
 const Navbar: React.FC<NavbarProps> = ({ 
-  user, currentPage, onVerifyClick, onLoginClick, onAdminClick, onProfileClick, onLogout, onMenuClick
+  user, currentPage, onVerifyClick, onLoginClick, onAdminClick, onProfileClick, onLogout, onMenuClick,
+  onSelectMedia, onSelectTalent, onSearchSubmit, initialSearchQuery = ''
 }) => {
   const isGuest = user.id === 'guest';
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const notificationsRef = useRef<HTMLDivElement>(null);
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
+  const [searchResults, setSearchResults] = useState<{ media: MediaItem[]; talent: TalentProfile[] } | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (isGuest) {
-      setNotifications([]);
-      return;
+    if (initialSearchQuery !== undefined) {
+      setSearchQuery(initialSearchQuery);
     }
+  }, [initialSearchQuery]);
 
-    const fetchNotifications = async () => {
-      try {
-        const data = await api.notifications.getAll(user.id);
-        if (Array.isArray(data)) {
-          setNotifications(data);
-        } else {
-          setNotifications([]);
-        }
-      } catch (err: any) {
-        const isSessionErr = err?.status === 401 || 
-                             err?.message?.includes("Session expired") || 
-                             err?.message?.includes("Authentication required") ||
-                             err?.message?.includes("Unauthorized");
-        
-        const isNetworkErr = err?.message?.includes("Failed to fetch") || 
-                             err?.name === "TypeError" || 
-                             err?.message?.includes("NetworkError");
-        
-        setNotifications([]);
-        if (isSessionErr) {
-          console.warn('Session expired or invalid. Logging out.');
-          onLogout();
-        } else if (isNetworkErr) {
-          console.log('Notification fetch skipped (transient server/network offline)');
-        } else {
-          console.error('Failed to fetch notifications:', err);
-        }
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
+      }
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setShowSearchDropdown(false);
       }
     };
-    
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 10000); // Poll less frequently
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) setShowNotifications(false);
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) setShowUserMenu(false);
-    };
     document.addEventListener("mousedown", handleClickOutside);
-
     return () => {
-      clearInterval(interval);
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [user.id, isGuest]);
+  }, []);
 
   useEffect(() => {
     if (showMobileSearch && searchInputRef.current) {
@@ -83,30 +61,51 @@ const Navbar: React.FC<NavbarProps> = ({
     }
   }, [showMobileSearch]);
 
-  const unreadCount = Array.isArray(notifications) ? notifications.filter(n => !n.read).length : 0;
-  const handleMarkAllRead = async () => { 
-    if (isGuest) return;
-    try {
-      await api.notifications.markAllRead(user.id);
-      const data = await api.notifications.getAll(user.id);
-      if (Array.isArray(data)) {
-        setNotifications(data);
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) {
+      setSearchResults(null);
+      setIsSearching(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const results = await api.search.query(query);
+        setSearchResults(results);
+        setShowSearchDropdown(true);
+      } catch (e) {
+        console.error('Search error:', e);
+      } finally {
+        setIsSearching(false);
       }
-    } catch (err) {
-      console.error('Failed to mark all read:', err);
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const handleSearchSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const query = searchQuery.trim();
+    if (!query) return;
+    setShowSearchDropdown(false);
+    setShowMobileSearch(false);
+    if (onSearchSubmit) {
+      onSearchSubmit(query);
     }
   };
-  const handleNotificationClick = async (id: string) => { 
-    if (isGuest) return;
-    try {
-      await api.notifications.markRead(id);
-      const data = await api.notifications.getAll(user.id);
-      if (Array.isArray(data)) {
-        setNotifications(data);
-      }
-    } catch (err) {
-      console.error('Failed to mark notification as read:', err);
-    }
+
+  const handleMediaPick = (id: string) => {
+    setShowSearchDropdown(false);
+    setShowMobileSearch(false);
+    if (onSelectMedia) onSelectMedia(id);
+  };
+
+  const handleTalentPick = (id: string) => {
+    setShowSearchDropdown(false);
+    setShowMobileSearch(false);
+    if (onSelectTalent) onSelectTalent(id);
   };
 
   return (
@@ -114,18 +113,111 @@ const Navbar: React.FC<NavbarProps> = ({
       
       {/* Mobile Search Overlay */}
       {showMobileSearch ? (
-         <div className="absolute inset-0 bg-black flex items-center px-4 z-40 animate-fade-in">
-            <Search className="w-5 h-5 text-zinc-500 mr-3" />
-            <input 
-              ref={searchInputRef}
-              type="text" 
-              placeholder="Search content..." 
-              className="flex-1 bg-transparent border-none text-white focus:outline-none text-base"
-              onBlur={() => !searchInputRef.current?.value && setShowMobileSearch(false)}
-            />
-            <button onClick={() => setShowMobileSearch(false)} className="p-2 text-zinc-400">
-              <X className="w-6 h-6" />
-            </button>
+         <div className="absolute inset-0 bg-black flex flex-col px-4 pt-2 z-50 animate-fade-in shadow-2xl">
+            <form onSubmit={handleSearchSubmit} className="flex items-center h-12 w-full gap-2">
+              <div className="flex-1 flex items-center bg-zinc-900 rounded-xl px-3 py-1.5 border border-zinc-800">
+                <Search className="w-4 h-4 text-zinc-500 mr-2 shrink-0" />
+                <input 
+                  ref={searchInputRef}
+                  type="text" 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search videos, creators, tags..." 
+                  className="flex-1 bg-transparent border-none text-white focus:outline-none text-sm placeholder:text-zinc-500"
+                />
+                {isSearching && <Loader2 className="w-4 h-4 text-yellow-500 animate-spin mr-2 shrink-0" />}
+                {searchQuery && (
+                  <button type="button" onClick={() => setSearchQuery('')} className="p-1 text-zinc-400 hover:text-white">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              <button 
+                type="submit" 
+                className="px-3.5 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-xl text-xs whitespace-nowrap active:scale-95 transition-all shadow-md cursor-pointer"
+              >
+                Search
+              </button>
+              <button 
+                type="button" 
+                onClick={() => { setShowMobileSearch(false); }} 
+                className="p-1.5 text-zinc-400 hover:text-white"
+                aria-label="Close search"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </form>
+
+            {/* Mobile Search Results */}
+            {searchResults && searchQuery.trim() && (
+              <div className="max-h-[70vh] overflow-y-auto pb-4 divide-y divide-zinc-900">
+                {searchResults.media.length === 0 && searchResults.talent.length === 0 ? (
+                  <div className="py-6 text-center text-sm text-zinc-500">
+                    <p>No quick results for "{searchQuery}"</p>
+                    <button
+                      type="button"
+                      onClick={() => handleSearchSubmit()}
+                      className="mt-3 px-4 py-2 bg-yellow-500 text-black font-bold rounded-xl text-xs inline-flex items-center gap-1.5"
+                    >
+                      <Search className="w-3.5 h-3.5" />
+                      <span>Search entire site</span>
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {searchResults.media.length > 0 && (
+                      <div className="py-2">
+                        <span className="text-xs uppercase font-bold text-zinc-500 px-2 tracking-wider">Videos</span>
+                        {searchResults.media.slice(0, 5).map((m) => (
+                          <div 
+                            key={m.id} 
+                            onClick={() => handleMediaPick(m.id)} 
+                            className="flex items-center space-x-3 p-2 rounded-lg hover:bg-zinc-900 cursor-pointer mt-1"
+                          >
+                            <div className="w-12 h-8 bg-zinc-800 rounded overflow-hidden flex-shrink-0 relative">
+                              {m.thumbnailUrl ? <img src={m.thumbnailUrl} alt="" className="w-full h-full object-cover" /> : <Play className="w-4 h-4 text-zinc-600 m-auto" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-white font-medium truncate">{m.title}</p>
+                              <p className="text-xs text-zinc-500 truncate">{m.creatorName || 'Creator'}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {searchResults.talent.length > 0 && (
+                      <div className="py-2">
+                        <span className="text-xs uppercase font-bold text-zinc-500 px-2 tracking-wider">Creators</span>
+                        {searchResults.talent.slice(0, 4).map((t) => (
+                          <div 
+                            key={t.id} 
+                            onClick={() => handleTalentPick(t.id)} 
+                            className="flex items-center space-x-3 p-2 rounded-lg hover:bg-zinc-900 cursor-pointer mt-1"
+                          >
+                            <div className="w-8 h-8 rounded-full bg-zinc-800 overflow-hidden flex-shrink-0">
+                              {t.avatarUrl ? <img src={t.avatarUrl} alt="" className="w-full h-full object-cover" /> : <UserIcon className="w-4 h-4 text-yellow-500 m-auto mt-2" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-white font-medium truncate">{t.name}</p>
+                              <p className="text-xs text-zinc-500 truncate">{t.title || 'Verified Creator'}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleSearchSubmit()}
+                      className="w-full text-center py-2.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 text-xs font-semibold rounded-xl border border-yellow-500/20 mt-2 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <span>View all results for "{searchQuery}"</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
          </div>
       ) : (
         <>
@@ -134,15 +226,142 @@ const Navbar: React.FC<NavbarProps> = ({
               <Menu className="w-6 h-6" />
             </button>
             
-            <div className="relative max-w-md w-full ml-4 hidden md:block">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 w-4 h-4" />
-              <input type="text" placeholder="Search creators, professionals, or content..." className="w-full bg-black border border-zinc-800 rounded-full py-2 pl-10 pr-4 text-sm text-zinc-200 focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 transition-all" />
+            {/* Desktop Global Search with Working Search Button & Live Results Dropdown */}
+            <div className="relative max-w-md w-full ml-4 hidden md:block" ref={searchContainerRef}>
+              <form onSubmit={handleSearchSubmit} className="relative w-full flex items-center">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 w-4 h-4 pointer-events-none" />
+                <input 
+                  type="text" 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => { if (searchResults) setShowSearchDropdown(true); }}
+                  placeholder="Search creators, videos, tags, cities..." 
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-full py-2 pl-9 pr-24 text-sm text-zinc-200 focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 transition-all placeholder:text-zinc-500" 
+                />
+                
+                {isSearching ? (
+                  <Loader2 className="absolute right-20 top-1/2 -translate-y-1/2 text-yellow-500 w-3.5 h-3.5 animate-spin" />
+                ) : searchQuery ? (
+                  <button 
+                    type="button" 
+                    onClick={() => setSearchQuery('')} 
+                    className="absolute right-20 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 p-0.5"
+                    aria-label="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                ) : null}
+
+                {/* Explicit Search Action Button */}
+                <button
+                  type="submit"
+                  aria-label="Search site"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 px-3 py-1 bg-yellow-500 hover:bg-yellow-400 text-black font-bold text-xs rounded-full flex items-center gap-1 transition-all shadow-sm active:scale-95 cursor-pointer"
+                >
+                  <Search className="w-3 h-3 stroke-[2.5]" />
+                  <span>Search</span>
+                </button>
+              </form>
+
+              {/* Desktop Results Dropdown */}
+              {showSearchDropdown && searchResults && searchQuery.trim() && (
+                <div className="absolute left-0 right-0 mt-2 bg-[#111] border border-zinc-800 rounded-2xl shadow-2xl z-50 overflow-hidden max-h-96 overflow-y-auto">
+                  {searchResults.media.length === 0 && searchResults.talent.length === 0 ? (
+                    <div className="p-6 text-center text-sm text-zinc-500 space-y-2">
+                      <p>No quick results for <span className="text-zinc-300 font-medium">"{searchQuery}"</span></p>
+                      <button
+                        type="button"
+                        onClick={() => handleSearchSubmit()}
+                        className="px-3.5 py-1.5 bg-yellow-500 text-black font-bold rounded-lg text-xs inline-flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Search className="w-3.5 h-3.5" />
+                        <span>Search full platform</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-2 space-y-2">
+                      {searchResults.media.length > 0 && (
+                        <div>
+                          <div className="px-3 py-1.5 text-xs uppercase tracking-wider font-semibold text-zinc-500">
+                            Videos ({searchResults.media.length})
+                          </div>
+                          {searchResults.media.slice(0, 4).map((item) => (
+                            <div
+                              key={item.id}
+                              onClick={() => handleMediaPick(item.id)}
+                              className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:bg-zinc-800/70 cursor-pointer transition-colors"
+                            >
+                              <div className="w-14 h-9 bg-zinc-900 rounded overflow-hidden flex-shrink-0 relative border border-zinc-800">
+                                {item.thumbnailUrl ? (
+                                  <img src={item.thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center">
+                                    <Play className="w-3.5 h-3.5 text-yellow-500/80" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-white truncate">{item.title}</p>
+                                <p className="text-xs text-zinc-400 truncate">{item.creatorName || 'Elysian Creator'}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {searchResults.talent.length > 0 && (
+                        <div className="border-t border-zinc-800/60 pt-2">
+                          <div className="px-3 py-1.5 text-xs uppercase tracking-wider font-semibold text-zinc-500">
+                            Creators ({searchResults.talent.length})
+                          </div>
+                          {searchResults.talent.slice(0, 3).map((talent) => (
+                            <div
+                              key={talent.id}
+                              onClick={() => handleTalentPick(talent.id)}
+                              className="flex items-center space-x-3 px-3 py-2 rounded-xl hover:bg-zinc-800/70 cursor-pointer transition-colors"
+                            >
+                              <div className="w-9 h-9 rounded-full bg-zinc-800 overflow-hidden flex-shrink-0 border border-zinc-700">
+                                {talent.avatarUrl ? (
+                                  <img src={talent.avatarUrl} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-xs text-yellow-500 font-bold">
+                                    {talent.name.charAt(0)}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-white truncate">{talent.name}</p>
+                                <p className="text-xs text-zinc-400 truncate">{talent.title || 'Verified Creator'}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Footer Full Search Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleSearchSubmit()}
+                        className="w-full text-center py-2 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 text-xs font-semibold rounded-b-xl border-t border-zinc-800/80 transition-colors flex items-center justify-center gap-1.5 cursor-pointer mt-1"
+                      >
+                        <span>View all results for "{searchQuery}"</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
           <div className="flex items-center space-x-1 sm:space-x-4">
             {/* Mobile Search Trigger */}
-            <button type="button" onClick={() => setShowMobileSearch(true)} className="md:hidden p-2 text-zinc-400 hover:text-white">
+            <button 
+              type="button" 
+              onClick={() => setShowMobileSearch(true)} 
+              className="md:hidden p-2 text-zinc-400 hover:text-white"
+              aria-label="Open search"
+            >
               <Search className="w-5 h-5" />
             </button>
 
@@ -151,22 +370,6 @@ const Navbar: React.FC<NavbarProps> = ({
                 <ShieldCheck className="w-3.5 h-3.5" />
                 <span>Get Verified</span>
               </button>
-            )}
-            
-            {/* Notifications icon (hidden when in Admin Panel) */}
-            {currentPage !== 'admin-dashboard' && (
-              <div className="relative" ref={notificationsRef}>
-                  <button type="button" aria-label="Toggle notifications" onClick={() => setShowNotifications(!showNotifications)} className="relative p-2 text-zinc-400 hover:text-yellow-400 transition-colors">
-                      <Bell className="w-5 h-5" />
-                      {unreadCount > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-yellow-500 rounded-full border-2 border-zinc-950 animate-pulse"></span>}
-                  </button>
-                  {showNotifications && (
-                      <div className="absolute right-0 mt-2 w-80 bg-[#111] border border-zinc-800 rounded-2xl shadow-2xl z-50 overflow-hidden">
-                          <div className="p-4 border-b border-zinc-800 flex justify-between items-center bg-black/50 backdrop-blur-sm"><h3 className="font-bold text-white text-sm">Notifications</h3>{unreadCount > 0 && <button type="button" onClick={handleMarkAllRead} className="text-xs text-yellow-400 hover:text-yellow-300 font-medium">Mark all read</button>}</div>
-                          <div className="max-h-80 overflow-y-auto">{notifications.length === 0 ? <div className="p-8 text-center text-zinc-500 text-sm">No notifications yet.</div> : notifications.map(notif => (<div key={notif.id} onClick={() => handleNotificationClick(notif.id)} className={`p-4 border-b border-zinc-800/50 hover:bg-zinc-800 cursor-pointer transition-colors ${!notif.read ? 'bg-yellow-500/5' : ''}`}><div className="flex items-start"><div className={`w-2 h-2 rounded-full mt-2 mr-3 flex-shrink-0 ${!notif.read ? 'bg-yellow-500' : 'bg-transparent'}`}></div><div><p className={`text-sm ${!notif.read ? 'text-white font-medium' : 'text-zinc-400'}`}>{notif.message}</p><p className="text-xs text-zinc-600 mt-1">{notif.createdAt}</p></div></div></div>))}</div>
-                      </div>
-                  )}
-              </div>
             )}
 
             <div className="flex items-center space-x-3 border-l border-zinc-800 pl-2 sm:pl-4">

@@ -6,7 +6,12 @@ import {
   Notification,
   Message,
   ActivityLog,
-  ChatThread
+  ChatThread,
+  Category,
+  AdUnit,
+  AnalyticsEvent,
+  AnalyticsSummary,
+  SearchResponse
 } from '../types';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -36,6 +41,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
+    if (res.status === 401) {
+      session.clear();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('elysian_session_expired'));
+      }
+    }
     const error: any = new Error((payload && payload.error) || res.statusText || 'Request failed');
     error.status = res.status;
     error.data = payload;
@@ -50,6 +61,7 @@ export const api = {
     init: async (): Promise<void> => Promise.resolve(),
     getActivityLogs: (): Promise<ActivityLog[]> => request<ActivityLog[]>('/api/activityLogs'),
     getStatus: (): Promise<any> => request<any>('/api/system/status'),
+    runSelfTest: (): Promise<any> => request<any>('/api/admin/self-test'),
   },
 
   auth: {
@@ -194,6 +206,30 @@ export const api = {
 
     getRotated: (limit = 50, seed?: string): Promise<MediaItem[]> =>
       request<MediaItem[]>(`/api/media/rotated?limit=${limit}${seed ? `&seed=${encodeURIComponent(seed)}` : ''}`),
+
+    recordView: (mediaId: string, viewerKey?: string): Promise<{ views: number; deduped: boolean }> =>
+      request<{ views: number; deduped: boolean }>(`/api/media/${mediaId}/view`, {
+        method: 'POST',
+        headers: viewerKey ? { 'x-viewer-key': viewerKey } : undefined,
+      }),
+
+    getFeed: (
+      page = 1,
+      limit = 24,
+      category = 'all',
+      seed?: string
+    ): Promise<{ items: MediaItem[]; total: number; page: number; limit: number; hasMore: boolean }> =>
+      request<{ items: MediaItem[]; total: number; page: number; limit: number; hasMore: boolean }>(
+        `/api/media/feed?page=${page}&limit=${limit}&category=${encodeURIComponent(category)}${
+          seed ? `&seed=${encodeURIComponent(seed)}` : ''
+        }`
+      ),
+
+    bulkValidate: (items: any[]): Promise<{ results: Array<{ index: number; ok: boolean; issues: string[]; preview: any }>; total: number }> =>
+      request<{ results: Array<{ index: number; ok: boolean; issues: string[]; preview: any }>; total: number }>('/api/media/bulk-validate', {
+        method: 'POST',
+        body: JSON.stringify({ items }),
+      }),
   },
 
   users: {
@@ -226,6 +262,14 @@ export const api = {
 
     subscribe: async (_userId: string, creatorId: string): Promise<User> => {
       const data = await request<{ user: User }>(`/api/users/${creatorId}/subscribe`, {
+        method: 'POST',
+      });
+      session.updateUser(data.user);
+      return data.user;
+    },
+
+    unsubscribe: async (_userId: string, creatorId: string): Promise<User> => {
+      const data = await request<{ user: User }>(`/api/users/${creatorId}/unsubscribe`, {
         method: 'POST',
       });
       session.updateUser(data.user);
@@ -285,20 +329,6 @@ export const api = {
     },
   },
 
-  messages: {
-    getConversation: (_userId1: string, userId2: string): Promise<Message[]> =>
-      request<Message[]>(`/api/messages/conversation/${userId2}`),
-
-    send: (_senderId: string, receiverId: string, text: string): Promise<Message> =>
-      request<Message>('/api/messages', {
-        method: 'POST',
-        body: JSON.stringify({
-          receiverId,
-          text,
-        }),
-      }),
-  },
-
   chat: {
     open: (talentId: string): Promise<ChatThread> =>
       request<ChatThread>('/api/chat/open', {
@@ -343,6 +373,104 @@ export const api = {
       request<{ _id: string; featuredMediaId: string | null }>('/api/siteSettings', {
         method: 'PUT',
         body: JSON.stringify(settings),
+      }),
+  },
+
+  search: {
+    query: (
+      q: string,
+      options?: {
+        type?: 'all' | 'media' | 'talent';
+        sort?: 'relevance' | 'views' | 'rating' | 'newest';
+        category?: string;
+        location?: string;
+        limit?: number;
+      }
+    ): Promise<SearchResponse> => {
+      const params = new URLSearchParams();
+      params.set('q', q);
+      if (options?.type) params.set('type', options.type);
+      if (options?.sort) params.set('sort', options.sort);
+      if (options?.category) params.set('category', options.category);
+      if (options?.location) params.set('location', options.location);
+      if (options?.limit) params.set('limit', String(options.limit));
+      return request<SearchResponse>(`/api/search?${params.toString()}`);
+    },
+  },
+
+  categories: {
+    getAll: (): Promise<Category[]> => request<Category[]>('/api/categories'),
+
+    create: (category: Partial<Category>): Promise<Category> =>
+      request<Category>('/api/categories', {
+        method: 'POST',
+        body: JSON.stringify(category),
+      }),
+
+    update: (id: string, updates: Partial<Category>): Promise<Category> =>
+      request<Category>(`/api/categories/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(updates),
+      }),
+
+    delete: (id: string): Promise<{ success: boolean }> =>
+      request<{ success: boolean }>(`/api/categories/${id}`, {
+        method: 'DELETE',
+      }),
+  },
+
+  ads: {
+    getAll: (): Promise<AdUnit[]> => request<AdUnit[]>('/api/ads'),
+
+    create: (ad: Partial<AdUnit>): Promise<AdUnit> =>
+      request<AdUnit>('/api/ads', {
+        method: 'POST',
+        body: JSON.stringify(ad),
+      }),
+
+    update: (id: string, updates: Partial<AdUnit>): Promise<AdUnit> =>
+      request<AdUnit>(`/api/ads/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(updates),
+      }),
+
+    delete: (id: string): Promise<{ success: boolean }> =>
+      request<{ success: boolean }>(`/api/ads/${id}`, {
+        method: 'DELETE',
+      }),
+
+    recordImpression: (id: string): Promise<{ success: boolean; impressions: number }> =>
+      request<{ success: boolean; impressions: number }>(`/api/ads/${id}/impression`, {
+        method: 'POST',
+      }),
+
+    recordClick: (id: string): Promise<{ success: boolean; clicks: number }> =>
+      request<{ success: boolean; clicks: number }>(`/api/ads/${id}/click`, {
+        method: 'POST',
+      }),
+  },
+
+  analytics: {
+    track: (event: Partial<AnalyticsEvent>): Promise<{ success: boolean }> =>
+      request<{ success: boolean }>('/api/analytics/track', {
+        method: 'POST',
+        body: JSON.stringify(event),
+      }),
+
+    getSummary: (days = 30): Promise<AnalyticsSummary> =>
+      request<AnalyticsSummary>(`/api/analytics/summary?days=${days}`),
+  },
+
+  diagnostics: {
+    run: (): Promise<{
+      allPassed: boolean;
+      timestamp: string;
+      tests: Array<{ id: string; name: string; status: 'pass' | 'fail' | 'warn'; message: string; details?: any }>;
+    }> => request('/api/admin/diagnostics/run'),
+
+    fix: (): Promise<{ success: boolean; message: string }> =>
+      request('/api/admin/diagnostics/fix', {
+        method: 'POST',
       }),
   },
 };
