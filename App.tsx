@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ShieldCheck } from 'lucide-react';
 import { User, UserRole } from './types';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
@@ -173,8 +174,10 @@ const App: React.FC = () => {
     setCurrentUser(user);
     if (user.role === UserRole.ADMIN) {
       setCurrentPage('admin-dashboard');
+      localStorage.setItem('elysian_current_page', 'admin-dashboard');
     } else {
       setCurrentPage('media');
+      localStorage.setItem('elysian_current_page', 'media');
     }
   };
 
@@ -307,6 +310,25 @@ const App: React.FC = () => {
           onSearchSubmit={handleSearchSubmit}
           initialSearchQuery={searchQuery}
         />
+
+        {/* Global Persistent Admin Management Ribbon */}
+        {currentUser.role === UserRole.ADMIN && currentPage !== 'admin-dashboard' && (
+          <div className="bg-yellow-500/15 border-b border-yellow-500/30 px-4 py-2.5 flex items-center justify-between text-xs text-yellow-300 backdrop-blur-md z-20 flex-shrink-0 animate-fade-in shadow-md">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-yellow-400 animate-pulse shadow-[0_0_8px_rgba(234,179,8,0.8)]"></span>
+              <span className="font-bold text-yellow-400">Admin Mode Active</span>
+              <span className="text-zinc-300 hidden sm:inline">— Manage users, 4K media, settings & ads</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleAdminNav}
+              className="bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-extrabold px-3.5 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-all shadow-md shadow-yellow-500/20 active:scale-95 cursor-pointer"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>Admin Dashboard & Site Controls</span>
+            </button>
+          </div>
+        )}
         
         {/* Added pb-24 to account for mobile BottomNav */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 scroll-smooth">
@@ -366,14 +388,16 @@ const App: React.FC = () => {
                 onUserUpdate={handleUserUpdate} 
                />
              )}
-             {currentPage === 'admin-dashboard' && <AdminDashboard user={currentUser} />}
+             {currentPage === 'admin-dashboard' && <AdminDashboard user={currentUser} onUserUpdate={handleUserUpdate} />}
              <Footer onOpenPrivacy={() => setLegalDocs({ isOpen: true, tab: 'privacy' })} onOpenTerms={() => setLegalDocs({ isOpen: true, tab: 'terms' })} />
           </div>
         </main>
 
         <BottomNav 
           activePage={activeSidebarPage} 
+          user={currentUser}
           onNavigate={handleNavigate} 
+          onAdminClick={handleAdminNav}
           onMenuClick={() => setIsSidebarOpen(true)}
         />
       </div>

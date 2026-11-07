@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import MediaGrid from '../components/MediaGrid';
 import AdBanner from '../components/AdBanner';
+import EventScheduleElement from '../components/EventScheduleElement';
 import { MediaItem, TalentProfile, Category } from '../types';
 import { Play, Grid, ChevronRight, Sparkles, RefreshCw } from 'lucide-react';
 import { api } from '../services/api';
@@ -258,6 +259,9 @@ const MediaHub: React.FC<MediaHubProps> = ({ onMediaClick, onTalentClick }) => {
 
       {/* Top Ad Unit */}
       <AdBanner slot="feed" />
+
+      {/* Live & Upcoming Event Schedule Element */}
+      <EventScheduleElement onTalentClick={onTalentClick} />
 
       {/* Top Creators / Verified Talent Section */}
       {topTalent.length > 0 && (

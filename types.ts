@@ -8,11 +8,13 @@ export enum UserRole {
 export interface User {
   id: string;
   name: string;
+  username?: string;
   role: UserRole;
   verified: boolean;
   avatarUrl: string;
   email?: string;
   password?: string;
+  pin?: string;
   subscriptions?: string[]; // Array of creator IDs this user is subscribed to
   bio: string;
   wallpaperUrl: string;
@@ -211,4 +213,31 @@ export interface SearchResponse {
   tookMs: number;
   query: string;
   suggestions?: string[];
+}
+
+export interface ScheduledEvent {
+  id: string;
+  title: string;
+  description: string;
+  talentId?: string;
+  talentName?: string;
+  talentAvatar?: string;
+  category: string;
+  eventType: 'livestream' | 'appearance' | 'premiere' | 'chat_session' | 'vip_party';
+  date: string; // YYYY-MM-DD
+  startTime: string; // e.g. "20:00"
+  endTime?: string; // e.g. "22:00"
+  startDate: string; // ISO string
+  endDate?: string;
+  timezone?: string;
+  locationOrUrl?: string;
+  coverImageUrl?: string;
+  price?: number;
+  isVipOnly?: boolean;
+  isLiveNow?: boolean;
+  status: 'scheduled' | 'live' | 'completed' | 'cancelled';
+  attendeesCount?: number;
+  tags?: string[];
+  createdAt?: string;
+  updatedAt?: string;
 }

@@ -131,7 +131,16 @@ async function findOneByField<T = any>(name: string, field: string, value: any):
 
 async function upsertDoc<T extends { id: string }>(name: string, doc: T): Promise<T> {
   if (mongo) {
-    await mongo.collection(name).updateOne({ id: doc.id }, { $set: doc }, { upsert: true });
+    const cleanDoc = { ...doc } as any;
+    if (name === "users") {
+      if (cleanDoc.username === null || cleanDoc.username === undefined || cleanDoc.username === "") {
+        delete cleanDoc.username;
+      }
+      if (cleanDoc.email === null || cleanDoc.email === undefined || cleanDoc.email === "") {
+        delete cleanDoc.email;
+      }
+    }
+    await mongo.collection(name).updateOne({ id: doc.id }, { $set: cleanDoc }, { upsert: true });
     return doc;
   }
   const dbInst = await loadJsonDB();
@@ -170,7 +179,7 @@ async function replaceCollection(name: string, items: any[]): Promise<void> {
 
 async function getSettings(): Promise<any> {
   if (mongo) {
-    const doc = await mongo.collection("siteSettings").findOne({ _id: "site" });
+    const doc = await mongo.collection("siteSettings").findOne({ _id: "site" as any });
     return doc || { _id: "site", featuredMediaId: null };
   }
   const dbInst = await loadJsonDB();
@@ -181,7 +190,7 @@ async function setSettings(updates: any): Promise<any> {
   const clean = { ...updates, _id: "site" };
   if (mongo) {
     await mongo.collection("siteSettings").updateOne(
-      { _id: "site" },
+      { _id: "site" as any },
       { $set: clean },
       { upsert: true }
     );
@@ -247,7 +256,10 @@ function getToken(req: Request): string | null {
 
 function stripSecrets(user: any) {
   if (!user) return user;
-  const { passwordHash, pin, ...safe } = user;
+  const { passwordHash, ...safe } = user;
+  if (user.role !== "ADMIN") {
+    delete (safe as any).pin;
+  }
   return safe;
 }
 
@@ -264,27 +276,42 @@ async function logActivity(action: string, details: string, userId?: string) {
 }
 
 async function seedAdmin(): Promise<void> {
-  const existing = await findOneByField("users", "username", "admin");
-  if (existing) {
-    console.log("[seed] Admin user already exists (username: admin)");
-    return;
-  }
   const passwordHash = await hashPassword("#Eightmillionby30$");
-  const admin: any = {
-    id: "admin-user",
-    username: "admin",
-    name: "admin",
-    email: "admin@elysian.local",
-    role: "ADMIN",
-    verified: true,
-    avatarUrl: "",
-    passwordHash,
-    pin: "225533",
-    subscriptions: [],
-    createdAt: new Date().toISOString(),
-  };
-  await upsertDoc("users", admin);
-  console.log("[seed] Admin created — username: admin, PIN: 225533");
+  let admin = (await findOneByField("users", "email", "kamogelomosiah@gmail.com")) ||
+              (await findOneByField("users", "username", "admin")) ||
+              (await findOneByField("users", "role", "ADMIN"));
+
+  if (admin) {
+    admin.role = "ADMIN";
+    // If admin is on placeholder or needs update to the specified email
+    if (!admin.email || admin.email === "admin@elysian.local" || admin.email === "admin") {
+      admin.email = "kamogelomosiah@gmail.com";
+    }
+    if (!admin.pin) {
+      admin.pin = "225533";
+    }
+    if (!admin.passwordHash) {
+      admin.passwordHash = passwordHash;
+    }
+    await upsertDoc("users", admin);
+    console.log(`[seed] Admin ready — email: ${admin.email}, PIN: ${admin.pin}`);
+  } else {
+    const newAdmin: any = {
+      id: "admin-user",
+      username: "admin",
+      name: "Kamogelo Mosiah",
+      email: "kamogelomosiah@gmail.com",
+      role: "ADMIN",
+      verified: true,
+      avatarUrl: "",
+      passwordHash,
+      pin: "225533",
+      subscriptions: [],
+      createdAt: new Date().toISOString(),
+    };
+    await upsertDoc("users", newAdmin);
+    console.log("[seed] Admin created — email: kamogelomosiah@gmail.com, PIN: 225533");
+  }
 }
 
 async function seedDefaults(): Promise<void> {
@@ -489,8 +516,146 @@ async function seedDefaults(): Promise<void> {
       }
       console.log(`[seed] Seeded ${DEFAULT_TALENT.length} default verified talent profiles`);
     }
+
+    await seedScheduledEvents();
   } catch (err: any) {
     console.error("[seed] seedDefaults failed:", err.message);
+  }
+}
+
+async function seedScheduledEvents(): Promise<void> {
+  try {
+    const existing = await listCollection("scheduledEvents");
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const hasToday = existing.some((e: any) => e.date === todayStr || (e.startDate && e.startDate.startsWith(todayStr)));
+
+    if (existing.length === 0 || !hasToday) {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = String(now.getMonth() + 1).padStart(2, "0");
+      const currentDay = String(now.getDate()).padStart(2, "0");
+      const todayDateStr = `${currentYear}-${currentMonth}-${currentDay}`;
+
+      const tomorrow = new Date(Date.now() + 86400000);
+      const tomorrowDateStr = tomorrow.toISOString().slice(0, 10);
+
+      const dayAfter = new Date(Date.now() + 2 * 86400000);
+      const dayAfterDateStr = dayAfter.toISOString().slice(0, 10);
+
+      const sampleEvents = [
+        {
+          id: "evt-today-1",
+          title: "VIP Penthouse Live: Sunset Session & Fan Q&A",
+          description: "Exclusive interactive 4K live broadcast with VIP chat, champagne celebration, and live requests from Camps Bay.",
+          talentId: "t1",
+          talentName: "Aaliyah Ndebele",
+          talentAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80",
+          category: "Live Stream",
+          eventType: "livestream",
+          date: todayDateStr,
+          startTime: "19:00",
+          endTime: "21:30",
+          startDate: `${todayDateStr}T19:00:00.000Z`,
+          endDate: `${todayDateStr}T21:30:00.000Z`,
+          timezone: "SAST (UTC+2)",
+          locationOrUrl: "https://elysian.vip/live/camps-bay-penthouse",
+          coverImageUrl: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=1200&q=80",
+          price: 0,
+          isVipOnly: true,
+          isLiveNow: true,
+          status: "live",
+          attendeesCount: 94,
+          tags: ["live", "exclusive", "camps bay", "q&a"],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: "evt-today-2",
+          title: "Premiere Screening: Umhlanga Oceanfront BTS",
+          description: "Uncut ultra-high-definition premiere of the summer fashion collection and director commentary with Sindi.",
+          talentId: "t2",
+          talentName: "Sindi Khumalo",
+          talentAvatar: "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?auto=format&fit=crop&w=400&q=80",
+          category: "Premiere",
+          eventType: "premiere",
+          date: todayDateStr,
+          startTime: "21:45",
+          endTime: "23:00",
+          startDate: `${todayDateStr}T21:45:00.000Z`,
+          endDate: `${todayDateStr}T23:00:00.000Z`,
+          timezone: "SAST (UTC+2)",
+          locationOrUrl: "https://elysian.vip/premiere/umhlanga-bts",
+          coverImageUrl: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80",
+          price: 150,
+          isVipOnly: false,
+          isLiveNow: false,
+          status: "scheduled",
+          attendeesCount: 58,
+          tags: ["premiere", "durban", "beach", "4k"],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: "evt-tomorrow-1",
+          title: "VIP Champagne Gala & Red Carpet Appearance",
+          description: "Luxury in-person private appearance and VIP table meet-and-greet in Sandton, Johannesburg.",
+          talentId: "t3",
+          talentName: "Chloe Van Der Bilt",
+          talentAvatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80",
+          category: "VIP Appearance",
+          eventType: "appearance",
+          date: tomorrowDateStr,
+          startTime: "20:00",
+          endTime: "01:00",
+          startDate: `${tomorrowDateStr}T20:00:00.000Z`,
+          endDate: `${tomorrowDateStr}T01:00:00.000Z`,
+          timezone: "SAST (UTC+2)",
+          locationOrUrl: "Skyline Lounge, Sandton, Johannesburg",
+          coverImageUrl: "https://images.unsplash.com/photo-1519671482749-fd09be7ccebf?auto=format&fit=crop&w=1200&q=80",
+          price: 500,
+          isVipOnly: true,
+          isLiveNow: false,
+          status: "scheduled",
+          attendeesCount: 126,
+          tags: ["gala", "sandton", "vip", "appearance"],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: "evt-dayafter-1",
+          title: "1-on-1 Creative Portfolio & Fitness Workshop",
+          description: "Exclusive coaching session covering professional modeling technique, high-fashion styling, and nutrition routines.",
+          talentId: "t4",
+          talentName: "Thando Zulu",
+          talentAvatar: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=400&q=80",
+          category: "Chat Session",
+          eventType: "chat_session",
+          date: dayAfterDateStr,
+          startTime: "18:00",
+          endTime: "20:00",
+          startDate: `${dayAfterDateStr}T18:00:00.000Z`,
+          endDate: `${dayAfterDateStr}T20:00:00.000Z`,
+          timezone: "SAST (UTC+2)",
+          locationOrUrl: "https://elysian.vip/workshop/thando-creative",
+          coverImageUrl: "https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=1200&q=80",
+          price: 250,
+          isVipOnly: false,
+          isLiveNow: false,
+          status: "scheduled",
+          attendeesCount: 33,
+          tags: ["workshop", "fitness", "mentorship"],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+      ];
+
+      for (const ev of sampleEvents) {
+        await upsertDoc("scheduledEvents", ev);
+      }
+      console.log(`[seed] Seeded ${sampleEvents.length} scheduled events including today's schedule`);
+    }
+  } catch (err: any) {
+    console.error("[seed] seedScheduledEvents error:", err.message);
   }
 }
 
@@ -880,6 +1045,12 @@ async function ensureSchema(): Promise<void> {
       { key: { expiresAt: 1 }, options: { expireAfterSeconds: 0, name: "ttl_expiresAt" } },
       { key: { userId: 1 }, options: { name: "by_user" } },
     ]},
+    { name: "scheduledEvents", indexes: [
+      { key: { id: 1 }, options: { unique: true, name: "uniq_id" } },
+      { key: { date: 1 }, options: { name: "by_date" } },
+      { key: { startDate: 1 }, options: { name: "by_startDate" } },
+      { key: { status: 1 }, options: { name: "by_status" } },
+    ]},
   ];
 
   let createdC = 0, existingC = 0, createdI = 0, existingI = 0;
@@ -925,7 +1096,7 @@ async function ensureSchema(): Promise<void> {
     const col = mongo.collection(spec.name);
     for (const idx of spec.indexes) {
       try {
-        await col.createIndex(idx.key, idx.options || {});
+        await col.createIndex(idx.key as any, idx.options || {});
         createdI++;
         console.log(`[schema]   + index on ${spec.name}: ${JSON.stringify(idx.key)}${idx.options?.name ? ` (${idx.options.name})` : ""}`);
       } catch (err: any) {
@@ -940,7 +1111,7 @@ async function ensureSchema(): Promise<void> {
 
   try {
     await mongo.collection("siteSettings").updateOne(
-      { _id: "site" },
+      { _id: "site" as any },
       {
         $setOnInsert: {
           _id: "site",
@@ -1163,7 +1334,7 @@ async function startServer() {
           size: req.file.size,
           uploadedAt: new Date().toISOString(),
         },
-      });
+      } as any);
       readableStream.pipe(uploadStream);
 
       uploadStream.on("error", () => {
@@ -1316,9 +1487,14 @@ async function startServer() {
 
   app.post("/api/auth/login", async (req, res) => {
     const { email, password, pin } = req.body || {};
-    if (!email || !password) return res.status(400).json({ error: "email and password required" });
+    const cleanIdentifier = String(email).trim().toLowerCase();
     let user: any = await findOneByField("users", "email", email);
+    if (!user) user = await findOneByField("users", "email", cleanIdentifier);
     if (!user) user = await findOneByField("users", "username", email);
+    if (!user) user = await findOneByField("users", "username", cleanIdentifier);
+    if (!user && (cleanIdentifier === "kamogelomosiah@gmail.com" || cleanIdentifier === "admin")) {
+      user = await findOneByField("users", "role", "ADMIN");
+    }
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
     const ok = await verifyPassword(password, user.passwordHash || "");
@@ -1438,7 +1614,31 @@ async function startServer() {
     delete updates.id;
     delete updates.role;
     delete updates.passwordHash;
-    delete updates.pin;
+    if (user.role !== "ADMIN") {
+      delete updates.pin;
+    } else if (updates.pin) {
+      updates.pin = String(updates.pin).trim();
+    }
+
+    if (updates.email && updates.email !== user.email) {
+      const cleanEmail = String(updates.email).trim().toLowerCase();
+      const existing = (await findOneByField("users", "email", updates.email)) ||
+                       (await findOneByField("users", "email", cleanEmail));
+      if (existing && existing.id !== user.id) {
+        return res.status(409).json({ error: "Email already in use by another account" });
+      }
+      updates.email = cleanEmail;
+    }
+
+    if (updates.username && updates.username !== user.username) {
+      const cleanUsername = String(updates.username).trim().toLowerCase();
+      const existing = (await findOneByField("users", "username", updates.username)) ||
+                       (await findOneByField("users", "username", cleanUsername));
+      if (existing && existing.id !== user.id) {
+        return res.status(409).json({ error: "Username already in use by another account" });
+      }
+      updates.username = cleanUsername;
+    }
 
     if (updates.password) {
       updates.passwordHash = await hashPassword(updates.password);
@@ -1446,6 +1646,7 @@ async function startServer() {
     }
     const merged = { ...user, ...updates };
     await upsertDoc("users", merged);
+    await logActivity("update", `User profile/credentials updated for ${user.id} (${merged.email})`, user.id);
     res.json({ user: stripSecrets(merged) });
   });
 
@@ -1530,7 +1731,7 @@ async function startServer() {
     const actor = (req as any).user;
     if (actor.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
     if (actor.id === req.params.id) return res.status(400).json({ error: "Cannot delete yourself" });
-    await removeDoc("users", req.params.id);
+    await removeDoc("users", String(req.params.id));
     await logActivity("delete", `User ${req.params.id} deleted`, actor.id);
     res.json({ success: true });
   });
@@ -1635,16 +1836,7 @@ async function startServer() {
     res.json({ likes: likes.length, dislikes: dislikes.length });
   });
 
-  app.post("/api/media/bulk", requireUser, async (req, res) => {
-    const user = (req as any).user;
-    if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
-    const items = Array.isArray(req.body) ? req.body : [];
-    for (const item of items) {
-      await upsertDoc("media", item);
-    }
-    await logActivity("import", `Imported ${items.length} items`, user.id);
-    res.json({ success: true, count: items.length });
-  });
+  // Bulk upload endpoint removed per user specification (JSON import retained)
 
   // -----------------------------------------------------------------------------
   // DUPLICATE DETECTION HELPERS & ROUTE
@@ -2308,7 +2500,7 @@ Description: ${existing.description || ""}`;
           const uploadStream = bucket.openUploadStream(file.originalname, {
             contentType: file.mimetype,
             metadata: { size: file.size, uploadedAt: new Date().toISOString() },
-          });
+          } as any);
           readableStream.pipe(uploadStream);
           const id: string = await new Promise((resolve, reject) => {
             uploadStream.on("error", reject);
@@ -2566,12 +2758,12 @@ Description: ${existing.description || ""}`;
 
   // --- Site Settings ---
 
-  app.get("/api/siteSettings", async (_req, res) => {
+  app.get(["/api/siteSettings", "/api/settings"], async (_req, res) => {
     const settings = await getSettings();
     res.json(settings || { _id: "site", featuredMediaId: null });
   });
 
-  app.put("/api/siteSettings", requireUser, async (req, res) => {
+  app.put(["/api/siteSettings", "/api/settings"], requireUser, async (req, res) => {
     const user = (req as any).user;
     if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
     if (!isPlainObject(req.body)) return res.status(400).json({ error: "Body must be a JSON object" });
@@ -2606,6 +2798,73 @@ Description: ${existing.description || ""}`;
       });
     } catch {
       res.json({});
+    }
+  });
+
+  // --- Categories CRUD Endpoints ---
+
+  app.get("/api/categories", async (_req, res) => {
+    try {
+      const categories = await listCollection("categories");
+      categories.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
+      res.json(categories);
+    } catch (e: any) {
+      res.status(500).json({ error: "Failed to list categories" });
+    }
+  });
+
+  app.post("/api/categories", requireUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
+      const { name, slug, description, icon, active, tags, order } = req.body || {};
+      if (!name) return res.status(400).json({ error: "Name is required" });
+      const cleanSlug = (slug || name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const newCategory = {
+        id: req.body.id || `cat_${generateId()}`,
+        name: String(name).trim(),
+        slug: cleanSlug,
+        description: description || "",
+        icon: icon || "Grid",
+        active: active !== false,
+        order: Number(order) || 0,
+        tags: Array.isArray(tags) ? tags : [],
+        createdAt: new Date().toISOString()
+      };
+      await upsertDoc("categories", newCategory);
+      await logActivity("create", `Category created: ${newCategory.name}`, user.id);
+      res.status(201).json(newCategory);
+    } catch (e: any) {
+      res.status(500).json({ error: "Failed to create category" });
+    }
+  });
+
+  app.put("/api/categories/:id", requireUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
+      const existing = await findOneByField("categories", "id", req.params.id);
+      if (!existing) return res.status(404).json({ error: "Category not found" });
+      const updates = { ...req.body };
+      delete updates.id;
+      const merged = { ...existing, ...updates, id: req.params.id };
+      await upsertDoc("categories", merged);
+      await logActivity("update", `Category updated: ${merged.name}`, user.id);
+      res.json(merged);
+    } catch (e: any) {
+      res.status(500).json({ error: "Failed to update category" });
+    }
+  });
+
+  app.delete("/api/categories/:id", requireUser, async (req, res) => {
+    try {
+      const user = (req as any).user;
+      if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
+      await removeDoc("categories", String(req.params.id));
+      await logActivity("delete", `Category deleted: ${req.params.id}`, user.id);
+      res.json({ success: true });
+    } catch (e: any) {
+      res.status(500).json({ error: "Failed to delete category" });
     }
   });
 
@@ -2820,6 +3079,209 @@ Description: ${existing.description || ""}`;
       });
     } catch (e: any) {
       res.status(500).json({ error: "Failed to generate analytics summary" });
+    }
+  });
+
+  // --- Scheduled Events Engine & Today's Live Schedule ---
+
+  app.get(["/api/events/today", "/api/schedule/today"], async (_req, res) => {
+    try {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      let all = await listCollection("scheduledEvents");
+      let todayEvents = all.filter((e: any) => e.date === todayStr || (e.startDate && e.startDate.startsWith(todayStr)));
+
+      if (todayEvents.length === 0) {
+        await seedScheduledEvents();
+        all = await listCollection("scheduledEvents");
+        todayEvents = all.filter((e: any) => e.date === todayStr || (e.startDate && e.startDate.startsWith(todayStr)));
+      }
+
+      const liveNow = todayEvents.filter((e: any) => e.status === "live" || e.isLiveNow).length;
+      const sortedToday = todayEvents.sort((a: any, b: any) => (a.startTime || "").localeCompare(b.startTime || ""));
+
+      res.json({
+        date: todayStr,
+        totalToday: sortedToday.length,
+        liveNow,
+        events: sortedToday,
+      });
+    } catch (err: any) {
+      console.error("[events] get today error:", err);
+      res.status(500).json({ error: "Failed to load today's scheduled events" });
+    }
+  });
+
+  app.get(["/api/events", "/api/schedule", "/api/eventSchedule"], async (req, res) => {
+    try {
+      let all = await listCollection("scheduledEvents");
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const filter = (req.query.filter as string) || (req.query.date as string);
+
+      if (all.length === 0) {
+        await seedScheduledEvents();
+        all = await listCollection("scheduledEvents");
+      }
+
+      let result = all;
+      if (filter === "today") {
+        result = all.filter((e: any) => e.date === todayStr || (e.startDate && e.startDate.startsWith(todayStr)));
+        if (result.length === 0) {
+          await seedScheduledEvents();
+          const refreshed = await listCollection("scheduledEvents");
+          result = refreshed.filter((e: any) => e.date === todayStr || (e.startDate && e.startDate.startsWith(todayStr)));
+        }
+      } else if (filter === "upcoming") {
+        result = all.filter((e: any) => (e.date >= todayStr || (e.startDate && e.startDate.slice(0, 10) >= todayStr)) && e.status !== "completed");
+      } else if (filter === "live") {
+        result = all.filter((e: any) => e.status === "live" || e.isLiveNow);
+      }
+
+      if (req.query.talentId) {
+        result = result.filter((e: any) => e.talentId === req.query.talentId);
+      }
+      if (req.query.category) {
+        result = result.filter((e: any) => (e.category || "").toLowerCase() === String(req.query.category).toLowerCase());
+      }
+
+      result.sort((a: any, b: any) => {
+        const dateA = a.date || (a.startDate ? a.startDate.slice(0, 10) : "");
+        const dateB = b.date || (b.startDate ? b.startDate.slice(0, 10) : "");
+        if (dateA !== dateB) return dateA.localeCompare(dateB);
+        return (a.startTime || "").localeCompare(b.startTime || "");
+      });
+
+      res.json(result);
+    } catch (err: any) {
+      console.error("[events] get error:", err);
+      res.status(500).json({ error: "Failed to load scheduled events" });
+    }
+  });
+
+  app.get(["/api/events/:id", "/api/schedule/:id"], async (req, res) => {
+    try {
+      const event = await findOneByField("scheduledEvents", "id", req.params.id);
+      if (!event) return res.status(404).json({ error: "Event not found" });
+      res.json(event);
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to load event" });
+    }
+  });
+
+  app.post(["/api/events", "/api/schedule"], requireUser, async (req, res) => {
+    try {
+      const { title, description, talentId, talentName, talentAvatar, category, eventType, date, startTime, endTime, locationOrUrl, coverImageUrl, price, isVipOnly, isLiveNow, status, tags } = req.body || {};
+      if (!title || !date) {
+        return res.status(400).json({ error: "Title and date are required" });
+      }
+
+      const id = req.body.id || `evt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const cleanDate = String(date).slice(0, 10);
+      const cleanStartTime = startTime || "20:00";
+
+      const newEvent = {
+        id,
+        title: String(title).trim(),
+        description: String(description || "").trim(),
+        talentId: talentId || null,
+        talentName: talentName || "Elysian Featured Talent",
+        talentAvatar: talentAvatar || "",
+        category: category || "Live Stream",
+        eventType: eventType || "livestream",
+        date: cleanDate,
+        startTime: cleanStartTime,
+        endTime: endTime || "",
+        startDate: `${cleanDate}T${cleanStartTime}:00.000Z`,
+        endDate: endTime ? `${cleanDate}T${endTime}:00.000Z` : null,
+        timezone: "SAST (UTC+2)",
+        locationOrUrl: locationOrUrl || "",
+        coverImageUrl: coverImageUrl || "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=1200&q=80",
+        price: Number(price) || 0,
+        isVipOnly: Boolean(isVipOnly),
+        isLiveNow: Boolean(isLiveNow || status === "live"),
+        status: status || (isLiveNow ? "live" : "scheduled"),
+        attendeesCount: 0,
+        tags: Array.isArray(tags) ? tags : [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      await upsertDoc("scheduledEvents", newEvent);
+      await logActivity("create", `Created scheduled event: ${newEvent.title}`, (req as any).user?.id);
+      res.status(201).json(newEvent);
+    } catch (err: any) {
+      console.error("[events] create error:", err);
+      res.status(500).json({ error: "Failed to create scheduled event" });
+    }
+  });
+
+  app.put(["/api/events/:id", "/api/schedule/:id"], requireUser, async (req, res) => {
+    try {
+      const existing = await findOneByField("scheduledEvents", "id", req.params.id);
+      if (!existing) return res.status(404).json({ error: "Event not found" });
+
+      const updated = {
+        ...existing,
+        ...req.body,
+        id: existing.id,
+        updatedAt: new Date().toISOString(),
+      };
+      if (req.body.isLiveNow !== undefined) {
+        updated.isLiveNow = Boolean(req.body.isLiveNow);
+        if (updated.isLiveNow) updated.status = "live";
+      }
+
+      await upsertDoc("scheduledEvents", updated);
+      await logActivity("update", `Updated scheduled event: ${updated.title}`, (req as any).user?.id);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to update event" });
+    }
+  });
+
+  app.delete(["/api/events/:id", "/api/schedule/:id"], requireUser, async (req, res) => {
+    try {
+      const existing = await findOneByField("scheduledEvents", "id", req.params.id);
+      if (!existing) return res.status(404).json({ error: "Event not found" });
+
+      await removeDoc("scheduledEvents", req.params.id);
+      await logActivity("delete", `Deleted scheduled event: ${existing.title}`, (req as any).user?.id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to delete event" });
+    }
+  });
+
+  app.post(["/api/events/:id/toggle-live", "/api/schedule/:id/toggle-live"], requireUser, async (req, res) => {
+    try {
+      const existing = await findOneByField("scheduledEvents", "id", req.params.id);
+      if (!existing) return res.status(404).json({ error: "Event not found" });
+
+      const nextLive = !existing.isLiveNow;
+      const updated = {
+        ...existing,
+        isLiveNow: nextLive,
+        status: nextLive ? "live" : "scheduled",
+        updatedAt: new Date().toISOString(),
+      };
+      await upsertDoc("scheduledEvents", updated);
+      await logActivity("update", `Toggled live status for: ${updated.title} -> ${nextLive ? "LIVE" : "SCHEDULED"}`, (req as any).user?.id);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to toggle live status" });
+    }
+  });
+
+  app.post(["/api/events/:id/rsvp", "/api/schedule/:id/rsvp"], async (req, res) => {
+    try {
+      const existing = await findOneByField("scheduledEvents", "id", req.params.id);
+      if (!existing) return res.status(404).json({ error: "Event not found" });
+
+      const attendeesCount = (existing.attendeesCount || 0) + 1;
+      const updated = { ...existing, attendeesCount, updatedAt: new Date().toISOString() };
+      await upsertDoc("scheduledEvents", updated);
+      res.json({ success: true, attendeesCount });
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to RSVP" });
     }
   });
 
@@ -3084,7 +3546,7 @@ Description: ${existing.description || ""}`;
           return res.status(403).json({ error: "Not allowed to delete this record" });
         }
 
-        await removeDoc(name, req.params.id);
+        await removeDoc(name, String(req.params.id));
         res.json({ success: true });
       } catch (e: any) {
         console.error(`[${name}] delete:`, e);

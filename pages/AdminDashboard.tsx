@@ -1,22 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { User, MediaItem, UserRole, TalentProfile, ActivityLog } from '../types';
+import { User, MediaItem, UserRole, TalentProfile, ActivityLog, ScheduledEvent } from '../types';
 import { api } from '../services/api';
-import { ShieldCheck, Video, Users, PlusCircle, Edit, Trash2, X, Save, Settings, Star, MapPin, UploadCloud, Menu, ChevronDown, RefreshCw, Upload, FileJson, Briefcase, Activity, Server, DollarSign, Play, Eye, ExternalLink, HardDrive, Film, Copy, Check, Lock, Unlock, Clock, Tag, Shuffle, Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
-import AdminBulkUpload from '../components/AdminBulkUpload';
+import { ShieldCheck, Video, Users, PlusCircle, Edit, Trash2, X, Save, Settings, Star, MapPin, UploadCloud, Menu, ChevronDown, RefreshCw, Upload, FileJson, Briefcase, Activity, Server, DollarSign, Play, Eye, EyeOff, AlertCircle, ExternalLink, HardDrive, Film, Copy, Check, Lock, Unlock, Clock, Tag, Shuffle, Search, Filter, ChevronLeft, ChevronRight, Calendar, Radio, Bell, Ticket } from 'lucide-react';
 import AdminBulkImport from '../components/AdminBulkImport';
 import AdminAds from '../components/AdminAds';
 import { BulkActionBar, BulkEditModal } from '../components/AdminBulkActions';
 import { CMPSandbox } from '../components/CMPBanner';
+import { EventSchedulePanel, EventFormModal } from '../components/EventSchedulePanel';
 
 interface AdminDashboardProps {
   user: User;
+  onUserUpdate?: (user: User) => void;
 }
 
-const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
+const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUserUpdate }) => {
   // --- State Management ---
   
   // Navigation state
-  const [activeTab, setActiveTab] = useState<'media' | 'users' | 'talent' | 'bulk-upload' | 'settings' | 'import-export' | 'activity' | 'system' | 'ads'>('media');
+  const [activeTab, setActiveTab] = useState<'media' | 'events' | 'users' | 'talent' | 'categories' | 'ads' | 'account' | 'settings' | 'import-export' | 'activity' | 'system'>('media');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   // Selection states
@@ -28,6 +29,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   
   // Data state
   const [media, setMedia] = useState<MediaItem[]>([]);
+  const [events, setEvents] = useState<ScheduledEvent[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [talent, setTalent] = useState<TalentProfile[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
@@ -52,12 +54,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   
   // Modal visibility states
   const [isMediaModalOpen, setIsMediaModalOpen] = useState(false);
+  const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [isTalentModalOpen, setIsTalentModalOpen] = useState(false);
   const [previewMedia, setPreviewMedia] = useState<MediaItem | null>(null);
   
   // Currently editing item states (null if creating new)
   const [editingMedia, setEditingMedia] = useState<MediaItem | null>(null);
+  const [editingEvent, setEditingEvent] = useState<ScheduledEvent | null>(null);
+  const [defaultEventToday, setDefaultEventToday] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editingTalent, setEditingTalent] = useState<TalentProfile | null>(null);
 
@@ -67,18 +72,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-        const [m, u, t, s, l] = await Promise.all([
+        const [m, u, t, s, l, ev] = await Promise.all([
             api.media.getAll(),
             api.users.getAll(),
             api.talent.getAll(),
             api.settings.get(),
-            api.system.getActivityLogs()
+            api.system.getActivityLogs(),
+            api.events.getAll().catch(() => [])
         ]);
         setMedia(m);
         setUsers(u);
         setTalent(t);
         setSiteSettings(s || {});
         setActivityLogs(l);
+        setEvents(ev || []);
     } catch(e) {
         console.error("Error loading admin data:", e);
     } finally {
@@ -99,6 +106,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
         closeMediaModal(); 
       } catch (e) { alert('Operation failed'); }
   };
+
+  const handleEventSubmit = async (formData: any) => {
+      try {
+        if (editingEvent) await api.events.update(editingEvent.id, formData);
+        else await api.events.create(formData);
+        fetchData();
+        closeEventModal();
+      } catch (e) { alert('Operation failed'); }
+  };
   
   const handleUserSubmit = async (formData: any) => { 
       try {
@@ -116,6 +132,43 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
         fetchData(); 
         closeTalentModal(); 
       } catch (e) { alert('Operation failed'); }
+  };
+
+  const openEventModal = (ev?: ScheduledEvent, defaultToday: boolean = false) => {
+    setEditingEvent(ev || null);
+    setDefaultEventToday(defaultToday);
+    setIsEventModalOpen(true);
+  };
+
+  const closeEventModal = () => {
+    setEditingEvent(null);
+    setDefaultEventToday(false);
+    setIsEventModalOpen(false);
+  };
+
+  const handleToggleEventLive = async (id: string) => {
+    try {
+      await api.events.toggleLive(id);
+      fetchData();
+    } catch {
+      alert('Failed to toggle event live status');
+    }
+  };
+
+  const handleDeleteEvent = async (id: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Scheduled Event',
+      message: 'Are you sure you want to remove this event from the platform schedule? This action cannot be reversed.',
+      onConfirm: async () => {
+        try {
+          await api.events.delete(id);
+          fetchData();
+        } catch {
+          alert('Failed to delete scheduled event');
+        }
+      }
+    });
   };
 
   // --- Delete Handlers ---
@@ -203,10 +256,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   // Navigation Items Configuration
   const navItems = [
       { id: 'media', label: 'Media Library', icon: Video },
+      { id: 'events', label: 'Event Schedule', icon: Calendar },
       { id: 'users', label: 'Users', icon: Users },
-      { id: 'ads', label: 'Ads', icon: DollarSign },
-      { id: 'bulk-upload', label: 'Bulk Upload', icon: Upload },
       { id: 'talent', label: 'Talent', icon: Briefcase },
+      { id: 'categories', label: 'Categories', icon: Tag },
+      { id: 'ads', label: 'Ads', icon: DollarSign },
+      { id: 'account', label: 'My Admin Account', icon: ShieldCheck },
       { id: 'settings', label: 'Site Settings', icon: Settings },
       { id: 'import-export', label: 'Import/Export', icon: FileJson },
       { id: 'activity', label: 'Activity Log', icon: Activity },
@@ -290,6 +345,105 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
       {/* --- Main Content Area --- */}
       <div className="flex-1 min-w-0 space-y-6 z-10">
           
+          {/* Platform Management Command Header */}
+          <div className="bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 border border-yellow-500/20 rounded-2xl p-4 sm:p-5 shadow-xl relative overflow-hidden">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 flex items-center gap-1">
+                    <ShieldCheck className="w-3 h-3 text-yellow-400" />
+                    <span>Administrator Console</span>
+                  </span>
+                  <span className="text-xs text-zinc-400">Logged in as <strong className="text-white">{user.name || 'Kamogelo Mosiah'}</strong></span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
+                  <span>Site Management Center</span>
+                </h2>
+                <p className="text-xs sm:text-sm text-zinc-400 mt-1 max-w-2xl">
+                  Full control over media uploads, registered users, creators, categories, system settings, and monetization.
+                </p>
+              </div>
+
+              {/* Quick Platform Metrics */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('media')}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    activeTab === 'media'
+                      ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-300'
+                      : 'bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:border-zinc-700'
+                  }`}
+                >
+                  <div className="text-[11px] text-zinc-400 font-medium">Total Media</div>
+                  <div className="text-lg font-bold text-white mt-0.5">{media.length}</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('events')}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    activeTab === 'events'
+                      ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-300'
+                      : 'bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:border-zinc-700'
+                  }`}
+                >
+                  <div className="text-[11px] text-zinc-400 font-medium flex items-center justify-between">
+                    <span>Events Today</span>
+                    {events.some(e => e.isLiveNow) && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />}
+                  </div>
+                  <div className="text-lg font-bold text-white mt-0.5 flex items-center gap-1.5">
+                    <span>{events.filter(e => e.date === new Date().toISOString().slice(0, 10)).length} Today</span>
+                    {events.filter(e => e.isLiveNow).length > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-red-500/20 text-red-400 font-extrabold uppercase">
+                        Live
+                      </span>
+                    )}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('users')}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    activeTab === 'users'
+                      ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-300'
+                      : 'bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:border-zinc-700'
+                  }`}
+                >
+                  <div className="text-[11px] text-zinc-400 font-medium">Users</div>
+                  <div className="text-lg font-bold text-white mt-0.5">{users.length}</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('talent')}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    activeTab === 'talent'
+                      ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-300'
+                      : 'bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:border-zinc-700'
+                  }`}
+                >
+                  <div className="text-[11px] text-zinc-400 font-medium">Talent Profiles</div>
+                  <div className="text-lg font-bold text-white mt-0.5">{talent.length}</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('settings')}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    activeTab === 'settings'
+                      ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-300'
+                      : 'bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:border-zinc-700'
+                  }`}
+                >
+                  <div className="text-[11px] text-zinc-400 font-medium">Site Config</div>
+                  <div className="text-xs font-bold text-yellow-400 truncate mt-1">Manage CMS →</div>
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Search and Action Bar */}
           {['media', 'users', 'talent'].includes(activeTab) && (
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-[#111]/30 p-4 rounded-2xl border border-zinc-800/50">
@@ -320,8 +474,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
           )}
           
           {/* Tab Content Routing */}
-          {activeTab === 'bulk-upload' ? (
-            <AdminBulkUpload user={user} onComplete={() => { setActiveTab('media'); fetchData(); }} />
+          {activeTab === 'events' ? (
+            <EventSchedulePanel
+              events={events}
+              talent={talent}
+              onRefresh={fetchData}
+              onAdd={(defaultToday) => openEventModal(undefined, defaultToday)}
+              onEdit={(item) => openEventModal(item)}
+              onDelete={handleDeleteEvent}
+              onToggleLive={handleToggleEventLive}
+            />
           ) : activeTab === 'import-export' ? (
             <AdminBulkImport onImported={() => { setActiveTab('media'); fetchData(); }} />
           ) : activeTab === 'ads' ? (
@@ -400,12 +562,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                   }}
                 />
               )}
+              {activeTab === 'categories' && (
+                <CategoriesPanel />
+              )}
+              {activeTab === 'account' && (
+                <AdminAccountPanel user={user} onUserUpdate={onUserUpdate} />
+              )}
               {activeTab === 'settings' && (
                 <SiteSettingsPanel 
                   media={media} 
                   settings={siteSettings} 
                   onSettingsChange={handleSettingsChange} 
                   onSaveSettings={saveSettings} 
+                  onNavigateAccount={() => setActiveTab('account')}
                 />
               )}
             </div>
@@ -540,6 +709,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
       )}
 
        {isMediaModalOpen && <MediaFormModal media={editingMedia} onClose={closeMediaModal} onSubmit={handleMediaSubmit} currentUser={user}/>}
+      {isEventModalOpen && (
+        <EventFormModal
+          event={editingEvent}
+          talent={talent}
+          defaultToday={defaultEventToday}
+          onClose={closeEventModal}
+          onSubmit={handleEventSubmit}
+        />
+      )}
       {isUserModalOpen && <UserFormModal user={editingUser} onClose={closeUserModal} onSubmit={handleUserSubmit} />}
       {isTalentModalOpen && <TalentFormModal talent={editingTalent} onClose={closeTalentModal} onSubmit={handleTalentSubmit} />}
 
@@ -771,7 +949,7 @@ const UserTable = ({ users, onEdit, onDelete, selected, onToggleSelect, onToggle
                 <td className="px-6 py-4 font-semibold text-white">{user.name}</td>
                 <td className="px-6 py-4">{user.email}</td>
                 <td className="px-6 py-4">
-                  <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${user.role === 'admin' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'bg-zinc-800 text-zinc-300 border-zinc-700'}`}>
+                  <span className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${user.role === UserRole.ADMIN ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'bg-zinc-800 text-zinc-300 border-zinc-700'}`}>
                     {user.role}
                   </span>
                 </td>
@@ -793,7 +971,7 @@ const UserTable = ({ users, onEdit, onDelete, selected, onToggleSelect, onToggle
                 <input type="checkbox" checked={selected.has(user.id)} onChange={() => onToggleSelect(user.id)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
                 <span className="text-white font-semibold text-sm">{user.name}</span>
               </div>
-              <span className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${user.role === 'admin' ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'bg-zinc-800 text-zinc-300 border-zinc-700'}`}>
+              <span className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${user.role === UserRole.ADMIN ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'bg-zinc-800 text-zinc-300 border-zinc-700'}`}>
                 {user.role}
               </span>
             </div>
@@ -833,7 +1011,7 @@ const TalentTable = ({ talent, onEdit, onDelete, selected, onToggleSelect, onTog
                   <input type="checkbox" checked={selected.has(item.id)} onChange={() => onToggleSelect(item.id)} className="w-4 h-4 accent-yellow-500 cursor-pointer" />
                 </td>
                 <td className="px-6 py-4 font-semibold text-white">{item.name}</td>
-                <td className="px-6 py-4">{item.category}</td>
+                <td className="px-6 py-4 text-zinc-400">{item.title}</td>
                 <td className="px-6 py-4">R {item.hourlyRate}/hr</td>
                 <td className="px-6 py-4 text-right space-x-2">
                   <button type="button" onClick={() => onEdit(item)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
@@ -855,7 +1033,7 @@ const TalentTable = ({ talent, onEdit, onDelete, selected, onToggleSelect, onTog
               </div>
               <span className="text-xs font-semibold text-yellow-400">R {item.hourlyRate}/hr</span>
             </div>
-            <p className="text-xs text-zinc-400 pl-6">{item.category}</p>
+            <p className="text-xs text-zinc-400 pl-6">{item.title}</p>
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={() => onEdit(item)} className="p-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg"><Edit className="w-4 h-4" /></button>
               <button type="button" onClick={() => onDelete(item.id)} className="p-2 bg-red-500/10 text-red-400 rounded-lg"><Trash2 className="w-4 h-4" /></button>
@@ -867,10 +1045,30 @@ const TalentTable = ({ talent, onEdit, onDelete, selected, onToggleSelect, onTog
   );
 };
 
-const SiteSettingsPanel = ({ media, settings, onSettingsChange, onSaveSettings }: any) => {
+const SiteSettingsPanel = ({ media, settings, onSettingsChange, onSaveSettings, onNavigateAccount }: any) => {
   return (
     <div className="p-6 space-y-6">
-      <h3 className="text-lg font-bold text-white">Global Site Control</h3>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+        <div>
+          <h3 className="text-xl font-bold text-white flex items-center gap-2">
+            <Settings className="w-5 h-5 text-yellow-500" />
+            <span>Global Site Control & CMS</span>
+          </h3>
+          <p className="text-xs sm:text-sm text-zinc-400 mt-0.5">
+            Configure site metadata, hero showcases, pricing, and system parameters.
+          </p>
+        </div>
+        {onNavigateAccount && (
+          <button
+            type="button"
+            onClick={onNavigateAccount}
+            className="flex items-center gap-2 px-3.5 py-2 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>Manage Admin Credentials</span>
+          </button>
+        )}
+      </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -971,18 +1169,519 @@ const SiteSettingsPanel = ({ media, settings, onSettingsChange, onSaveSettings }
             ))}
           </select>
         </div>
+        <div>
+          <label className="block text-sm font-semibold text-zinc-300 mb-2">SEO Meta Title</label>
+          <input
+            type="text"
+            name="metaTitle"
+            value={settings.metaTitle || ''}
+            onChange={onSettingsChange}
+            placeholder="Elysian — Exclusive Media & Verified Talent Hub"
+            className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-zinc-300 mb-2">SEO Meta Keywords</label>
+          <input
+            type="text"
+            name="metaKeywords"
+            value={settings.metaKeywords || ''}
+            onChange={onSettingsChange}
+            placeholder="creators, 4k, exclusive media, talent"
+            className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-yellow-500 text-sm"
+          />
+        </div>
+        <div className="md:col-span-2">
+          <label className="block text-sm font-semibold text-zinc-300 mb-2">SEO Meta Description</label>
+          <textarea
+            name="metaDescription"
+            rows={2}
+            value={settings.metaDescription || ''}
+            onChange={onSettingsChange}
+            placeholder="Discover verified creator profiles, premium exclusive adult media, and book virtual services on Elysian."
+            className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-yellow-500 text-sm"
+          />
+        </div>
       </div>
 
       <div className="flex justify-end pt-4 border-t border-zinc-800">
         <button
           type="button"
           onClick={onSaveSettings}
-          className="bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-bold px-6 py-3 rounded-xl transition-colors flex items-center space-x-2"
+          className="bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-bold px-6 py-3 rounded-xl transition-colors flex items-center space-x-2 cursor-pointer shadow-lg shadow-yellow-500/20"
         >
           <Save className="w-5 h-5" />
           <span>Save Global Settings</span>
         </button>
       </div>
+    </div>
+  );
+};
+
+const CategoriesPanel: React.FC = () => {
+  const [categories, setCategories] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [editingCategory, setEditingCategory] = useState<any | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [slug, setSlug] = useState('');
+  const [icon, setIcon] = useState('Tag');
+  const [description, setDescription] = useState('');
+  const [tags, setTags] = useState('');
+  const [active, setActive] = useState(true);
+
+  const fetchCats = async () => {
+    setIsLoading(true);
+    try {
+      const list = await api.categories.getAll();
+      setCategories(list);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCats();
+  }, []);
+
+  const handleOpenModal = (cat: any | null = null) => {
+    setEditingCategory(cat);
+    if (cat) {
+      setName(cat.name || '');
+      setSlug(cat.slug || '');
+      setIcon(cat.icon || 'Tag');
+      setDescription(cat.description || '');
+      setTags((cat.tags || []).join(', '));
+      setActive(cat.active ?? true);
+    } else {
+      setName('');
+      setSlug('');
+      setIcon('Tag');
+      setDescription('');
+      setTags('');
+      setActive(true);
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    const catSlug = (slug.trim() || name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')).replace(/^-|-$/g, '');
+    const tagArray = tags.split(',').map(t => t.trim()).filter(Boolean);
+
+    try {
+      if (editingCategory) {
+        await api.categories.update(editingCategory.id, {
+          name: name.trim(),
+          slug: catSlug,
+          icon: icon.trim(),
+          description: description.trim(),
+          tags: tagArray,
+          active
+        });
+      } else {
+        await api.categories.create({
+          name: name.trim(),
+          slug: catSlug,
+          icon: icon.trim() || 'Tag',
+          description: description.trim(),
+          tags: tagArray,
+          active
+        });
+      }
+      setIsModalOpen(false);
+      fetchCats();
+    } catch (e: any) {
+      alert(e.message || 'Failed to save category');
+    }
+  };
+
+  const handleDelete = async (id: string, catName: string) => {
+    if (!confirm(`Are you sure you want to delete category "${catName}"?`)) return;
+    try {
+      await api.categories.delete(id);
+      fetchCats();
+    } catch (e: any) {
+      alert(e.message || 'Failed to delete category');
+    }
+  };
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-zinc-800 pb-5">
+        <div>
+          <h3 className="text-xl font-bold text-white flex items-center gap-2">
+            <Tag className="w-5 h-5 text-yellow-500" />
+            <span>Site Categories Management</span>
+          </h3>
+          <p className="text-xs sm:text-sm text-zinc-400 mt-1">
+            Configure feed filters, taxonomy pills, and search categories across Elysian.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => handleOpenModal(null)}
+          className="flex items-center bg-yellow-500 hover:bg-yellow-400 text-zinc-950 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors cursor-pointer"
+        >
+          <PlusCircle className="w-4 h-4 mr-2" /> Add Category
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="py-12 text-center text-zinc-500">Loading categories...</div>
+      ) : categories.length === 0 ? (
+        <div className="py-12 text-center text-zinc-500">No categories defined yet.</div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {categories.map((cat) => (
+            <div key={cat.id || cat.slug} className="bg-black/60 border border-zinc-800 rounded-xl p-4 flex flex-col justify-between hover:border-zinc-700 transition-colors">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-white text-base">{cat.name}</span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                    cat.active !== false ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-zinc-800 text-zinc-400'
+                  }`}>
+                    {cat.active !== false ? 'Active' : 'Hidden'}
+                  </span>
+                </div>
+                <div className="text-xs text-yellow-500/90 font-mono mb-2">/{cat.slug}</div>
+                <p className="text-xs text-zinc-400 line-clamp-2 mb-3">{cat.description || 'No description'}</p>
+                {Array.isArray(cat.tags) && cat.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {cat.tags.map((t: string) => (
+                      <span key={t} className="text-[10px] bg-zinc-900 text-zinc-400 px-2 py-0.5 rounded border border-zinc-800">
+                        #{t}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-850">
+                <button
+                  type="button"
+                  onClick={() => handleOpenModal(cat)}
+                  className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-medium border border-zinc-800 transition-colors cursor-pointer"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(cat.id, cat.name)}
+                  className="px-3 py-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 text-red-300 text-xs font-medium border border-red-800/40 transition-colors cursor-pointer"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-lg p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <h4 className="text-lg font-bold text-white">
+                {editingCategory ? 'Edit Category' : 'Create New Category'}
+              </h4>
+              <button onClick={() => setIsModalOpen(false)} className="text-zinc-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSave} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Category Name</label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    if (!editingCategory) {
+                      setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
+                    }
+                  }}
+                  placeholder="e.g. 4K Cinema"
+                  className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Slug / URL Path</label>
+                <input
+                  type="text"
+                  required
+                  value={slug}
+                  onChange={(e) => setSlug(e.target.value)}
+                  placeholder="4k-cinema"
+                  className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500 font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Description</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={2}
+                  placeholder="Brief description of this media collection..."
+                  className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Associated Tags (comma separated)</label>
+                <input
+                  type="text"
+                  value={tags}
+                  onChange={(e) => setTags(e.target.value)}
+                  placeholder="4k, ultra-hd, cinema"
+                  className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500"
+                />
+              </div>
+              <div className="flex items-center gap-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="catActive"
+                  checked={active}
+                  onChange={(e) => setActive(e.target.checked)}
+                  className="w-4 h-4 accent-yellow-500 rounded cursor-pointer"
+                />
+                <label htmlFor="catActive" className="text-xs font-medium text-zinc-300 cursor-pointer">
+                  Category is Active & Visible in MediaHub filters
+                </label>
+              </div>
+              <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-zinc-800 text-zinc-300 hover:bg-zinc-800 text-sm font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-bold text-sm"
+                >
+                  {editingCategory ? 'Update Category' : 'Create Category'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const AdminAccountPanel: React.FC<{
+  user: User;
+  onUserUpdate?: (user: User) => void;
+}> = ({ user, onUserUpdate }) => {
+  const [email, setEmail] = useState(user.email || 'kamogelomosiah@gmail.com');
+  const [name, setName] = useState(user.name || 'Kamogelo Mosiah');
+  const [username, setUsername] = useState(user.username || 'admin');
+  const [pin, setPin] = useState(user.pin || '225533');
+  const [showPin, setShowPin] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatusMsg(null);
+
+    if (newPassword && newPassword !== confirmPassword) {
+      setStatusMsg({ type: 'error', text: 'New password and confirm password do not match' });
+      return;
+    }
+
+    if (pin && (pin.length !== 6 || !/^\d+$/.test(pin))) {
+      setStatusMsg({ type: 'error', text: 'Admin security PIN must be exactly 6 numeric digits (e.g. 225533)' });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const updates: any = {
+        name: name.trim(),
+        username: username.trim(),
+        email: email.trim().toLowerCase(),
+        pin: pin.trim(),
+      };
+      if (newPassword) {
+        updates.password = newPassword;
+      }
+
+      const updated = await api.auth.updateProfile(user.id, updates);
+      if (onUserUpdate) {
+        onUserUpdate(updated);
+      }
+      setStatusMsg({ type: 'success', text: 'Admin credentials and login details updated successfully!' });
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      setStatusMsg({ type: 'error', text: err.message || 'Failed to update admin account details' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="p-6 sm:p-8 space-y-8 max-w-4xl">
+      <div className="border-b border-zinc-800 pb-5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-yellow-500">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-xl font-bold text-white">Admin Account & Login Security</h3>
+            <p className="text-xs sm:text-sm text-zinc-400">
+              Manage your administrator email, login credentials, and 6-digit security PIN.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {statusMsg && (
+        <div className={`p-4 rounded-xl text-sm flex items-center gap-2.5 ${
+          statusMsg.type === 'success' 
+            ? 'bg-emerald-950/70 border border-emerald-800 text-emerald-200'
+            : 'bg-red-950/70 border border-red-800 text-red-200'
+        }`}>
+          {statusMsg.type === 'success' ? <Check className="w-4 h-4 text-emerald-400" /> : <AlertCircle className="w-4 h-4 text-red-400" />}
+          <span>{statusMsg.text}</span>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="bg-black/40 border border-zinc-800/80 rounded-2xl p-5 sm:p-6 space-y-5">
+          <h4 className="text-sm font-semibold text-yellow-400 uppercase tracking-wider">Account Identity</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Admin Email Address</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="kamogelomosiah@gmail.com"
+                className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-yellow-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Admin Username</label>
+              <input
+                type="text"
+                required
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="admin"
+                className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-yellow-500"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Display Name</label>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Kamogelo Mosiah"
+                className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-yellow-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-black/40 border border-zinc-800/80 rounded-2xl p-5 sm:p-6 space-y-5">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-semibold text-yellow-400 uppercase tracking-wider">Security PIN Gate</h4>
+            <span className="text-[11px] text-zinc-500 font-mono">Current PIN: {pin || '225533'}</span>
+          </div>
+          <p className="text-xs text-zinc-400">
+            This 6-digit PIN is strictly required whenever logging into the admin panel.
+          </p>
+          <div className="max-w-xs">
+            <label className="block text-xs font-semibold text-zinc-300 mb-1.5">6-Digit Admin PIN</label>
+            <div className="relative">
+              <input
+                type={showPin ? 'text' : 'password'}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                required
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                placeholder="225533"
+                className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm font-mono tracking-widest text-center focus:outline-none focus:border-yellow-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPin(!showPin)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 p-1"
+              >
+                {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-black/40 border border-zinc-800/80 rounded-2xl p-5 sm:p-6 space-y-5">
+          <h4 className="text-sm font-semibold text-yellow-400 uppercase tracking-wider">Change Password</h4>
+          <p className="text-xs text-zinc-400">
+            Leave blank to keep your current admin password unchanged.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">New Password</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password"
+                  className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-yellow-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 p-1"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Confirm New Password</label>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm new password"
+                className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-yellow-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-4 border-t border-zinc-800">
+          <button
+            type="submit"
+            disabled={isSaving}
+            className="bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-bold px-7 py-3 rounded-xl transition-all shadow-lg shadow-yellow-500/20 flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+          >
+            {isSaving ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            <span>Save Admin Credentials</span>
+          </button>
+        </div>
+      </form>
     </div>
   );
 };

@@ -45,6 +45,7 @@ const REQUIRED_COLLECTIONS = [
   "comments",
   "activityLogs",
   "siteSettings",
+  "scheduledEvents",
 ];
 
 export async function runAdminSmokeTest(ctx: Ctx): Promise<SmokeReport> {
@@ -90,7 +91,7 @@ export async function runAdminSmokeTest(ctx: Ctx): Promise<SmokeReport> {
     const col = ctx.db.collection("media");
     const idx = await col.indexes();
     const names = idx.map((i: any) => i.name);
-    if (!names.includes("uniq_id")) throw new Error("media.id unique index missing");
+    if (!names.includes("uniq_id") && !names.includes("id_1")) throw new Error("media.id unique index missing");
   });
 
   // ---------- 3. User CRUD ----------
@@ -99,6 +100,7 @@ export async function runAdminSmokeTest(ctx: Ctx): Promise<SmokeReport> {
     await ctx.upsertDoc("users", {
       id: testUserId,
       name: "Smoke Test",
+      username: testUserId,
       email: `${testUserId}@smoke.local`,
       role: "CONSUMER",
       verified: false,

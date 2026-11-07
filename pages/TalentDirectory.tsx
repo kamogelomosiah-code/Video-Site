@@ -9,7 +9,7 @@ interface TalentDirectoryProps {
   onNavigateSearch?: (query: string) => void;
 }
 
-const TalentDirectory: React.FC<TalentDirectoryProps> = ({ onNavigateMessages }) => {
+const TalentDirectory: React.FC<TalentDirectoryProps> = ({ onNavigateMessages, onNavigateSearch }) => {
   const [talent, setTalent] = useState<TalentProfile[]>([]);
   const [uniqueLocations, setUniqueLocations] = useState<string[]>([]);
   const [filterCity, setFilterCity] = useState('');

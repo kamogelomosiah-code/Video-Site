@@ -1,18 +1,23 @@
-import React from 'react';
-import { PlayCircle, Users, Settings, MessageSquare, Search } from 'lucide-react';
+import { PlayCircle, Users, Settings, MessageSquare, Search, ShieldCheck } from 'lucide-react';
+import { User, UserRole } from '../types';
 
 interface BottomNavProps {
   activePage: string;
+  user?: User;
   onNavigate: (page: 'media' | 'directory' | 'messages' | 'profile' | 'search') => void;
+  onAdminClick?: () => void;
   onMenuClick: () => void;
 }
 
-const BottomNav: React.FC<BottomNavProps> = ({ activePage, onNavigate, onMenuClick }) => {
+const BottomNav: React.FC<BottomNavProps> = ({ activePage, user, onNavigate, onAdminClick, onMenuClick }) => {
+  const isAdmin = user?.role === UserRole.ADMIN;
+  
   const navItems = [
     { id: 'media', label: 'Media', icon: PlayCircle, action: () => onNavigate('media') },
     { id: 'search', label: 'Search', icon: Search, action: () => onNavigate('search') },
     { id: 'directory', label: 'Talent', icon: Users, action: () => onNavigate('directory') },
     { id: 'messages', label: 'Chat', icon: MessageSquare, action: () => onNavigate('messages') },
+    ...(isAdmin && onAdminClick ? [{ id: 'admin-dashboard', label: 'Admin', icon: ShieldCheck, action: onAdminClick }] : []),
     { id: 'profile', label: 'Profile', icon: Settings, action: () => onNavigate('profile') },
   ];
 

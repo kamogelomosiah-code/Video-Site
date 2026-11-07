@@ -372,12 +372,28 @@ const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
+            {user.role === UserRole.ADMIN && (
+              <button
+                type="button"
+                onClick={onAdminClick}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer ${
+                  currentPage === 'admin-dashboard'
+                    ? 'bg-yellow-500 text-zinc-950 shadow-yellow-500/20 ring-2 ring-yellow-400'
+                    : 'bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-400 border border-yellow-500/30'
+                }`}
+                title="Manage Site & Platform Controls"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Manage Site</span>
+              </button>
+            )}
+
             <div className="flex items-center space-x-3 border-l border-zinc-800 pl-2 sm:pl-4">
               {isGuest ? (
                  <button type="button" onClick={onLoginClick} className="flex items-center space-x-2 bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-full text-sm font-bold shadow-lg shadow-yellow-500/20 transition-all transform hover:scale-105 active:scale-95"><LogIn className="w-4 h-4" /><span className="hidden sm:inline">Sign In</span></button>
               ) : (
                 <div className="relative" ref={userMenuRef}>
-                  <button type="button" onClick={() => setShowUserMenu(!showUserMenu)} className="relative group flex items-center space-x-2 focus:outline-none">
+                  <button type="button" onClick={() => setShowUserMenu(!showUserMenu)} className="relative group flex items-center space-x-2 focus:outline-none cursor-pointer">
                     {user.avatarUrl ? (
                       <img src={user.avatarUrl} alt={user.name || "User"} className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 border-zinc-800 group-hover:border-yellow-500 object-cover transition-colors"/>
                     ) : (
@@ -388,16 +404,26 @@ const Navbar: React.FC<NavbarProps> = ({
                     <div className="text-right hidden sm:block"><p className="text-sm font-medium text-white max-w-[100px] truncate">{user.name}</p><p className="text-xs text-zinc-500">{user.role}</p></div>
                   </button>
                   {showUserMenu && (
-                     <div className="absolute right-0 mt-2 w-48 bg-[#111] border border-zinc-800 rounded-xl shadow-2xl z-50 overflow-hidden animate-fade-in-up">
-                        <div className="px-4 py-3 border-b border-zinc-800 sm:hidden">
+                     <div className="absolute right-0 mt-2 w-52 bg-[#111] border border-zinc-800 rounded-xl shadow-2xl z-50 overflow-hidden animate-fade-in-up">
+                        <div className="px-4 py-3 border-b border-zinc-800">
                           <p className="text-white font-medium truncate">{user.name}</p>
-                          <p className="text-xs text-zinc-500">{user.role}</p>
+                          <p className="text-xs text-yellow-500 font-semibold">{user.role}</p>
                         </div>
-                        <button type="button" onClick={() => { onProfileClick(); setShowUserMenu(false); }} className="w-full text-left px-4 py-3 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors">My Profile</button>
                         {user.role === UserRole.ADMIN && (
-                            <button type="button" onClick={() => { onAdminClick(); setShowUserMenu(false); }} className="w-full text-left px-4 py-3 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors sm:hidden">Admin Dashboard</button>
+                            <button 
+                              type="button" 
+                              onClick={() => { onAdminClick(); setShowUserMenu(false); }} 
+                              className="w-full text-left px-4 py-3 text-sm text-yellow-400 bg-yellow-500/10 hover:bg-yellow-500/20 font-bold flex items-center justify-between transition-colors border-b border-zinc-800/80 cursor-pointer"
+                            >
+                              <span className="flex items-center gap-2">
+                                <ShieldCheck className="w-4 h-4 text-yellow-400" />
+                                <span>Admin Dashboard</span>
+                              </span>
+                              <span className="text-[10px] bg-yellow-500 text-zinc-950 px-1.5 py-0.5 rounded font-extrabold uppercase">Manage</span>
+                            </button>
                         )}
-                        <button type="button" onClick={() => { onLogout(); setShowUserMenu(false); }} className="w-full text-left px-4 py-3 text-sm text-yellow-400 hover:bg-zinc-800 hover:text-yellow-300 flex items-center transition-colors border-t border-zinc-800"><LogOut className="w-4 h-4 mr-2"/>Sign Out</button>
+                        <button type="button" onClick={() => { onProfileClick(); setShowUserMenu(false); }} className="w-full text-left px-4 py-3 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors cursor-pointer">My Profile</button>
+                        <button type="button" onClick={() => { onLogout(); setShowUserMenu(false); }} className="w-full text-left px-4 py-3 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-red-400 flex items-center transition-colors border-t border-zinc-800 cursor-pointer"><LogOut className="w-4 h-4 mr-2"/>Sign Out</button>
                      </div>
                   )}
                 </div>

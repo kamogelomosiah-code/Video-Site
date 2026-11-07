@@ -11,7 +11,8 @@ import {
   AdUnit,
   AnalyticsEvent,
   AnalyticsSummary,
-  SearchResponse
+  SearchResponse,
+  ScheduledEvent
 } from '../types';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -193,9 +194,10 @@ export const api = {
         body: JSON.stringify({ like: isLike }),
       }),
 
-    recordView: (mediaId: string): Promise<{ views: number; totalViews: number; viewed: boolean }> =>
-      request<{ views: number; totalViews: number; viewed: boolean }>(`/api/media/${mediaId}/view`, {
+    recordView: (mediaId: string, viewerKey?: string): Promise<{ views: number; totalViews?: number; viewed?: boolean; deduped?: boolean }> =>
+      request<{ views: number; totalViews?: number; viewed?: boolean; deduped?: boolean }>(`/api/media/${mediaId}/view`, {
         method: 'POST',
+        headers: viewerKey ? { 'x-viewer-key': viewerKey } : undefined,
       }),
 
     checkDuplicate: (item: Partial<MediaItem>): Promise<{ duplicate: boolean; match: { id: string; title: string; reason: string } | null }> =>
@@ -206,12 +208,6 @@ export const api = {
 
     getRotated: (limit = 50, seed?: string): Promise<MediaItem[]> =>
       request<MediaItem[]>(`/api/media/rotated?limit=${limit}${seed ? `&seed=${encodeURIComponent(seed)}` : ''}`),
-
-    recordView: (mediaId: string, viewerKey?: string): Promise<{ views: number; deduped: boolean }> =>
-      request<{ views: number; deduped: boolean }>(`/api/media/${mediaId}/view`, {
-        method: 'POST',
-        headers: viewerKey ? { 'x-viewer-key': viewerKey } : undefined,
-      }),
 
     getFeed: (
       page = 1,
@@ -470,6 +466,51 @@ export const api = {
 
     fix: (): Promise<{ success: boolean; message: string }> =>
       request('/api/admin/diagnostics/fix', {
+        method: 'POST',
+      }),
+  },
+
+  events: {
+    getAll: (params?: { date?: string; filter?: string; talentId?: string; category?: string }): Promise<ScheduledEvent[]> => {
+      const q = new URLSearchParams();
+      if (params?.date) q.append('date', params.date);
+      if (params?.filter) q.append('filter', params.filter);
+      if (params?.talentId) q.append('talentId', params.talentId);
+      if (params?.category) q.append('category', params.category);
+      const queryStr = q.toString() ? `?${q.toString()}` : '';
+      return request<ScheduledEvent[]>(`/api/events${queryStr}`);
+    },
+
+    getToday: (): Promise<{ date: string; totalToday: number; liveNow: number; events: ScheduledEvent[] }> =>
+      request<{ date: string; totalToday: number; liveNow: number; events: ScheduledEvent[] }>('/api/events/today'),
+
+    getById: (id: string): Promise<ScheduledEvent> =>
+      request<ScheduledEvent>(`/api/events/${id}`),
+
+    create: (data: Partial<ScheduledEvent>): Promise<ScheduledEvent> =>
+      request<ScheduledEvent>('/api/events', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    update: (id: string, data: Partial<ScheduledEvent>): Promise<ScheduledEvent> =>
+      request<ScheduledEvent>(`/api/events/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+
+    delete: (id: string): Promise<{ success: boolean }> =>
+      request<{ success: boolean }>(`/api/events/${id}`, {
+        method: 'DELETE',
+      }),
+
+    toggleLive: (id: string): Promise<ScheduledEvent> =>
+      request<ScheduledEvent>(`/api/events/${id}/toggle-live`, {
+        method: 'POST',
+      }),
+
+    rsvp: (id: string): Promise<{ success: boolean; attendeesCount: number }> =>
+      request<{ success: boolean; attendeesCount: number }>(`/api/events/${id}/rsvp`, {
         method: 'POST',
       }),
   },
