@@ -104,7 +104,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUserUpdate }) =
         else await api.media.create({ ...formData, userId: user.id }); 
         fetchData(); 
         closeMediaModal(); 
-      } catch (e) { alert('Operation failed'); }
+      } catch (e: any) { alert(e?.message || 'Operation failed'); }
   };
 
   const handleEventSubmit = async (formData: any) => {
@@ -113,7 +113,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUserUpdate }) =
         else await api.events.create(formData);
         fetchData();
         closeEventModal();
-      } catch (e) { alert('Operation failed'); }
+      } catch (e: any) { alert(e?.message || 'Operation failed'); }
   };
   
   const handleUserSubmit = async (formData: any) => { 
@@ -122,7 +122,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUserUpdate }) =
         else await api.users.create(formData); 
         fetchData(); 
         closeUserModal(); 
-      } catch (e) { alert('Operation failed'); }
+      } catch (e: any) { alert(e?.message || 'Operation failed'); }
   };
 
   const handleTalentSubmit = async (formData: any) => { 
@@ -131,7 +131,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUserUpdate }) =
         else await api.talent.create(formData); 
         fetchData(); 
         closeTalentModal(); 
-      } catch (e) { alert('Operation failed'); }
+      } catch (e: any) { alert(e?.message || 'Operation failed'); }
   };
 
   const openEventModal = (ev?: ScheduledEvent, defaultToday: boolean = false) => {
@@ -207,7 +207,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUserUpdate }) =
           try {
             await api.users.delete(id);
             fetchData();
-          } catch (e) { alert('Operation failed'); }
+          } catch (e: any) { alert(e?.message || 'Operation failed'); }
         }
       });
   };
@@ -1381,7 +1381,7 @@ const CategoriesPanel: React.FC = () => {
       )}
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-lg p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <h4 className="text-lg font-bold text-white">
@@ -1478,10 +1478,11 @@ const AdminAccountPanel: React.FC<{
   user: User;
   onUserUpdate?: (user: User) => void;
 }> = ({ user, onUserUpdate }) => {
-  const [email, setEmail] = useState(user.email || 'kamogelomosiah@gmail.com');
-  const [name, setName] = useState(user.name || 'Kamogelo Mosiah');
-  const [username, setUsername] = useState(user.username || 'admin');
-  const [pin, setPin] = useState(user.pin || '225533');
+  const [email, setEmail] = useState(user.email || '');
+  const [name, setName] = useState(user.name || '');
+  const [username, setUsername] = useState(user.username || '');
+  // The current PIN is never sent to the browser. Leave blank to keep it unchanged.
+  const [pin, setPin] = useState('');
   const [showPin, setShowPin] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -1499,7 +1500,7 @@ const AdminAccountPanel: React.FC<{
     }
 
     if (pin && (pin.length !== 6 || !/^\d+$/.test(pin))) {
-      setStatusMsg({ type: 'error', text: 'Admin security PIN must be exactly 6 numeric digits (e.g. 225533)' });
+      setStatusMsg({ type: 'error', text: 'Admin security PIN must be exactly 6 numeric digits' });
       return;
     }
 
@@ -1509,8 +1510,10 @@ const AdminAccountPanel: React.FC<{
         name: name.trim(),
         username: username.trim(),
         email: email.trim().toLowerCase(),
-        pin: pin.trim(),
       };
+      if (pin.trim()) {
+        updates.pin = pin.trim();
+      }
       if (newPassword) {
         updates.password = newPassword;
       }
@@ -1522,6 +1525,7 @@ const AdminAccountPanel: React.FC<{
       setStatusMsg({ type: 'success', text: 'Admin credentials and login details updated successfully!' });
       setNewPassword('');
       setConfirmPassword('');
+      setPin('');
     } catch (err: any) {
       setStatusMsg({ type: 'error', text: err.message || 'Failed to update admin account details' });
     } finally {
@@ -1599,7 +1603,7 @@ const AdminAccountPanel: React.FC<{
         <div className="bg-black/40 border border-zinc-800/80 rounded-2xl p-5 sm:p-6 space-y-5">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-semibold text-yellow-400 uppercase tracking-wider">Security PIN Gate</h4>
-            <span className="text-[11px] text-zinc-500 font-mono">Current PIN: {pin || '225533'}</span>
+            <span className="text-[11px] text-zinc-500 font-mono">Leave blank to keep current PIN</span>
           </div>
           <p className="text-xs text-zinc-400">
             This 6-digit PIN is strictly required whenever logging into the admin panel.
@@ -1612,10 +1616,9 @@ const AdminAccountPanel: React.FC<{
                 inputMode="numeric"
                 pattern="[0-9]*"
                 maxLength={6}
-                required
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-                placeholder="225533"
+                placeholder="New 6-digit PIN"
                 className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm font-mono tracking-widest text-center focus:outline-none focus:border-yellow-500"
               />
               <button
@@ -2119,7 +2122,7 @@ const VideoPreviewModal: React.FC<VideoPreviewModalProps> = ({ media, onClose, o
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
       <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl my-auto animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[calc(100vh-2rem)]">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/80 bg-black/40 flex-shrink-0">
@@ -2349,7 +2352,7 @@ const MediaFormModal: React.FC<MediaFormModalProps> = ({ media, onClose, onSubmi
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
       <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl my-auto flex flex-col max-h-[calc(100vh-2rem)]">
         <div className="flex items-center justify-between p-6 border-b border-zinc-800 flex-shrink-0 bg-black/20">
           <h3 className="text-xl font-bold text-white flex items-center gap-2">
@@ -2586,7 +2589,7 @@ const UserFormModal: React.FC<UserFormModalProps> = ({ user, onClose, onSubmit }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
       <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl my-auto flex flex-col max-h-[calc(100vh-2rem)]">
         <div className="flex items-center justify-between p-6 border-b border-zinc-800 flex-shrink-0 bg-black/20">
           <h3 className="text-xl font-bold text-white">
@@ -2759,7 +2762,7 @@ const TalentFormModal: React.FC<TalentFormModalProps> = ({ talent, onClose, onSu
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
       <div className="bg-[#111] border border-zinc-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl my-auto flex flex-col max-h-[calc(100vh-2rem)]">
         <div className="flex items-center justify-between p-6 border-b border-zinc-800 flex-shrink-0 bg-black/20">
           <h3 className="text-xl font-bold text-white">

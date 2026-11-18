@@ -42,7 +42,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
-    if (res.status === 401) {
+    // Only treat a 401 as "session expired" when we actually sent a token.
+    // Login attempts (wrong password, PIN required) also return 401 and must
+    // stay on the sign-in screen so the user can see the error / enter a PIN.
+    const isAuthAttempt = path.startsWith('/api/auth/login') || path.startsWith('/api/auth/register');
+    if (res.status === 401 && token && !isAuthAttempt) {
       session.clear();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('elysian_session_expired'));

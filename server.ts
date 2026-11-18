@@ -256,10 +256,8 @@ function getToken(req: Request): string | null {
 
 function stripSecrets(user: any) {
   if (!user) return user;
-  const { passwordHash, ...safe } = user;
-  if (user.role !== "ADMIN") {
-    delete (safe as any).pin;
-  }
+  // Never send password hashes or admin PINs to the browser.
+  const { passwordHash, pin, ...safe } = user;
   return safe;
 }
 
@@ -275,42 +273,59 @@ async function logActivity(action: string, details: string, userId?: string) {
   return log;
 }
 
+// Admin account configuration. Set these in .env (server-side only — never VITE_*).
+// ADMIN_PASSWORD / ADMIN_PIN, when set, are re-applied on every startup so you can
+// rotate credentials just by changing .env and restarting.
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "kamogelomosiah@gmail.com").trim().toLowerCase();
+const ADMIN_USERNAME = (process.env.ADMIN_USERNAME || "admin").trim().toLowerCase();
+const ADMIN_NAME = process.env.ADMIN_NAME || "Kamogelo Mosiah";
+const LEGACY_ADMIN_PASSWORD = "#Eightmillionby30$";
+const LEGACY_ADMIN_PIN = "225533";
+
 async function seedAdmin(): Promise<void> {
-  const passwordHash = await hashPassword("#Eightmillionby30$");
-  let admin = (await findOneByField("users", "email", "kamogelomosiah@gmail.com")) ||
-              (await findOneByField("users", "username", "admin")) ||
-              (await findOneByField("users", "role", "ADMIN"));
+  const envPassword = process.env.ADMIN_PASSWORD || "";
+  const envPin = (process.env.ADMIN_PIN || "").trim();
+
+  let admin = (await findOneByField("users", "email", ADMIN_EMAIL)) ||
+              (await findOneByField("users", "username", ADMIN_USERNAME)) ||
+              (await findOneByField("users", "id", "admin-user"));
 
   if (admin) {
     admin.role = "ADMIN";
-    // If admin is on placeholder or needs update to the specified email
+    admin.verified = true;
     if (!admin.email || admin.email === "admin@elysian.local" || admin.email === "admin") {
-      admin.email = "kamogelomosiah@gmail.com";
+      admin.email = ADMIN_EMAIL;
     }
-    if (!admin.pin) {
-      admin.pin = "225533";
+    if (!admin.username) admin.username = ADMIN_USERNAME;
+    if (envPassword) {
+      admin.passwordHash = await hashPassword(envPassword);
+    } else if (!admin.passwordHash) {
+      admin.passwordHash = await hashPassword(LEGACY_ADMIN_PASSWORD);
     }
-    if (!admin.passwordHash) {
-      admin.passwordHash = passwordHash;
-    }
+    if (envPin) admin.pin = envPin;
+    else if (!admin.pin) admin.pin = LEGACY_ADMIN_PIN;
     await upsertDoc("users", admin);
-    console.log(`[seed] Admin ready — email: ${admin.email}, PIN: ${admin.pin}`);
+    console.log(`[seed] Admin ready — login: ${admin.email} / ${admin.username} (PIN protected)`);
   } else {
     const newAdmin: any = {
       id: "admin-user",
-      username: "admin",
-      name: "Kamogelo Mosiah",
-      email: "kamogelomosiah@gmail.com",
+      username: ADMIN_USERNAME,
+      name: ADMIN_NAME,
+      email: ADMIN_EMAIL,
       role: "ADMIN",
       verified: true,
       avatarUrl: "",
-      passwordHash,
-      pin: "225533",
+      passwordHash: await hashPassword(envPassword || LEGACY_ADMIN_PASSWORD),
+      pin: envPin || LEGACY_ADMIN_PIN,
       subscriptions: [],
       createdAt: new Date().toISOString(),
     };
     await upsertDoc("users", newAdmin);
-    console.log("[seed] Admin created — email: kamogelomosiah@gmail.com, PIN: 225533");
+    console.log(`[seed] Admin created — login: ${ADMIN_EMAIL} / ${ADMIN_USERNAME} (PIN protected)`);
+  }
+
+  if (!envPassword || !envPin) {
+    console.warn("[seed] ⚠ ADMIN_PASSWORD and/or ADMIN_PIN are not set in .env — the legacy default admin credentials are in use. Set both before deploying.");
   }
 }
 
@@ -677,11 +692,16 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
     }
   }
 
-  if (!ADMIN_KEY && !token) {
-    return next();
+  if (token) {
+    return res.status(403).json({ error: "Admin access required" });
   }
-
   return res.status(401).json({ error: "Unauthorized — provide valid ADMIN session token or X-Admin-Key header" });
+}
+
+function canManageEvent(user: any, event: any): boolean {
+  if (!user) return false;
+  if (user.role === "ADMIN") return true;
+  return !!event && (event.createdBy === user.id || event.talentId === user.id);
 }
 
 async function requireUser(req: Request, res: Response, next: NextFunction) {
@@ -1275,7 +1295,7 @@ async function startServer() {
   });
 
   // Legacy global data blob endpoint (fans out to per-entity collections)
-  app.get("/api/data", async (_req, res) => {
+  app.get("/api/data", requireAdmin, async (_req, res) => {
     try {
       const media = await listCollection("media");
       const users = (await listCollection("users")).map(stripSecrets);
@@ -1464,16 +1484,24 @@ async function startServer() {
     if (typeof password !== "string" || password.length < 6) {
       return res.status(400).json({ error: "Password must be at least 6 characters" });
     }
-    const existing = await findOneByField("users", "email", email);
+    const cleanEmail = String(email).trim().toLowerCase();
+    const existing = (await findOneByField("users", "email", email)) || (await findOneByField("users", "email", cleanEmail));
     if (existing) return res.status(409).json({ error: "Email already registered" });
+    const cleanUsername = String(username || cleanEmail).trim();
+    if (cleanUsername.toLowerCase() === ADMIN_USERNAME || cleanEmail === ADMIN_EMAIL) {
+      return res.status(409).json({ error: "That username or email is reserved" });
+    }
+    // Public sign-up can never create an ADMIN account.
+    const SELF_SERVICE_ROLES = ["CONSUMER", "CREATOR", "PROFESSIONAL"];
+    const safeRole = SELF_SERVICE_ROLES.includes(role) ? role : "CONSUMER";
 
     const passwordHash = await hashPassword(password);
     const user: any = {
       id: generateId(),
-      name: name || email,
-      username: username || email,
-      email,
-      role: role || "CONSUMER",
+      name: name || cleanEmail,
+      username: cleanUsername,
+      email: cleanEmail,
+      role: safeRole,
       verified: false,
       avatarUrl: "",
       passwordHash,
@@ -1487,13 +1515,17 @@ async function startServer() {
 
   app.post("/api/auth/login", async (req, res) => {
     const { email, password, pin } = req.body || {};
-    const cleanIdentifier = String(email).trim().toLowerCase();
-    let user: any = await findOneByField("users", "email", email);
+    if (!email || typeof password !== "string") {
+      return res.status(400).json({ error: "Email/username and password required" });
+    }
+    const rawIdentifier = String(email).trim();
+    const cleanIdentifier = rawIdentifier.toLowerCase();
+    let user: any = await findOneByField("users", "email", rawIdentifier);
     if (!user) user = await findOneByField("users", "email", cleanIdentifier);
-    if (!user) user = await findOneByField("users", "username", email);
+    if (!user) user = await findOneByField("users", "username", rawIdentifier);
     if (!user) user = await findOneByField("users", "username", cleanIdentifier);
-    if (!user && (cleanIdentifier === "kamogelomosiah@gmail.com" || cleanIdentifier === "admin")) {
-      user = await findOneByField("users", "role", "ADMIN");
+    if (!user && (cleanIdentifier === ADMIN_EMAIL || cleanIdentifier === ADMIN_USERNAME)) {
+      user = await findOneByField("users", "id", "admin-user");
     }
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
@@ -1502,7 +1534,9 @@ async function startServer() {
 
     if (user.role === "ADMIN" && user.pin) {
       if (!pin) return res.status(401).json({ error: "PIN required", requiresPin: true });
-      if (String(pin) !== String(user.pin)) return res.status(401).json({ error: "Invalid PIN" });
+      if (String(pin).trim() !== String(user.pin)) {
+        return res.status(401).json({ error: "Invalid PIN", requiresPin: true });
+      }
     }
 
     const token = await createSession(user.id);
@@ -1556,8 +1590,14 @@ async function startServer() {
 
       const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
       const base = origin || process.env.APP_URL || `http://localhost:${PORT}`;
-      resetUrl = `${base}/reset-password?token=${rawToken}`;
-      await sendPasswordResetEmail(user.email || target, resetUrl);
+      const link = `${base}/reset-password?token=${rawToken}`;
+      const sent = await sendPasswordResetEmail(user.email || target, link);
+      // Only reveal the link in the response for local development when no email
+      // provider is configured, and never for admin accounts. Returning it in
+      // production would let anyone reset anyone's password.
+      if (sent.provider === "console" && process.env.NODE_ENV !== "production" && user.role !== "ADMIN") {
+        resetUrl = link;
+      }
     }
     res.json({ success: true, resetUrl });
   });
@@ -1614,10 +1654,14 @@ async function startServer() {
     delete updates.id;
     delete updates.role;
     delete updates.passwordHash;
-    if (user.role !== "ADMIN") {
+    delete updates.verified;
+    delete updates.subscriberCount;
+    delete updates.totalViews;
+    if (user.role !== "ADMIN" || !updates.pin) {
       delete updates.pin;
-    } else if (updates.pin) {
+    } else {
       updates.pin = String(updates.pin).trim();
+      if (!/^\d{6}$/.test(updates.pin)) return res.status(400).json({ error: "PIN must be exactly 6 digits" });
     }
 
     if (updates.email && updates.email !== user.email) {
@@ -1711,10 +1755,15 @@ async function startServer() {
 
     const updates = { ...req.body };
     delete updates.id;
+    delete updates.passwordHash;
     if (!isAdmin) {
       delete updates.role;
       delete updates.pin;
+      delete updates.verified;
+      delete updates.subscriberCount;
+      delete updates.totalViews;
     }
+    if (updates.pin === "" || updates.pin === null) delete updates.pin;
     if (updates.password) {
       updates.passwordHash = await hashPassword(updates.password);
       delete updates.password;
@@ -3201,6 +3250,7 @@ Description: ${existing.description || ""}`;
         status: status || (isLiveNow ? "live" : "scheduled"),
         attendeesCount: 0,
         tags: Array.isArray(tags) ? tags : [],
+        createdBy: (req as any).user?.id,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -3218,11 +3268,13 @@ Description: ${existing.description || ""}`;
     try {
       const existing = await findOneByField("scheduledEvents", "id", req.params.id);
       if (!existing) return res.status(404).json({ error: "Event not found" });
+      if (!canManageEvent((req as any).user, existing)) return res.status(403).json({ error: "Not allowed to modify this event" });
 
       const updated = {
         ...existing,
         ...req.body,
         id: existing.id,
+        createdBy: existing.createdBy,
         updatedAt: new Date().toISOString(),
       };
       if (req.body.isLiveNow !== undefined) {
@@ -3242,8 +3294,9 @@ Description: ${existing.description || ""}`;
     try {
       const existing = await findOneByField("scheduledEvents", "id", req.params.id);
       if (!existing) return res.status(404).json({ error: "Event not found" });
+      if (!canManageEvent((req as any).user, existing)) return res.status(403).json({ error: "Not allowed to modify this event" });
 
-      await removeDoc("scheduledEvents", req.params.id);
+      await removeDoc("scheduledEvents", String(req.params.id));
       await logActivity("delete", `Deleted scheduled event: ${existing.title}`, (req as any).user?.id);
       res.json({ success: true });
     } catch (err: any) {
@@ -3255,6 +3308,7 @@ Description: ${existing.description || ""}`;
     try {
       const existing = await findOneByField("scheduledEvents", "id", req.params.id);
       if (!existing) return res.status(404).json({ error: "Event not found" });
+      if (!canManageEvent((req as any).user, existing)) return res.status(403).json({ error: "Not allowed to modify this event" });
 
       const nextLive = !existing.isLiveNow;
       const updated = {
@@ -3287,10 +3341,7 @@ Description: ${existing.description || ""}`;
 
   // --- Admin Diagnostics Engine ---
 
-  app.get("/api/admin/diagnostics/run", requireUser, async (req, res) => {
-    const user = (req as any).user;
-    if (user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
-
+  const runDiagnostics = async () => {
     const tests: Array<{ id: string; name: string; status: "pass" | "fail" | "warn"; message: string; details?: any }> = [];
 
     // Test 1: Database
@@ -3369,7 +3420,19 @@ Description: ${existing.description || ""}`;
     });
 
     const allPassed = tests.every((t) => t.status === "pass");
-    res.json({ allPassed, timestamp: new Date().toISOString(), tests });
+    return { allPassed, timestamp: new Date().toISOString(), tests };
+  };
+
+  app.get("/api/admin/diagnostics/run", requireAdmin, async (_req, res) => {
+    res.json(await runDiagnostics());
+  });
+
+  // Shape expected by the Admin Dashboard "Run System Self-Test" button.
+  app.get("/api/admin/self-test", requireAdmin, async (_req, res) => {
+    const report = await runDiagnostics();
+    const results: Record<string, { status: string; message: string }> = {};
+    for (const t of report.tests) results[t.name] = { status: t.status, message: t.message };
+    res.json({ allPassed: report.allPassed, timestamp: report.timestamp, results });
   });
 
   app.post("/api/admin/diagnostics/fix", requireUser, async (req, res) => {
@@ -3412,6 +3475,9 @@ Description: ${existing.description || ""}`;
     analyticsEvents: "userId",
   };
 
+  // Site-wide content that only admins may create.
+  const ADMIN_ONLY_WRITE = new Set<string>(["categories", "ads", "activityLogs"]);
+
   for (const name of CRUD_COLLECTIONS) {
     const router = express.Router();
 
@@ -3445,6 +3511,9 @@ Description: ${existing.description || ""}`;
       }
       try {
         const user = (req as any).user;
+        if (ADMIN_ONLY_WRITE.has(name) && user.role !== "ADMIN") {
+          return res.status(403).json({ error: "Admin access required" });
+        }
         const ownerField = OWNER_FIELD[name];
         const doc: any = { ...req.body, id: req.body.id || generateId() };
 

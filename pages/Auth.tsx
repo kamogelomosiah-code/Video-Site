@@ -3,14 +3,6 @@ import { Mail, Lock, User, ArrowRight, MailCheck, AlertCircle, Eye, EyeOff, Shie
 import { UserRole } from '../types';
 import { api } from '../services/api';
 
-// Hardcoded Administrator credentials
-export const HARDCODED_ADMIN = {
-  email: 'kamogelomosiah@gmail.com',
-  username: 'admin',
-  password: '#Eightmillionby30$',
-  defaultPin: '225533',
-};
-
 interface AuthProps {
   onLogin: (data: any) => void;
   onNavigateBack: () => void;
@@ -35,36 +27,27 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigateBack, onNavigateReset })
   const [showPinInput, setShowPinInput] = useState(false);
   const pinInputRef = useRef<HTMLInputElement>(null);
 
-  // Check if current input matches the hardcoded admin credentials
-  const cleanEmail = email.trim().toLowerCase();
-  const isEmailAdmin = cleanEmail === HARDCODED_ADMIN.email.toLowerCase() || 
-                       cleanEmail === HARDCODED_ADMIN.username.toLowerCase();
-  const isPasswordAdmin = password === HARDCODED_ADMIN.password;
-  const isAdminCredentialsEntered = isEmailAdmin || isPasswordAdmin;
+  // The server decides whether an account needs a PIN (admin accounts do).
+  // No credentials are ever embedded in the browser bundle.
+  const isAdminCredentialsEntered = needsPin;
+  const isPinRequired = needsPin || showPinInput;
 
-  // Show the PIN tab/field whenever admin credentials are entered or when required
-  const isPinRequired = isAdminCredentialsEntered || needsPin || showPinInput;
-
-  // Auto-focus PIN field when admin credentials are recognized and password is provided
+  // Focus the PIN field as soon as the server asks for it
   useEffect(() => {
-    if (isAdminCredentialsEntered && password && !pin) {
+    if (needsPin && !pin) {
       const timer = setTimeout(() => {
         pinInputRef.current?.focus();
       }, 150);
       return () => clearTimeout(timer);
     }
-  }, [isAdminCredentialsEntered, password, pin]);
+  }, [needsPin, pin]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
 
-    let pinToSend = pin.trim();
-    if (isAdminCredentialsEntered && !pinToSend) {
-      pinToSend = HARDCODED_ADMIN.defaultPin;
-      setPin(HARDCODED_ADMIN.defaultPin);
-    }
+    const pinToSend = pin.trim();
 
     try {
       if (authMode === 'login') {
@@ -80,12 +63,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigateBack, onNavigateReset })
         onLogin(newUser);
       }
     } catch (err: any) {
-      if (err?.data?.requiresPin || err?.message?.toLowerCase().includes('pin required')) {
+      if (err?.data?.requiresPin) {
         setNeedsPin(true);
-        if (isAdminCredentialsEntered && !pin) {
-          setPin(HARDCODED_ADMIN.defaultPin);
+        if (pinToSend) {
+          setPin('');
+          setError('Incorrect security PIN. Please try again.');
+        } else {
+          setError('Security PIN required for administrator access. Please enter your 6-digit PIN below.');
         }
-        setError('Security PIN required for administrator access. Please enter your 6-digit PIN below.');
         return;
       }
       setError(err.message || 'Authentication failed. Please check your credentials and try again.');
@@ -156,7 +141,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigateBack, onNavigateReset })
             type="button"
             onClick={() => {
               setShowPinInput(true);
-              if (!pin) setPin(HARDCODED_ADMIN.defaultPin);
               setTimeout(() => pinInputRef.current?.focus(), 50);
             }}
             className="flex-1 py-2.5 text-xs sm:text-sm font-bold rounded-lg transition-all bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border border-yellow-500/40 shadow-sm flex items-center justify-center gap-1.5 animate-fade-in cursor-pointer active:scale-95"
@@ -259,15 +243,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigateBack, onNavigateReset })
                 <span>Security PIN {isAdminCredentialsEntered && '— Admin Account'}</span>
               </label>
               <div className="flex items-center gap-2">
-                {isAdminCredentialsEntered && (
-                  <button
-                    type="button"
-                    onClick={() => setPin(HARDCODED_ADMIN.defaultPin)}
-                    className="text-[10px] text-yellow-400 hover:text-yellow-300 underline font-medium cursor-pointer"
-                  >
-                    Use Admin PIN ({HARDCODED_ADMIN.defaultPin})
-                  </button>
-                )}
                 <span className="text-[10px] text-yellow-500/80 font-mono">6 digits</span>
               </div>
             </div>
@@ -288,7 +263,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigateBack, onNavigateReset })
             </div>
             {isAdminCredentialsEntered && (
               <p className="text-[11px] text-yellow-500/90 font-medium">
-                Admin credentials recognized. Enter your 6-digit security PIN to unlock administrator access.
+                Administrator account. Enter your 6-digit security PIN to unlock admin access.
               </p>
             )}
           </div>

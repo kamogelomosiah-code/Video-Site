@@ -423,7 +423,7 @@ export const EventScheduleElement: React.FC<EventScheduleElementProps> = ({
 
       {/* Event Details Modal */}
       {selectedEventModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
           <div className="bg-[#121216] border border-zinc-800 rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto shadow-2xl relative">
             {/* Modal Image Header */}
             <div className="relative h-56 w-full bg-zinc-900">

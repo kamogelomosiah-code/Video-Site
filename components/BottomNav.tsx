@@ -1,3 +1,4 @@
+import React from 'react';
 import { PlayCircle, Users, Settings, MessageSquare, Search, ShieldCheck } from 'lucide-react';
 import { User, UserRole } from '../types';
 
