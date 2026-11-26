@@ -1,149 +1,23 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#000000" />
-    <link rel="icon" href="peach-svgrepo-com.svg">
-    <title>Elysian | Premium Media & Talent Hub</title>
-    <meta name="description" content="Discover verified creator profiles, premium exclusive adult media, and book virtual services on Elysian. Bank-grade ID verified creators, high-resolution media discovery, and custom virtual chat bookings." />
-    <meta name="keywords" content="verified creators, adult media hub, elite models, exclusive video streaming, VIP booking, high resolution media, creator talent directory" />
-    <meta name="author" content="Elysian Media Hub" />
-    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
-    <link rel="canonical" href="https://elysian.app" />
-    
-    <!-- OpenGraph Social Cards -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#09090b" />
+    <meta name="rating" content="adult" />
+    <meta name="RATING" content="RTA-5042-1996-1400-1577-RTA" />
+    <link rel="icon" href="/peach-svgrepo-com.svg" />
+    <title>Elysian</title>
+    <meta name="description" content="Discover verified creators and premium exclusive media." />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://elysian.app" />
-    <meta property="og:title" content="Elysian | Premium Media & Creator Talent Discovery" />
-    <meta property="og:description" content="Discover verified creator profiles, premium exclusive adult media, and book virtual services on Elysian. Bank-grade ID verified creators, high-resolution media discovery, and custom virtual chat bookings." />
     <meta property="og:site_name" content="Elysian" />
-    <meta property="og:locale" content="en_US" />
-    <meta property="og:image" content="https://elysian.app/peach-svgrepo-com.svg" />
-    
-    <!-- Twitter Social Cards -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@ElysianHub" />
-    <meta name="twitter:title" content="Elysian | Premium Media & Creator Talent Discovery" />
-    <meta name="twitter:description" content="Discover verified creator profiles, premium exclusive adult media, and book virtual services on Elysian. Bank-grade ID verified creators, high-resolution media discovery, and custom virtual chat bookings." />
-    <meta name="twitter:image" content="https://elysian.app/peach-svgrepo-com.svg" />
-
-    <!-- Schema.org Structured Data (JSON-LD Organization & WebApplication) -->
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@graph": [
-        {
-          "@type": "Organization",
-          "@id": "https://elysian.app/#organization",
-          "name": "Elysian",
-          "url": "https://elysian.app",
-          "logo": "https://elysian.app/peach-svgrepo-com.svg"
-        },
-        {
-          "@type": "WebSite",
-          "@id": "https://elysian.app/#website",
-          "url": "https://elysian.app",
-          "name": "Elysian Media & Talent Hub",
-          "publisher": {
-            "@id": "https://elysian.app/#organization"
-          }
-        },
-        {
-          "@type": "WebApplication",
-          "@id": "https://elysian.app/#webapp",
-          "name": "Elysian",
-          "url": "https://elysian.app",
-          "applicationCategory": "SocialMediaApplication",
-          "operatingSystem": "All",
-          "description": "Discover verified creator profiles, premium exclusive adult media, and book virtual services on Elysian. Features high-resolution media discovery and a bank-grade ID verified creator directory.",
-          "offers": {
-            "@type": "Offer",
-            "price": "0",
-            "priceCurrency": "ZAR"
-          }
-        }
-      ]
-    }
-    </script>
-    <!-- AdSense Verification Meta Tag -->
-    <meta name="google-adsense-account" content="ca-pub-6421372298185696">
-    
-    <!-- GDPR/ePrivacy Consent script to conditionally load AdSense -->
-    <script>
-      (function() {
-        window.__loadAdSense = function() {
-          if (window.__adSenseLoaded) return;
-          window.__adSenseLoaded = true;
-          var script = document.createElement('script');
-          script.async = true;
-          script.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6421372298185696";
-          script.crossOrigin = "anonymous";
-          document.head.appendChild(script);
-          console.log("[Elysian CMP] AdSense script loaded successfully under consent.");
-        };
-
-        try {
-          var consent = localStorage.getItem('elysian_cmp_consent');
-          if (consent === 'granted' || consent === 'all') {
-            window.__loadAdSense();
-          }
-        } catch (e) {
-          console.error("[Elysian CMP] Failed to read consent from localStorage", e);
-        }
-      })();
-    </script>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Satisfy&display=swap" rel="stylesheet">
-    <style>
-      html, body, #root {
-        height: 100%;
-        margin: 0;
-        padding: 0;
-        overscroll-behavior-y: none; /* Prevents pull-to-refresh rubber banding */
-        background-color: #000000;
-      }
-      body {
-        font-family: 'Poppins', sans-serif;
-        color: #fafafa; /* Zinc 50 */
-        -webkit-tap-highlight-color: transparent;
-      }
-      .font-cursive {
-        font-family: 'Satisfy', cursive;
-      }
-      /* Safe Area Utilities for iOS */
-      .safe-area-pb {
-        padding-bottom: env(safe-area-inset-bottom);
-      }
-      .safe-area-pt {
-        padding-top: env(safe-area-inset-top);
-      }
-      
-      /* Custom Scrollbar */
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #18181b; /* Zinc 900 */
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #3f3f46; /* Zinc 700 */
-        border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #eab308; /* Yellow 500 */
-      }
-      .no-scrollbar::-webkit-scrollbar {
-        display: none;
-      }
-      .no-scrollbar {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-      }
-    </style>
-</head>
-<body>
+    <meta name="google-adsense-account" content="ca-pub-6421372298185696" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  </head>
+  <body>
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
