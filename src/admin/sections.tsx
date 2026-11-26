@@ -6,8 +6,9 @@ import { api } from '../lib/api';
 import { useSettings, usePageTitle } from '../lib/settings';
 import { formatDate, formatViews, useFetch } from '../lib/utils';
 import { Thumb } from '../components/Media';
-import { Button, cx, useToast } from '../components/ui';
+import { Button, Select, cx, useToast } from '../components/ui';
 import ResourceAdmin, { type FieldDef } from './ResourceAdmin';
+import { ExportVideosButton, ImportVideosButton } from './MediaJson';
 
 const Badge = ({ on, yes, no }: { on: boolean; yes: string; no: string }) => (
   <span className={cx('rounded-full px-2 py-0.5 text-xs', on ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-800 text-zinc-400')}>{on ? yes : no}</span>
@@ -19,7 +20,7 @@ const newest = (a: any, b: any) => String(b.createdAt || '').localeCompare(Strin
 export function MediaAdmin() {
   usePageTitle('Admin · Videos');
   const { settings, refresh } = useSettings();
-  const { toast } = useToast();
+  const { toast, confirm } = useToast();
   const { data: categories } = useFetch(() => api.get<Category[]>('/admin/categories'), []);
   const catOptions = [{ value: '', label: '— None —' }, ...(categories || []).map((c) => ({ value: c.slug, label: c.name }))];
 
@@ -41,6 +42,18 @@ export function MediaAdmin() {
     { key: 'published', label: 'Published', type: 'toggle', defaultOn: true, hint: 'Turn off to hide this video from visitors (draft).' },
   ];
 
+  const bulk = async (ids: string[], action: string, done: () => void, category?: string) => {
+    if (action === 'delete' && !(await confirm(`Delete ${ids.length} video(s)? This can't be undone.`, { confirmLabel: 'Delete' }))) return;
+    try {
+      const r = await api.post<{ count: number }>('/admin/media/bulk', { ids, action, category });
+      toast(`${r.count} video(s) updated`);
+      if (action === 'delete') await refresh();
+      done();
+    } catch (x: any) {
+      toast(x.message, 'error');
+    }
+  };
+
   const feature = async (m: MediaItem) => {
     const on = settings.featuredMediaId === m.id;
     try {
@@ -55,8 +68,31 @@ export function MediaAdmin() {
   return (
     <ResourceAdmin<MediaItem>
       title="Videos"
-      description="Add, edit, publish and feature videos."
+      description="Add, edit, publish and feature videos. Import many at once from JSON."
       endpoint="media"
+      toolbar={(reload) => (
+        <>
+          <ImportVideosButton onDone={reload} />
+          <ExportVideosButton />
+        </>
+      )}
+      bulkBar={(ids, done) => (
+        <>
+          <Button variant="secondary" onClick={() => bulk(ids, 'publish', done)}>Publish</Button>
+          <Button variant="secondary" onClick={() => bulk(ids, 'unpublish', done)}>Unpublish</Button>
+          <Select
+            aria-label="Move selected to category"
+            className="w-auto"
+            value=""
+            onChange={(e) => e.target.value && bulk(ids, 'category', done, e.target.value === '__none' ? '' : e.target.value)}
+          >
+            <option value="">Move to category…</option>
+            {(categories || []).map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+            <option value="__none">— No category —</option>
+          </Select>
+          <Button variant="danger" onClick={() => bulk(ids, 'delete', done)}>Delete</Button>
+        </>
+      )}
       noun="video"
       defaults={{ title: '', published: true, isPremium: false, tags: [], mediaType: 'video' }}
       fields={fields}

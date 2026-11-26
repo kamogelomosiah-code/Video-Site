@@ -34,15 +34,36 @@ export async function connect(): Promise<void> {
       await client.connect();
       mongo = client.db(config.mongoDb);
       bucket = new GridFSBucket(mongo, { bucketName: 'uploads' });
-      await Promise.all([
-        mongo.collection('sessions').createIndex({ token: 1 }),
-        mongo.collection('media').createIndex({ id: 1 }),
-        mongo.collection('users').createIndex({ id: 1 }),
-      ]).catch(() => {});
-      console.log(`[db] Connected to MongoDB (${config.mongoDb})`);
+      const indexes: [string, Record<string, 1 | -1>, Record<string, any>?][] = [
+        ['users', { id: 1 }, { unique: true }],
+        ['users', { email: 1 }, { unique: true, partialFilterExpression: { email: { $type: 'string' } } }],
+        ['users', { username: 1 }],
+        ['sessions', { token: 1 }, { unique: true }],
+        ['sessions', { userId: 1 }],
+        ['media', { id: 1 }, { unique: true }],
+        ['media', { published: 1, createdAt: -1 }],
+        ['comments', { mediaId: 1 }],
+        ['passwordResetCodes', { userId: 1 }],
+      ];
+      for (const [col, keys, opts] of indexes) {
+        // An existing database may already hold duplicates; keep running and say so.
+        await mongo.collection(col).createIndex(keys, opts || {}).catch((e) =>
+          console.warn(`[db] Could not create index on ${col} ${JSON.stringify(keys)}: ${e.message}`),
+        );
+      }
+      console.log(`[db] Connected to MongoDB (database "${config.mongoDb}")`);
       return;
     } catch (err: any) {
-      console.error('[db] MongoDB connection failed, using data.json instead:', err.message);
+      const hint = /auth/i.test(err.message)
+        ? 'Check the username/password in MONGODB_URI.'
+        : /ENOTFOUND|querySrv|timed out|Server selection/i.test(err.message)
+          ? "Check the cluster address, and in Atlas → Network Access allow your server's IP (or 0.0.0.0/0)."
+          : '';
+      if (config.isProd) {
+        // In production, never silently fall back to a throwaway local file.
+        throw new Error(`MongoDB connection failed: ${err.message} ${hint}`);
+      }
+      console.error(`[db] MongoDB connection failed (${err.message}). ${hint} Using data.json instead.`);
       mongo = null;
     }
   }

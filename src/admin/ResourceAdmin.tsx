@@ -31,7 +31,9 @@ interface Props<T> {
   searchText: (row: T) => string;
   sort?: (a: T, b: T) => number;
   rowActions?: (row: T, reload: () => void) => ReactNode;
-  toolbar?: ReactNode;
+  toolbar?: ReactNode | ((reload: () => void) => ReactNode);
+  /** Show row checkboxes; renders this bar when some rows are selected. */
+  bulkBar?: (selectedIds: string[], done: () => void) => ReactNode;
 }
 
 function ProductsEditor({ value, onChange }: { value: any[]; onChange: (v: any[]) => void }) {
@@ -129,6 +131,17 @@ export default function ResourceAdmin<T extends { id: string }>(p: Props<T>) {
   const [draft, setDraft] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const toggleRow = (id: string) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  const bulkDone = () => {
+    setSelected(new Set());
+    reload();
+  };
 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -210,7 +223,7 @@ export default function ResourceAdmin<T extends { id: string }>(p: Props<T>) {
           {p.description && <p className="text-sm text-zinc-400">{p.description}</p>}
         </div>
         <div className="flex gap-2">
-          {p.toolbar}
+          {typeof p.toolbar === 'function' ? p.toolbar(reload) : p.toolbar}
           <Button onClick={openCreate}><Plus className="h-4 w-4" /> Add {p.noun}</Button>
         </div>
       </div>
@@ -218,6 +231,13 @@ export default function ResourceAdmin<T extends { id: string }>(p: Props<T>) {
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${p.title.toLowerCase()}…`} className="pl-9" aria-label={`Search ${p.title}`} />
       </div>
+      {p.bulkBar && selected.size > 0 && (
+        <div className="sticky top-14 z-20 mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-brand-500/40 bg-zinc-950 p-3 shadow-lg lg:top-2" data-testid="bulk-bar">
+          <span className="mr-2 text-sm font-medium">{selected.size} selected</span>
+          {p.bulkBar([...selected], bulkDone)}
+          <Button variant="ghost" className="ml-auto" onClick={() => setSelected(new Set())}>Clear</Button>
+        </div>
+      )}
       {error && <Alert>{error}</Alert>}
       {loading ? (
         <Spinner />
@@ -230,13 +250,29 @@ export default function ResourceAdmin<T extends { id: string }>(p: Props<T>) {
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="bg-zinc-900/70 text-xs uppercase tracking-wide text-zinc-500">
               <tr>
+                {p.bulkBar && (
+                  <th className="w-10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all shown"
+                      className="accent-amber-500"
+                      checked={rows.length > 0 && rows.every((r) => selected.has(r.id))}
+                      onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((r) => r.id)) : new Set())}
+                    />
+                  </th>
+                )}
                 {p.columns.map((c) => <th key={c.label} className={`px-4 py-3 font-medium ${c.className || ''}`}>{c.label}</th>)}
                 <th className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-900">
               {rows.map((row) => (
-                <tr key={row.id} className="hover:bg-zinc-900/40" data-testid="admin-row">
+                <tr key={row.id} className={selected.has(row.id) ? 'bg-brand-500/5' : 'hover:bg-zinc-900/40'} data-testid="admin-row">
+                  {p.bulkBar && (
+                    <td className="px-4 py-3">
+                      <input type="checkbox" aria-label="Select row" className="accent-amber-500" checked={selected.has(row.id)} onChange={() => toggleRow(row.id)} />
+                    </td>
+                  )}
                   {p.columns.map((c) => <td key={c.label} className={`px-4 py-3 align-middle ${c.className || ''}`}>{c.render(row)}</td>)}
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">

@@ -33,7 +33,9 @@ async function main() {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', config.trustProxyHops);
-  app.use(express.json({ limit: '1mb' }));
+  const smallJson = express.json({ limit: '1mb' });
+  // Admin routes parse their own (larger) bodies after the admin check — see routes/admin.ts.
+  app.use((req, res, next) => (req.path.startsWith('/api/admin') ? next() : smallJson(req, res, next)));
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');

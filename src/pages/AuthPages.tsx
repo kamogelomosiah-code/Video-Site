@@ -219,101 +219,26 @@ export function RegisterPage() {
 
 export function ForgotPasswordPage() {
   usePageTitle('Reset password');
-  const [email, setEmail] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [sent, setSent] = useState<{ devResetUrl?: string } | null>(null);
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      setSent(await api.post('/auth/forgot-password', { email: email.trim() }));
-    } catch (x: any) {
-      setError(x.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (sent) {
-    return (
-      <Card title="Check your email">
-        <p className="text-sm text-zinc-300">If an account exists for <strong>{email}</strong>, we've sent a link to reset your password. It expires in 30 minutes.</p>
-        {sent.devResetUrl && (
-          <div className="mt-4">
-            <Alert kind="info">
-              No email service is configured (development mode).{' '}
-              <a href={sent.devResetUrl} className="text-brand-400 underline">Open the reset link</a>
-            </Alert>
-          </div>
-        )}
-        <Link to="/login" className="mt-6 inline-block text-sm text-brand-400 hover:underline">Back to sign in</Link>
-      </Card>
-    );
-  }
-  return (
-    <Card title="Forgot your password?" subtitle="Enter your email and we'll send you a reset link.">
-      <form onSubmit={submit} className="space-y-4">
-        <Field label="Email">
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required autoFocus />
-        </Field>
-        <ErrorList error={error} />
-        <Button type="submit" loading={busy} className="w-full">Send reset link</Button>
-      </form>
-      <Link to="/login" className="mt-6 inline-block text-sm text-zinc-400 hover:text-white">← Back to sign in</Link>
-    </Card>
-  );
-}
-
-export function ResetPasswordPage() {
-  usePageTitle('Choose a new password');
-  const [params] = useSearchParams();
-  const token = params.get('token') || '';
   const { setSession } = useAuth();
   const navigate = useNavigate();
-  const [state, setState] = useState<{ loading: boolean; email?: string; invalid?: string }>({ loading: true });
+  const [params] = useSearchParams();
+  const [step, setStep] = useState<'email' | 'code' | 'password'>('email');
+  const [email, setEmail] = useState(params.get('email') || '');
+  const [code, setCode] = useState('');
+  const [devCode, setDevCode] = useState<string | undefined>();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [failures, setFailures] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
+  const [info, setInfo] = useState('');
 
-  useEffect(() => {
-    if (!token) return setState({ loading: false, invalid: 'This reset link is missing its token.' });
-    api
-      .get<{ email: string }>(`/auth/reset-password/${encodeURIComponent(token)}`)
-      .then((r) => setState({ loading: false, email: r.email }))
-      .catch((x) => setState({ loading: false, invalid: x.message }));
-  }, [token]);
-
-  if (state.loading) return <Spinner />;
-  if (state.invalid) {
-    return (
-      <Card title="Link expired">
-        <p className="text-sm text-zinc-300">{state.invalid}</p>
-        <Link to="/forgot-password" className="mt-4 inline-block text-sm text-brand-400 hover:underline">Request a new link</Link>
-      </Card>
-    );
-  }
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
     setError('');
     setFailures([]);
-    const pw = checkPassword(password, { email: state.email });
-    if (!pw.ok) {
-      setError('Please choose a stronger password.');
-      setFailures(pw.failures);
-      return;
-    }
-    if (password !== confirm) return setError('Passwords do not match.');
-    setBusy(true);
     try {
-      const r = await api.post<{ user: User; token: string }>('/auth/reset-password', { token, password });
-      setSession(r.user, r.token);
-      navigate(r.user.role === 'ADMIN' ? '/admin' : '/', { replace: true });
+      await fn();
     } catch (x: any) {
       setError(x.message);
       setFailures(x.data?.passwordFailures || []);
@@ -322,19 +247,101 @@ export function ResetPasswordPage() {
     }
   };
 
+  const sendCode = (e?: FormEvent) => {
+    e?.preventDefault();
+    return run(async () => {
+      const r = await api.post<{ devCode?: string }>('/auth/forgot-password', { email: email.trim() });
+      setDevCode(r.devCode);
+      setCode('');
+      setStep('code');
+      setInfo(`If an account exists for ${email.trim()}, a 6-digit code is on its way. Check your inbox and spam folder.`);
+    });
+  };
+
+  const verify = (e: FormEvent) => {
+    e.preventDefault();
+    return run(async () => {
+      await api.post('/auth/verify-reset-code', { email: email.trim(), code });
+      setInfo('');
+      setStep('password');
+    });
+  };
+
+  const save = (e: FormEvent) => {
+    e.preventDefault();
+    const pw = checkPassword(password, { email: email.trim() });
+    if (!pw.ok) {
+      setError('Please choose a stronger password.');
+      setFailures(pw.failures);
+      return;
+    }
+    if (password !== confirm) return setError('Passwords do not match.');
+    return run(async () => {
+      const r = await api.post<{ user: User; token: string }>('/auth/reset-password', { email: email.trim(), code, password });
+      setSession(r.user, r.token);
+      navigate(r.user.role === 'ADMIN' ? '/admin' : '/', { replace: true });
+    });
+  };
+
+  const stepLabel = { email: 'Step 1 of 3', code: 'Step 2 of 3', password: 'Step 3 of 3' }[step];
+
   return (
-    <Card title="Choose a new password" subtitle={state.email ? `For ${state.email}` : undefined}>
-      <form onSubmit={submit} className="space-y-4">
-        <Field label="New password">
-          <PasswordInput value={password} onChange={setPassword} autoComplete="new-password" label="New password" />
-        </Field>
-        <PasswordStrength password={password} context={{ email: state.email }} />
-        <Field label="Confirm new password" error={confirm && confirm !== password ? 'Passwords do not match' : undefined}>
-          <PasswordInput value={confirm} onChange={setConfirm} autoComplete="new-password" label="Confirm new password" />
-        </Field>
-        <ErrorList error={error} failures={failures} />
-        <Button type="submit" loading={busy} className="w-full">Save password & sign in</Button>
-      </form>
+    <Card
+      title={step === 'password' ? 'Choose a new password' : step === 'code' ? 'Enter your code' : 'Forgot your password?'}
+      subtitle={<span><span className="text-brand-400">{stepLabel}</span> · {step === 'email' ? "We'll email you a 6-digit code." : email}</span>}
+    >
+      {info && <div className="mb-4"><Alert kind="info">{info}</Alert></div>}
+      {devCode && step === 'code' && (
+        <div className="mb-4"><Alert kind="info">No email service is configured (development). Your code is <strong className="font-mono">{devCode}</strong>.</Alert></div>
+      )}
+
+      {step === 'email' && (
+        <form onSubmit={sendCode} className="space-y-4">
+          <Field label="Email">
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required autoFocus />
+          </Field>
+          <ErrorList error={error} />
+          <Button type="submit" loading={busy} className="w-full">Send code</Button>
+        </form>
+      )}
+
+      {step === 'code' && (
+        <form onSubmit={verify} className="space-y-4">
+          <Field label="6-digit code">
+            <Input
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              className="text-center font-mono text-lg tracking-[0.5em]"
+              required
+              autoFocus
+            />
+          </Field>
+          <ErrorList error={error} />
+          <Button type="submit" loading={busy} disabled={code.length !== 6} className="w-full">Continue</Button>
+          <div className="flex justify-between text-sm">
+            <button type="button" onClick={() => { setStep('email'); setInfo(''); setError(''); }} className="text-zinc-400 hover:text-white">Use a different email</button>
+            <button type="button" onClick={() => sendCode()} disabled={busy} className="text-brand-400 hover:underline disabled:opacity-50">Send a new code</button>
+          </div>
+        </form>
+      )}
+
+      {step === 'password' && (
+        <form onSubmit={save} className="space-y-4">
+          <Field label="New password">
+            <PasswordInput value={password} onChange={setPassword} autoComplete="new-password" label="New password" />
+          </Field>
+          <PasswordStrength password={password} context={{ email }} />
+          <Field label="Confirm new password" error={confirm && confirm !== password ? 'Passwords do not match' : undefined}>
+            <PasswordInput value={confirm} onChange={setConfirm} autoComplete="new-password" label="Confirm new password" />
+          </Field>
+          <ErrorList error={error} failures={failures} />
+          <Button type="submit" loading={busy} className="w-full">Save password & sign in</Button>
+        </form>
+      )}
+
+      <Link to="/login" className="mt-6 inline-block text-sm text-zinc-400 hover:text-white">← Back to sign in</Link>
     </Card>
   );
 }

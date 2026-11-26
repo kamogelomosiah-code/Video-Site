@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { db, newId } from '../db';
 import { config } from '../config';
 import { checkPassword } from '../../shared/password';
-import { sendPasswordResetEmail } from '../email';
+import { sendResetCode } from '../mail/mailer.js';
+import { randomInt, timingSafeEqual } from 'crypto';
+import { getSettings } from './public';
 import {
   hashPassword, verifyPassword, createSession, deleteSession, bearer, publicUser, requireUser,
   hit, lockedFor, clearLimit, tooMany, clientIp, isEmail, randomToken, sha256, logActivity,
@@ -128,6 +130,14 @@ authRouter.put('/profile', requireUser, async (req, res) => {
   res.json({ user: publicUser(user) });
 });
 
+// --- Password reset with an emailed 6-digit code ---
+// 1. POST /forgot-password { email }            → emails a code (same reply whether or not the account exists)
+// 2. POST /verify-reset-code { email, code }    → optional check so the page can move to "choose password"
+// 3. POST /reset-password { email, code, password } → sets the password and signs the user in
+
+const codeHash = (userId: string, code: string) => sha256(`${userId}:${code}`);
+const sameHash = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+
 authRouter.post('/forgot-password', async (req, res) => {
   const target = String(req.body?.email || '').trim();
   if (!target) return res.status(400).json({ error: 'Email is required' });
@@ -136,55 +146,66 @@ authRouter.post('/forgot-password', async (req, res) => {
   if (wait) return tooMany(res, wait);
 
   const user: any = await findByLogin(target);
-  let devResetUrl: string | undefined;
-  if (user?.email) {
-    await db.removeWhere('passwordResetTokens', { userId: user.id, used: false });
-    const token = randomToken();
-    await db.put('passwordResetTokens', {
+  let devCode: string | undefined;
+  if (user?.email && !user.disabled) {
+    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    await db.removeWhere('passwordResetCodes', { userId: user.id });
+    await db.put('passwordResetCodes', {
       id: newId(),
       userId: user.id,
-      tokenHash: sha256(token),
-      expiresAt: new Date(Date.now() + config.resetTtlMs).toISOString(),
-      used: false,
+      codeHash: codeHash(user.id, code),
+      attempts: 0,
+      expiresAt: new Date(Date.now() + config.resetCodeTtlMs).toISOString(),
       createdAt: new Date().toISOString(),
     });
-    const origin = config.appUrl || req.headers.origin || `${req.protocol}://${req.get('host')}`;
-    const link = `${origin}/reset-password?token=${token}`;
-    const sent = await sendPasswordResetEmail(user.email, link);
-    // Local development without an email provider: show the link on screen (never for admins or in production).
-    if (sent.provider === 'console' && !config.isProd && user.role !== 'ADMIN') devResetUrl = link;
+    const settings = await getSettings();
+    const sent = await sendResetCode(user.email, code, { siteName: settings.siteName, minutes: config.resetCodeTtlMs / 60000 });
+    // Local development without an email service: show the code on screen (never in production, never for admins).
+    if (sent.provider === 'console' && !config.isProd && user.role !== 'ADMIN') devCode = code;
   }
-  // Same response whether or not the account exists, so emails can't be probed.
-  res.json({ ok: true, devResetUrl });
+  res.json({ ok: true, devCode });
 });
 
-async function validResetToken(token: string) {
-  if (!token) return null;
-  const row: any = await db.findOne('passwordResetTokens', { tokenHash: sha256(token) });
-  if (!row || row.used || new Date(row.expiresAt).getTime() < Date.now()) return null;
-  return row;
+/** Returns the reset record if the code is right; counts wrong guesses and locks after too many. */
+async function checkCode(email: string, code: string): Promise<{ user: any; row: any } | { error: string; status: number }> {
+  const generic = { error: 'That code is incorrect or has expired. Request a new one.', status: 400 };
+  const user: any = await findByLogin(email);
+  if (!user || !/^\d{6}$/.test(code)) return generic;
+  const row: any = await db.findOne('passwordResetCodes', { userId: user.id });
+  if (!row || new Date(row.expiresAt).getTime() < Date.now()) return generic;
+  if (row.attempts >= config.resetCodeMaxAttempts) {
+    return { error: 'Too many wrong codes. Request a new one.', status: 429 };
+  }
+  if (!sameHash(row.codeHash, codeHash(user.id, code))) {
+    await db.put('passwordResetCodes', { ...row, attempts: (row.attempts || 0) + 1 });
+    const left = config.resetCodeMaxAttempts - (row.attempts || 0) - 1;
+    return { error: left > 0 ? `That code is incorrect. ${left} ${left === 1 ? 'try' : 'tries'} left.` : 'Too many wrong codes. Request a new one.', status: 400 };
+  }
+  return { user, row };
 }
 
-authRouter.get('/reset-password/:token', async (req, res) => {
-  const row = await validResetToken(String(req.params.token));
-  if (!row) return res.status(400).json({ error: 'This reset link is invalid or has expired.' });
-  const user: any = await db.get('users', row.userId);
-  res.json({ ok: true, email: user?.email });
+authRouter.post('/verify-reset-code', async (req, res) => {
+  const wait = hit(`verify-ip:${clientIp(req)}`, 30, 15 * 60 * 1000);
+  if (wait) return tooMany(res, wait);
+  const r = await checkCode(String(req.body?.email || ''), String(req.body?.code || '').trim());
+  if ('error' in r) return res.status(r.status).json({ error: r.error });
+  res.json({ ok: true });
 });
 
 authRouter.post('/reset-password', async (req, res) => {
-  const { token, password } = req.body || {};
-  const row = await validResetToken(String(token || ''));
-  if (!row) return res.status(400).json({ error: 'This reset link is invalid or has expired.' });
-  const user: any = await db.get('users', row.userId);
-  if (!user) return res.status(400).json({ error: 'This reset link is invalid or has expired.' });
+  const wait = hit(`verify-ip:${clientIp(req)}`, 30, 15 * 60 * 1000);
+  if (wait) return tooMany(res, wait);
+  const { email, code, password } = req.body || {};
+  const r = await checkCode(String(email || ''), String(code || '').trim());
+  if ('error' in r) return res.status(r.status).json({ error: r.error });
+  const { user } = r;
   const pw = checkPassword(String(password || ''), { email: user.email, name: user.name });
   if (!pw.ok) return res.status(400).json({ error: 'Password does not meet security requirements.', passwordFailures: pw.failures });
 
   user.passwordHash = await hashPassword(String(password));
   await db.put('users', user);
-  await db.put('passwordResetTokens', { ...row, used: true, usedAt: new Date().toISOString() });
-  await db.removeWhere('sessions', { userId: user.id }); // sign out everywhere
-  await logActivity('update', `Password reset for ${user.email}`, user.id);
+  await db.removeWhere('passwordResetCodes', { userId: user.id }); // one use only
+  await db.removeWhere('sessions', { userId: user.id }); // sign out everywhere else
+  await logActivity('update', `Password reset by email code for ${user.email}`, user.id);
   res.json({ user: publicUser(user), token: await createSession(user.id) });
 });

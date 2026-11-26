@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { db, newId, storageMode } from '../db';
 import { requireAdmin, hashPassword, publicUser, logActivity, isEmail } from '../auth';
 import { checkPassword } from '../../shared/password';
@@ -7,6 +7,8 @@ import { getSettings } from './public';
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
+// Larger limit for bulk JSON imports, parsed only once we know the caller is an admin.
+adminRouter.use(express.json({ limit: '10mb' }));
 
 type FieldType = 'string' | 'text' | 'number' | 'boolean' | 'tags' | 'json' | 'url' | 'date' | 'time';
 type Schema = Record<string, FieldType>;
@@ -213,6 +215,114 @@ for (const r of RESOURCES) {
     res.json({ ok: true });
   });
 }
+
+// --- Videos: bulk JSON import / export and bulk actions ---
+
+const MEDIA = RESOURCES.find((r) => r.collection === 'media')!;
+
+// Common alternative key names people use in JSON exports.
+const MEDIA_ALIASES: Record<string, string> = {
+  url: 'externalUrl', link: 'externalUrl', videoUrl: 'externalUrl', embedUrl: 'externalUrl', redirectUrl: 'externalUrl',
+  file: 'sourceUrl', fileUrl: 'sourceUrl', src: 'sourceUrl',
+  thumbnail: 'thumbnailUrl', thumb: 'thumbnailUrl', image: 'thumbnailUrl', poster: 'thumbnailUrl',
+  name: 'title', creator: 'creatorName', author: 'creatorName', premium: 'isPremium',
+};
+
+function normalizeMediaInput(raw: any): any {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Each item must be an object');
+  const out: any = {};
+  for (const [k, v] of Object.entries(raw)) {
+    const key = MEDIA_ALIASES[k] && !(MEDIA_ALIASES[k] in raw) ? MEDIA_ALIASES[k] : k;
+    out[key] = v;
+  }
+  // A plain web link in sourceUrl that isn't a video file is really an external link.
+  if (out.sourceUrl && !out.externalUrl && !/\.(mp4|webm|m4v|mov|ogg)(\?|$)/i.test(out.sourceUrl) && !String(out.sourceUrl).startsWith('/api/files/')) {
+    out.externalUrl = out.sourceUrl;
+    delete out.sourceUrl;
+  }
+  return out;
+}
+
+adminRouter.get('/media/export', async (_req, res) => {
+  const items = await db.list('media');
+  res.setHeader('Content-Disposition', `attachment; filename="videos-${new Date().toISOString().slice(0, 10)}.json"`);
+  res.json(items);
+});
+
+/**
+ * Body: { items: [...], mode: "create" | "upsert", dryRun?: boolean }
+ * - create: every item becomes a new video
+ * - upsert: items whose "id" matches an existing video update it; others are created
+ * dryRun validates everything and reports what would happen without saving.
+ */
+adminRouter.post('/media/import', async (req, res) => {
+  const user = (req as any).user;
+  const { items, mode = 'create', dryRun = false } = req.body || {};
+  if (!Array.isArray(items)) return res.status(400).json({ error: 'Expected a JSON array of videos (or { "items": [...] })' });
+  if (items.length === 0) return res.status(400).json({ error: 'The list is empty' });
+  if (items.length > 2000) return res.status(400).json({ error: 'Import at most 2000 videos at a time' });
+
+  const existing = new Map((await db.list('media')).map((m: any) => [m.id, m]));
+  const result = { created: 0, updated: 0, failed: [] as { index: number; title: string; error: string }[] };
+  const now = new Date().toISOString();
+
+  for (const [index, raw] of items.entries()) {
+    try {
+      const input = normalizeMediaInput(raw);
+      const prior = mode === 'upsert' && input.id ? existing.get(String(input.id)) : null;
+      let doc: any;
+      if (prior) {
+        doc = { ...prior, ...clean(input, MEDIA.schema, true), id: prior.id, updatedAt: now };
+      } else {
+        doc = {
+          ...MEDIA.defaults!(),
+          ...clean(input, MEDIA.schema, false),
+          id: mode === 'upsert' && input.id && /^[\w-]{1,64}$/.test(String(input.id)) ? String(input.id) : newId(),
+          createdAt: input.createdAt && !isNaN(Date.parse(input.createdAt)) ? new Date(input.createdAt).toISOString() : now,
+          updatedAt: now,
+        };
+      }
+      await MEDIA.beforeSave!(doc, prior, user);
+      if (!dryRun) await db.put('media', doc);
+      existing.set(doc.id, doc);
+      prior ? result.updated++ : result.created++;
+    } catch (e: any) {
+      result.failed.push({ index, title: String(raw?.title ?? raw?.name ?? `Item ${index + 1}`).slice(0, 80), error: e.message });
+    }
+  }
+  if (!dryRun && (result.created || result.updated)) {
+    await logActivity('import', `Imported videos from JSON: ${result.created} added, ${result.updated} updated, ${result.failed.length} skipped`, user.id);
+  }
+  res.json({ ...result, dryRun: !!dryRun });
+});
+
+/** Body: { ids: string[], action: "publish" | "unpublish" | "delete" | "category", category?: string } */
+adminRouter.post('/media/bulk', async (req, res) => {
+  const user = (req as any).user;
+  const { ids, action, category } = req.body || {};
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'Select at least one video' });
+  if (!['publish', 'unpublish', 'delete', 'category'].includes(action)) return res.status(400).json({ error: 'Unknown action' });
+  const settings = await db.getSettings();
+  let done = 0;
+  for (const id of ids.map(String)) {
+    const m: any = await db.get('media', id);
+    if (!m) continue;
+    if (action === 'delete') {
+      await db.remove('media', id);
+      await db.removeWhere('comments', { mediaId: id });
+      if (settings.featuredMediaId === id) await db.setSettings({ featuredMediaId: null });
+    } else {
+      if (action === 'publish') m.published = true;
+      if (action === 'unpublish') m.published = false;
+      if (action === 'category') m.category = String(category || '');
+      m.updatedAt = new Date().toISOString();
+      await db.put('media', m);
+    }
+    done++;
+  }
+  await logActivity(action === 'delete' ? 'delete' : 'update', `Bulk ${action} on ${done} video(s)${action === 'category' ? ` → ${category || 'none'}` : ''}`, user.id);
+  res.json({ ok: true, count: done });
+});
 
 // --- Users ---
 

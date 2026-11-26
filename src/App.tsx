@@ -8,7 +8,7 @@ import Home from './pages/Home';
 import Watch from './pages/Watch';
 import { CreatorDetailPage, CreatorsPage } from './pages/Creators';
 import EventsPage from './pages/Events';
-import { ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage } from './pages/AuthPages';
+import { ForgotPasswordPage, LoginPage, RegisterPage } from './pages/AuthPages';
 import AccountPage from './pages/Account';
 import { LegalPage, MaintenancePage, NotFoundPage } from './pages/Misc';
 
@@ -25,7 +25,7 @@ function legacyRedirect(search: string): string | null {
     directory: '/creators',
     auth: '/login',
     'admin-dashboard': '/admin',
-    'reset-password': `/reset-password?token=${p.get('token') || ''}`,
+    'reset-password': '/forgot-password',
     search: `/?q=${encodeURIComponent(p.get('q') || '')}`,
     profile: '/account',
   };
@@ -65,7 +65,7 @@ export default function App() {
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
         <Route path="forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="reset-password" element={<ResetPasswordPage />} />
+        <Route path="reset-password" element={<Navigate to="/forgot-password" replace />} />
         <Route path="account" element={<AccountPage />} />
         <Route path="privacy" element={<LegalPage kind="privacy" />} />
         <Route path="terms" element={<LegalPage kind="terms" />} />
