@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Mail, Lock, User, ArrowRight, MailCheck, AlertCircle, Eye, EyeOff, ShieldCheck, Sparkles, CheckCircle2, ChevronLeft } from 'lucide-react';
 import { UserRole } from '../types';
 import { api } from '../services/api';
+import PasswordStrength from '../components/PasswordStrength';
+import { checkPassword } from '../utils/password';
 
 interface AuthProps {
   onLogin: (data: any) => void;
@@ -20,6 +22,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigateBack, onNavigateReset })
   // Form State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordFailures, setPasswordFailures] = useState<string[]>([]);
   const [name, setName] = useState('');
   const [role, setRole] = useState<UserRole>(UserRole.CONSUMER);
   const [pin, setPin] = useState('');
@@ -48,6 +52,28 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigateBack, onNavigateReset })
     setError('');
 
     const pinToSend = pin.trim();
+    setPasswordFailures([]);
+
+    if (authMode === 'register') {
+      const cleanEmail = email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) {
+        setError('Please enter a valid email address.');
+        setIsLoading(false);
+        return;
+      }
+      const pw = checkPassword(password, { email: cleanEmail, name: name.trim() });
+      if (!pw.ok) {
+        setError('Please choose a stronger password.');
+        setPasswordFailures(pw.failures);
+        setIsLoading(false);
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('Passwords do not match.');
+        setIsLoading(false);
+        return;
+      }
+    }
 
     try {
       if (authMode === 'login') {
@@ -72,6 +98,9 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigateBack, onNavigateReset })
           setError('Security PIN required for administrator access. Please enter your 6-digit PIN below.');
         }
         return;
+      }
+      if (Array.isArray(err?.data?.passwordFailures)) {
+        setPasswordFailures(err.data.passwordFailures);
       }
       setError(err.message || 'Authentication failed. Please check your credentials and try again.');
     } finally {
@@ -101,6 +130,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigateBack, onNavigateReset })
     setError('');
     setEmail('');
     setPassword('');
+    setConfirmPassword('');
+    setPasswordFailures([]);
     setName('');
     setPin('');
     setNeedsPin(false);
@@ -234,6 +265,35 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigateBack, onNavigateReset })
           </div>
         </div>
 
+        {authMode === 'register' && (
+          <>
+            {password && (
+              <PasswordStrength password={password} context={{ email: email.trim().toLowerCase(), name: name.trim() }} />
+            )}
+            <div className="space-y-1.5">
+              <label className="text-xs sm:text-sm font-medium text-zinc-300">Confirm Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className={`w-full bg-zinc-900/90 border rounded-xl py-3 pl-10 pr-4 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-yellow-500/50 transition-all ${
+                    confirmPassword && confirmPassword !== password ? 'border-red-500/70' : 'border-zinc-800 focus:border-yellow-500'
+                  }`}
+                  placeholder="Re-enter your password"
+                  autoComplete="new-password"
+                  aria-label="Confirm password"
+                />
+              </div>
+              {confirmPassword && confirmPassword !== password && (
+                <p className="text-[11px] text-red-400">Passwords do not match</p>
+              )}
+            </div>
+          </>
+        )}
+
         {/* Security PIN Gate (Required for Admin accounts or optionally entered) */}
         {authMode === 'login' && isPinRequired && (
           <div className="space-y-1.5 p-3.5 bg-yellow-500/10 border border-yellow-500/30 rounded-xl animate-fade-in">
@@ -320,7 +380,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onNavigateBack, onNavigateReset })
         {error && (
           <div className="bg-red-950/70 border border-red-800/80 text-red-200 text-xs sm:text-sm rounded-xl p-3 flex items-start gap-2.5 animate-fade-in">
             <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-            <span className="leading-snug">{error}</span>
+            <div className="leading-snug">
+              <span>{error}</span>
+              {passwordFailures.length > 0 && (
+                <ul className="mt-1.5 list-disc pl-4 space-y-0.5 text-red-300/90">
+                  {passwordFailures.map((f) => <li key={f}>{f}</li>)}
+                </ul>
+              )}
+            </div>
           </div>
         )}
 

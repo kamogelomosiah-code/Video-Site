@@ -28,22 +28,25 @@ export function checkPassword(password: string, context?: PasswordPolicyContext)
   if (!/[0-9]/.test(password)) {
     failures.push("Must contain at least one number");
   }
-  if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+  if (!/[^A-Za-z0-9\s]/.test(password)) {
     failures.push("Must contain at least one special character");
   }
 
   if (context) {
     const { email, name, username } = context;
+    const lower = password.toLowerCase();
+    // Only check meaningful fragments (3+ chars) so short names/emails don't block everything.
     if (email) {
       const emailLocal = email.split('@')[0];
-      if (password.toLowerCase().includes(emailLocal.toLowerCase())) {
+      if (emailLocal.length >= 3 && lower.includes(emailLocal.toLowerCase())) {
         failures.push("Password cannot contain parts of your email address");
       }
     }
-    if (name && password.toLowerCase().includes(name.toLowerCase())) {
+    const nameParts = (name || '').toLowerCase().split(/\s+/).filter(part => part.length >= 3);
+    if (nameParts.some(part => lower.includes(part))) {
       failures.push("Password cannot contain your name");
     }
-    if (username && password.toLowerCase().includes(username.toLowerCase())) {
+    if (username && username.length >= 3 && !username.includes('@') && lower.includes(username.toLowerCase())) {
       failures.push("Password cannot contain your username");
     }
   }

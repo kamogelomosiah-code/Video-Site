@@ -15,7 +15,7 @@ const PasswordStrength: React.FC<PasswordStrengthProps> = ({ password = "", cont
   if (/[A-Z]/.test(password)) score++;
   if (/[a-z]/.test(password)) score++;
   if (/[0-9]/.test(password)) score++;
-  if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) score++;
+  if (/[^A-Za-z0-9\s]/.test(password)) score++;
 
   let strengthColor = "bg-zinc-800";
   let strengthText = "Very Weak";

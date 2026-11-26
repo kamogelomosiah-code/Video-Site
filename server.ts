@@ -698,6 +698,55 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   return res.status(401).json({ error: "Unauthorized — provide valid ADMIN session token or X-Admin-Key header" });
 }
 
+// --- Auth helpers: input validation & brute-force protection ---
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function isValidEmail(email: string): boolean {
+  return EMAIL_RE.test(email) && email.length <= 254;
+}
+
+/**
+ * Tiny in-memory fixed-window limiter. Good enough for a single server
+ * instance; keyed by IP + action (+ identifier) so one attacker can't lock
+ * everyone out and one user can't be brute-forced from many IPs.
+ */
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+function rateLimited(key: string, max: number, windowMs: number): number {
+  const now = Date.now();
+  const bucket = rateBuckets.get(key);
+  if (!bucket || bucket.resetAt <= now) {
+    rateBuckets.set(key, { count: 1, resetAt: now + windowMs });
+    return 0;
+  }
+  bucket.count++;
+  if (bucket.count > max) return Math.ceil((bucket.resetAt - now) / 1000);
+  return 0;
+}
+/** Seconds until `key` may try again, without counting this check as an attempt. */
+function lockedFor(key: string, max: number): number {
+  const bucket = rateBuckets.get(key);
+  if (!bucket || bucket.resetAt <= Date.now() || bucket.count < max) return 0;
+  return Math.ceil((bucket.resetAt - Date.now()) / 1000);
+}
+function clearRateLimit(key: string) {
+  rateBuckets.delete(key);
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, b] of rateBuckets) if (b.resetAt <= now) rateBuckets.delete(k);
+}, 10 * 60 * 1000).unref();
+
+function clientIp(req: Request): string {
+  return String(req.ip || req.socket.remoteAddress || "unknown");
+}
+
+function tooMany(res: Response, retryAfter: number) {
+  res.setHeader("Retry-After", String(retryAfter));
+  const mins = Math.max(1, Math.ceil(retryAfter / 60));
+  return res.status(429).json({ error: `Too many attempts. Please try again in ${mins} minute${mins === 1 ? "" : "s"}.` });
+}
+
 function canManageEvent(user: any, event: any): boolean {
   if (!user) return false;
   if (user.role === "ADMIN") return true;
@@ -1165,6 +1214,8 @@ async function ensureSchema(): Promise<void> {
 
 async function startServer() {
   const app = express();
+  // Behind Render/other proxies, use the real client IP for rate limiting.
+  app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS ?? 1));
   const PORT = Number(process.env.PORT) || 3000;
 
   // MongoDB Connection Setup
@@ -1480,11 +1531,21 @@ async function startServer() {
 
   app.post("/api/auth/register", async (req, res) => {
     const { name, email, username, password, role } = req.body || {};
-    if (!email || !password) return res.status(400).json({ error: "email and password required" });
-    if (typeof password !== "string" || password.length < 6) {
-      return res.status(400).json({ error: "Password must be at least 6 characters" });
-    }
+    const regWait = rateLimited(`register:${clientIp(req)}`, 10, 60 * 60 * 1000);
+    if (regWait) return tooMany(res, regWait);
+    if (!email || !password) return res.status(400).json({ error: "Email and password are required" });
     const cleanEmail = String(email).trim().toLowerCase();
+    if (!isValidEmail(cleanEmail)) return res.status(400).json({ error: "Please enter a valid email address" });
+    const cleanName = String(name || "").trim();
+    if (!cleanName) return res.status(400).json({ error: "Please enter your name" });
+    if (cleanName.length > 80) return res.status(400).json({ error: "Name is too long" });
+    if (typeof password !== "string" || password.length > 200) {
+      return res.status(400).json({ error: "Invalid password" });
+    }
+    const regPw = checkPassword(password, { email: cleanEmail, name: cleanName });
+    if (!regPw.ok) {
+      return res.status(400).json({ error: "Password does not meet security requirements.", passwordFailures: regPw.failures });
+    }
     const existing = (await findOneByField("users", "email", email)) || (await findOneByField("users", "email", cleanEmail));
     if (existing) return res.status(409).json({ error: "Email already registered" });
     const cleanUsername = String(username || cleanEmail).trim();
@@ -1498,7 +1559,7 @@ async function startServer() {
     const passwordHash = await hashPassword(password);
     const user: any = {
       id: generateId(),
-      name: name || cleanEmail,
+      name: cleanName,
       username: cleanUsername,
       email: cleanEmail,
       role: safeRole,
@@ -1520,6 +1581,16 @@ async function startServer() {
     }
     const rawIdentifier = String(email).trim();
     const cleanIdentifier = rawIdentifier.toLowerCase();
+    const ipKey = `login-ip:${clientIp(req)}`;
+    const idKey = `login-id:${cleanIdentifier}`;
+    // Counts only failed attempts (cleared on success below).
+    const loginWait = Math.max(lockedFor(ipKey, 30), lockedFor(idKey, 8));
+    if (loginWait) return tooMany(res, loginWait);
+    const failLogin = (body: any) => {
+      rateLimited(ipKey, 30, 15 * 60 * 1000);
+      rateLimited(idKey, 8, 15 * 60 * 1000);
+      return res.status(401).json(body);
+    };
     let user: any = await findOneByField("users", "email", rawIdentifier);
     if (!user) user = await findOneByField("users", "email", cleanIdentifier);
     if (!user) user = await findOneByField("users", "username", rawIdentifier);
@@ -1527,17 +1598,19 @@ async function startServer() {
     if (!user && (cleanIdentifier === ADMIN_EMAIL || cleanIdentifier === ADMIN_USERNAME)) {
       user = await findOneByField("users", "id", "admin-user");
     }
-    if (!user) return res.status(401).json({ error: "Invalid credentials" });
+    if (!user) return failLogin({ error: "Incorrect email/username or password" });
 
     const ok = await verifyPassword(password, user.passwordHash || "");
-    if (!ok) return res.status(401).json({ error: "Invalid credentials" });
+    if (!ok) return failLogin({ error: "Incorrect email/username or password" });
 
     if (user.role === "ADMIN" && user.pin) {
+      // Asking for the PIN is a normal step, not a failed attempt.
       if (!pin) return res.status(401).json({ error: "PIN required", requiresPin: true });
       if (String(pin).trim() !== String(user.pin)) {
-        return res.status(401).json({ error: "Invalid PIN", requiresPin: true });
+        return failLogin({ error: "Invalid PIN", requiresPin: true });
       }
     }
+    clearRateLimit(idKey);
 
     const token = await createSession(user.id);
     res.json({ user: stripSecrets(user), token });
@@ -1558,8 +1631,12 @@ async function startServer() {
 
   app.post("/api/auth/forgot-password", async (req, res) => {
     const { email } = req.body || {};
-    if (!email) return res.status(400).json({ error: "email required" });
+    if (!email) return res.status(400).json({ error: "Email is required" });
     const target = String(email).trim();
+    const forgotWait =
+      rateLimited(`forgot-ip:${clientIp(req)}`, 10, 60 * 60 * 1000) ||
+      rateLimited(`forgot-id:${target.toLowerCase()}`, 3, 15 * 60 * 1000);
+    if (forgotWait) return tooMany(res, forgotWait);
     let user: any = await findOneByField("users", "email", target);
     if (!user) user = await findOneByField("users", "email", target.toLowerCase());
     if (!user) user = await findOneByField("users", "username", target);
@@ -1685,6 +1762,14 @@ async function startServer() {
     }
 
     if (updates.password) {
+      const pw = checkPassword(String(updates.password), {
+        email: updates.email || user.email,
+        name: updates.name || user.name,
+        username: updates.username || user.username,
+      });
+      if (!pw.ok) {
+        return res.status(400).json({ error: "Password does not meet security requirements.", passwordFailures: pw.failures });
+      }
       updates.passwordHash = await hashPassword(updates.password);
       delete updates.password;
     }
@@ -1765,6 +1850,12 @@ async function startServer() {
     }
     if (updates.pin === "" || updates.pin === null) delete updates.pin;
     if (updates.password) {
+      if (!isAdmin) {
+        const pw = checkPassword(String(updates.password), { email: existing.email, name: existing.name, username: existing.username });
+        if (!pw.ok) {
+          return res.status(400).json({ error: "Password does not meet security requirements.", passwordFailures: pw.failures });
+        }
+      }
       updates.passwordHash = await hashPassword(updates.password);
       delete updates.password;
     }
