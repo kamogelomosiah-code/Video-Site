@@ -8,6 +8,7 @@ import Home from './pages/Home';
 import { ForgotPasswordPage, LoginPage, RegisterPage } from './pages/AuthPages';
 import AccountPage from './pages/Account';
 import { LegalPage, MaintenancePage, NotFoundPage } from './pages/Misc';
+import AdvertisePage from './pages/Advertise';
 
 const AdminApp = lazy(() => import('./admin/AdminApp'));
 
@@ -65,6 +66,7 @@ export default function App() {
         <Route path="forgot-password" element={<ForgotPasswordPage />} />
         <Route path="reset-password" element={<Navigate to="/forgot-password" replace />} />
         <Route path="account" element={<AccountPage />} />
+        <Route path="advertise" element={<AdvertisePage />} />
         <Route path="privacy" element={<LegalPage kind="privacy" />} />
         <Route path="terms" element={<LegalPage kind="terms" />} />
         <Route path="*" element={<NotFoundPage />} />

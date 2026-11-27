@@ -95,7 +95,8 @@ export function AdSlot({ slot, className, variant = 'banner' }: { slot: AdSlotId
   if (!settings.adsEnabled || ad === undefined) return null;
   if (!ad && !settings.adsShowPlaceholders) return null;
 
-  const contact = settings.adsContactLink || (settings.contactEmail ? `mailto:${settings.contactEmail}?subject=${encodeURIComponent(`Advertising: ${def.label}`)}` : '');
+  // Where "Advertise here" leads: the admin's own link if set, otherwise the site's enquiry page.
+  const contact = settings.adsContactLink || '/advertise';
   const box = (inner: ReactNode) => (
     <div className="relative w-full overflow-hidden rounded-xl" style={{ aspectRatio: String(def.ratio) }}>
       {inner}

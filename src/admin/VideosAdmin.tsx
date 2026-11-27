@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronDown, Download, ExternalLink, FileUp, Globe, MoreHorizontal, Pencil, Plus, Search, SlidersHorizontal, Star, Trash2 } from 'lucide-react';
 import type { Category } from '../../shared/types';
@@ -32,6 +32,7 @@ function VideoForm({ initial, categories, onDone, onDelete }: { initial: Partial
   const set = (k: string, val: any) => setV((x: any) => ({ ...x, [k]: val }));
   const isNew = !initial.id;
   const [fetching, setFetching] = useState(false);
+  const lastFetched = useRef('');   // the last link we read, so leaving the field twice doesn't read it twice
   // On phones the form starts with just the essentials; the rest is one tap away. Larger screens show it all.
   const [more, setMore] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches);
 
@@ -90,6 +91,14 @@ function VideoForm({ initial, categories, onDone, onDelete }: { initial: Partial
               // Pasting a link into a new video reads the page straight away.
               const t = e.clipboardData.getData('text').trim();
               if (isNew && !v.title && /^https?:\/\//i.test(t)) setTimeout(() => fetchDetails(t), 0);
+            }}
+            onBlur={(e) => {
+              // Typed or dictated links (and phone keyboards that don't fire paste) read the page when you leave the field.
+              const t = e.currentTarget.value.trim();
+              if (isNew && !v.title && /^https?:\/\/[^\s/]+\.[^\s]+/i.test(t) && t !== lastFetched.current) {
+                lastFetched.current = t;
+                fetchDetails(t);
+              }
             }}
             placeholder="https://…"
             inputMode="url"
@@ -405,8 +414,10 @@ export default function VideosAdmin() {
       )}
 
       {selectionCount > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-30 mb-0 flex items-center gap-2 overflow-x-auto border-t border-brand-500/40 bg-zinc-950 p-3 shadow-2xl md:sticky md:inset-x-auto md:bottom-auto md:top-14 md:mb-4 md:flex-wrap md:overflow-visible md:rounded-xl md:border md:shadow-lg lg:top-2 [&>*]:shrink-0 [&>*]:whitespace-nowrap" data-testid="bulk-bar">
+        <div className="fixed inset-x-0 bottom-0 z-30 mb-0 flex flex-wrap items-center gap-2 border-t border-brand-500/40 bg-zinc-950 p-3 shadow-2xl md:sticky md:inset-x-auto md:bottom-auto md:top-14 md:mb-4 md:rounded-xl md:border md:shadow-lg lg:top-2 [&>*]:whitespace-nowrap" data-testid="bulk-bar">
           <span className="text-sm font-medium">{selectionCount.toLocaleString()} selected</span>
+          {/* Delete sits next to the count so it is always visible on a phone (the bar wraps, it never scrolls off-screen). */}
+          <Button variant="danger" loading={busyBulk} onClick={() => bulk('delete')}><Trash2 className="h-4 w-4" /> Delete</Button>
           <Button variant="secondary" loading={busyBulk} onClick={() => bulk('publish')}>Show</Button>
           <Button variant="secondary" loading={busyBulk} onClick={() => bulk('unpublish')}>Hide</Button>
           <Button variant="secondary" loading={busyBulk} onClick={() => bulk('pin')}>Trending</Button>
@@ -419,7 +430,6 @@ export default function VideosAdmin() {
             </Select>
             <Button variant="secondary" disabled={!bulkCat} loading={busyBulk} onClick={() => { bulk('category', { category: bulkCat === '__none' ? '' : bulkCat }); setBulkCat(''); }}>Move</Button>
           </span>
-          <Button variant="danger" loading={busyBulk} onClick={() => bulk('delete')}><Trash2 className="h-4 w-4" /> Delete</Button>
           <Button variant="ghost" className="md:ml-auto" onClick={() => { setSelected(new Set()); setAllMatching(false); }}>Clear</Button>
         </div>
       )}

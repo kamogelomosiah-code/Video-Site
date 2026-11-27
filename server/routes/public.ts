@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 import { db, saveFile, openFile } from '../db';
-import { requireAdmin, hit, clientIp } from '../auth';
+import { requireAdmin, hit, clientIp, tooMany } from '../auth';
 import { DEFAULT_SETTINGS, type SiteSettings } from '../../shared/types';
 import { linkOf, recordClick, toPublic, trending, videoFilter, videoSort } from '../videos';
 
@@ -119,4 +119,45 @@ publicRouter.get('/files/:id', async (req, res) => {
   }
   res.setHeader('Content-Length', end - start + 1);
   f.stream(start, end).on('error', () => res.end()).pipe(res);
+});
+
+
+// --- Advertising enquiries ---------------------------------------------------------------------
+// The "Advertise here" boxes lead to /advertise. The form is sent to MasterAPI, which saves the enquiry
+// and emails it to this site's contact address. Needs MASTERAPI_URL and MASTERAPI_KEY on the server.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const field = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max + 1) : '');
+
+publicRouter.post('/advertise', async (req, res) => {
+  const base = (process.env.MASTERAPI_URL || '').replace(/\/$/, '');
+  const key = process.env.MASTERAPI_KEY || '';
+  if (!base || !key) return res.status(503).json({ error: 'Advertising enquiries are not set up on this site yet.' });
+
+  const b = req.body || {};
+  const name = field(b.name, 100), email = field(b.email, 255), company = field(b.company, 120), website = field(b.website, 200), message = field(b.message, 4000);
+  if (!name || name.length > 100) return res.status(400).json({ error: 'Please enter your name.' });
+  if (!EMAIL_RE.test(email) || email.length > 255) return res.status(400).json({ error: 'Please enter a valid email address.' });
+  if (!message || message.length > 4000) return res.status(400).json({ error: 'Please tell us what you would like to advertise (up to 4000 characters).' });
+  if (company.length > 120 || website.length > 200) return res.status(400).json({ error: 'The company or website is too long.' });
+
+  // Only enquiries that are valid and about to be sent count toward the limit, so a typo never locks anyone out.
+  const wait = hit(`advertise:${clientIp(req)}`, 3, 60 * 60 * 1000);
+  if (wait) return tooMany(res, wait);
+
+  const details = [company && `Company: ${company}`, website && `Website: ${website}`].filter(Boolean).join('\n');
+  const lines = details ? `${details}\n\n${message}` : message;
+  try {
+    const r = await fetch(`${base}/api/v1/mail/contact`, {
+      method: 'POST',
+      headers: { 'x-api-key': key, 'content-type': 'application/json' },
+      body: JSON.stringify({ name, email, subject: `Advertising enquiry${company ? `: ${company}` : ''}`, message: lines }),
+      signal: AbortSignal.timeout(25_000),
+    });
+    const j: any = await r.json().catch(() => ({}));
+    if (!r.ok || !(j.saved || j.emailed)) throw new Error(j.error || `HTTP ${r.status}`);
+    return res.status(201).json({ ok: true });
+  } catch (e: any) {
+    console.warn(`[advertise] MasterAPI failed: ${e.message}`);
+    return res.status(502).json({ error: 'We could not send your enquiry right now. Please try again in a few minutes.' });
+  }
 });

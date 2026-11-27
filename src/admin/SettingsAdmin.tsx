@@ -99,7 +99,7 @@ export default function SettingsAdmin() {
         <Toggle label="Show ads" hint="Master switch for every ad placement." checked={s.adsEnabled} onChange={(v) => set('adsEnabled', v)} />
         <Toggle label="Show “Advertise here” in empty ad spaces" hint="Lets visitors and advertisers see the spaces you have for sale." checked={s.adsShowPlaceholders} onChange={(v) => set('adsShowPlaceholders', v)} />
         {text('adsPlaceholderText', 'Text in empty ad spaces', undefined, 'Advertise here')}
-        {text('adsContactLink', 'Where “Advertise here” links to', 'A page (/…), https:// link or mailto:you@example.com. Leave blank to use the contact email.')}
+        {text('adsContactLink', 'Where “Advertise here” links to', 'A page (/…), https:// link or mailto:you@example.com. Leave blank to use the built-in enquiry page (/advertise).')}
         {text('adsenseClientId', 'Google AdSense client ID', 'Needed for AdSense ads. Visitors are asked for cookie consent first.', 'ca-pub-…')}
         {area('adsTxtContent', 'ads.txt', 'Served at /ads.txt for ad networks.', 3)}
       </Section>
