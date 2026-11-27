@@ -3,6 +3,21 @@
 A simple video directory. Visitors search, browse and click a video to open it on its original website.
 Admins sign in to manage every video, category, ad, user and setting. React + Vite front end, Express + MongoDB back end.
 
+## Where this project is now (27 Nov 2026)
+
+**Status: feature-complete v2, ready to deploy once MongoDB and the admin login are set on the host.** Suggested GitHub name: `elysian-video-site`.
+
+| | |
+|---|---|
+| **Works and tested** | Search, Trending, video grid, click-through to the original site, 18+ gate, sign-up / sign-in, password reset by email code, four ad spaces with schedules, and an admin panel: videos (add, edit, hide, Trending, bulk actions, 1,200-row import), **Add from URL** scraper, categories, ads, users, site settings, activity log |
+| **Phone admin** | The videos list is card-based on phones (tap to edit, one-tap Shown/Hidden and Trending, select mode, full-screen editor) |
+| **Tested with** | API checks (`npm run test:api`), database checks (`npm run check:db`) and browser runs of the admin (27 checks), public site (23) and phone admin (21) during development. The browser scripts are not in the repo yet |
+| **Not verified from the build environment** | Connecting to **MongoDB Atlas**, real email delivery (tested with a local mail sink; Render's free plan may block SMTP, so use Resend there), scraping real external sites |
+
+**Not connected to MasterAPI** (the shared backend): this site has its own MongoDB. Moving it over is an option, not a need.
+
+**Next:** deploy on Render with `APP_SECRET_KEY` set, confirm the Atlas connection from the admin Overview page, and add a first batch of real videos.
+
 ## Run locally
 
 ```bash
