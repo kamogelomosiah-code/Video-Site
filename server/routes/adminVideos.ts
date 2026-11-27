@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { db, newId } from '../db';
 import { logActivity } from '../auth';
 import { scrapeMany } from '../scrape';
+import { notifySearchEngines } from '../seo';
+import { videoPath } from '../../shared/seo';
 import { linkKey, normalizeVideo, slugify } from '../../shared/video';
 import {
   applyClean, clearTrendingCache, prepareVideo, resolveCategories, toAdmin, videoFilter, videoSort,
@@ -71,6 +73,7 @@ adminVideos.post('/', async (req, res) => {
   await db.put('media', doc);
   clearTrendingCache();
   await logActivity('create', `Added video: ${doc.title}`, user.id);
+  if (doc.published !== false) notifySearchEngines([videoPath(doc)]);
   res.status(201).json(toAdmin(doc));
 });
 
@@ -86,6 +89,7 @@ adminVideos.put('/:id', async (req, res) => {
   await db.put('media', doc);
   clearTrendingCache();
   await logActivity('update', `Edited video: ${doc.title}`, user.id);
+  notifySearchEngines(doc.published !== false ? [videoPath(doc)] : []);
   res.json(toAdmin(doc));
 });
 
@@ -197,6 +201,7 @@ adminVideos.post('/import', async (req, res) => {
   }
 
   await db.putMany('media', toSave);
+  notifySearchEngines(toSave.filter((d: any) => d.published !== false).map((d: any) => videoPath(d)));
   if (created || updated) clearTrendingCache();
   res.json({ created, updated, skipped, failed: failed.slice(0, 200), failedCount: failed.length, warnings, newCategories });
 });
@@ -246,6 +251,7 @@ adminVideos.post('/bulk', async (req, res) => {
     count = await db.updateMany('media', filter, { category: slug, categoryKey: slug });
   }
   clearTrendingCache();
+  notifySearchEngines([]); // pages and sitemaps are rebuilt with the change
   await logActivity(action === 'delete' ? 'delete' : 'update', `Bulk ${action}: ${count} video(s)`, user.id);
   res.json({ ok: true, count });
 });

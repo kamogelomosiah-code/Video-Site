@@ -7,6 +7,10 @@ import AgeGate from './AgeGate';
 import ConsentBar from './ConsentBar';
 import { AdSlot } from './Media';
 import { cx } from './ui';
+import { api } from '../lib/api';
+import { useFetch } from '../lib/utils';
+import { categoryPath } from '../../shared/seo';
+import type { Category } from '../../shared/types';
 
 const NAV = [{ to: '/', label: 'Videos', end: true }];
 
@@ -140,8 +144,20 @@ function Announcement() {
 
 function Footer() {
   const { settings } = useSettings();
+  const { data: cats } = useFetch(() => api.get<Category[]>('/categories'), []);
   return (
     <footer className="mt-16 border-t border-zinc-900 px-4 py-10 text-sm text-zinc-500">
+      {!!cats?.length && (
+        // Links to every category on every page: helps people browse and search engines find them.
+        <nav className="mx-auto mb-8 max-w-7xl" aria-label="Browse categories">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">Browse</p>
+          <ul className="flex flex-wrap gap-x-5 gap-y-2">
+            {cats.map((c) => (
+              <li key={c.slug}><Link to={categoryPath(c.slug)} className="hover:text-zinc-300">{c.name} videos</Link></li>
+            ))}
+          </ul>
+        </nav>
+      )}
       <div className="mx-auto flex max-w-7xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p>{settings.footerText || `© ${new Date().getFullYear()} ${settings.siteName}. All rights reserved.`}</p>
@@ -221,10 +237,11 @@ function BottomNav({ onSearch, searchOpen }: { onSearch: () => void; searchOpen:
 export default function Layout() {
   const [searchOpen, setSearchOpen] = useState(false);
   const loc = useLocation();
+  const pageKey = loc.pathname.replace(/^(\/v\/[^/]+)\/.*$/, '$1'); // a video's slug fix-up is not a new page
   useEffect(() => {
     setSearchOpen(false);
     if (!loc.hash) window.scrollTo(0, 0);
-  }, [loc.pathname, loc.search]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pageKey, loc.search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -262,7 +279,7 @@ export default function Layout() {
         )}
       </header>
       {/* Each page rises in as you arrive (keyed by the address, so search typing doesn't re-animate). */}
-      <main key={loc.pathname} className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 animate-page">
+      <main key={pageKey} className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 animate-page">
         <Outlet />
       </main>
       <div className="mx-auto w-full max-w-3xl px-4">

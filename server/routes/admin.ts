@@ -243,6 +243,10 @@ adminRouter.put('/settings', async (req, res) => {
   if (patch.adsContactLink && !/^(https?:\/\/|\/|mailto:)/i.test(patch.adsContactLink)) {
     return res.status(400).json({ error: '"Advertise here" link must start with https://, / or mailto:' });
   }
+  for (const k of ['googleSiteVerification', 'bingSiteVerification']) {
+    // People often paste the whole <meta> tag; keep just the code.
+    if (k in patch) patch[k] = (/content=["']([^"']+)["']/.exec(patch[k])?.[1] || patch[k]).replace(/[^A-Za-z0-9_=-]/g, '').slice(0, 120);
+  }
   if ('adSizes' in patch) {
     // Keep only sensible sizes for known ad spaces; anything else is dropped (blank = defaults).
     const clean = parseAdSizes(patch.adSizes);

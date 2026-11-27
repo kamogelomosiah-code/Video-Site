@@ -7,10 +7,12 @@ import { api } from '../lib/api';
 import { formatViews } from '../lib/utils';
 import { hasAdConsent } from './ConsentBar';
 import { cx } from './ui';
+import { videoPath } from '../../shared/seo';
 import { focusStyle } from '../../shared/image';
 import type { Focus } from '../../shared/image';
 
-export function Thumb({ src, alt, className, focus }: { src?: string; alt: string; className?: string; focus?: Focus | null }) {
+/** A thumbnail. `priority` loads it first (the big picture at the top of a page), everything else waits until it scrolls near. */
+export function Thumb({ src, alt, className, focus, priority }: { src?: string; alt: string; className?: string; focus?: Focus | null; priority?: boolean }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [src]);
   if (!src || failed) {
@@ -20,16 +22,27 @@ export function Thumb({ src, alt, className, focus }: { src?: string; alt: strin
       </div>
     );
   }
-  return <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} className={cx('object-cover', className)} style={focusStyle(focus)} />;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      loading={priority ? 'eager' : 'lazy'}
+      decoding="async"
+      {...({ fetchpriority: priority ? 'high' : 'auto' } as any)}
+      onError={() => setFailed(true)}
+      className={cx('object-cover', className)}
+      style={focusStyle(focus)}
+    />
+  );
 }
 
 /** A video. Opens its page on this site; from there, one more tap watches it on the original website. */
 export function VideoCard({ item, className, style }: { item: PublicVideo; className?: string; style?: CSSProperties }) {
   return (
-    <Link style={style} to={`/v/${encodeURIComponent(item.id)}`} className={cx('group block rounded-2xl outline-offset-4', className)} data-testid="video-card">
+    <Link style={style} to={videoPath(item)} className={cx('group block rounded-2xl outline-offset-4', className)} data-testid="video-card">
       {/* Material card: lifts on hover, presses in on tap, ripple from the finger */}
       <div className="ripple relative aspect-video overflow-hidden rounded-2xl bg-zinc-900 shadow-md shadow-black/30 transition-[transform,box-shadow] duration-300 ease-emphasized group-hover:-translate-y-1 group-hover:shadow-xl group-hover:shadow-black/50 group-active:scale-[.97]">
-        <Thumb src={item.thumbnailUrl} focus={item.thumbFocus} alt="" className="h-full w-full transition-[filter] duration-300 group-hover:brightness-110" />
+        <Thumb src={item.thumbnailUrl} focus={item.thumbFocus} alt={item.title} className="h-full w-full transition-[filter] duration-300 group-hover:brightness-110" />
         <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition duration-300 ease-emphasized group-hover:bg-black/25 group-hover:opacity-100">
           <span className="flex h-12 w-12 scale-75 items-center justify-center rounded-full bg-brand-500 text-zinc-950 shadow-lg transition-transform duration-300 ease-emphasized group-hover:scale-100">
             <Play className="h-6 w-6 fill-current" />
@@ -129,7 +142,18 @@ export function AdSlot({ slot, className, variant = 'banner' }: { slot: AdSlotId
     }
   }, [ad]);
 
-  if (!settings.adsEnabled || ad === undefined) return null;
+  if (!settings.adsEnabled) return null;
+  if (ad === undefined) {
+    // Still loading: hold the space (an ad or an "Advertise here" box will fill it), so the page doesn't jump.
+    if (!settings.adsShowPlaceholders) return null;
+    return (
+      <aside className={cx(variant === 'card' ? 'block' : 'mx-auto w-full', className)} style={variant === 'banner' ? { maxWidth: def.width } : undefined} aria-hidden>
+        {variant === 'banner' && <p className="mb-1 text-[10px] uppercase tracking-wider text-zinc-600">Sponsored</p>}
+        <div className="w-full rounded-xl" style={{ aspectRatio: String(def.ratio) }} />
+        {variant === 'card' && <div className="mt-2.5 h-10" />}
+      </aside>
+    );
+  }
   if (!ad && !settings.adsShowPlaceholders) return null;
 
   // Where "Advertise here" leads: the admin's own link if set, otherwise the site's enquiry page.

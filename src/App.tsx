@@ -63,6 +63,9 @@ export default function App() {
       <Route element={<Layout />}>
         <Route index element={<Home />} />
         <Route path="v/:id" element={<VideoPage />} />
+        <Route path="v/:id/:slug" element={<VideoPage />} />
+        <Route path="c/:slug" element={<Home />} />
+        <Route path="tag/:tag" element={<Home />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
         <Route path="forgot-password" element={<ForgotPasswordPage />} />
