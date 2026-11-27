@@ -32,10 +32,10 @@ publicRouter.get('/categories', async (_req, res) => {
 // --- Videos ---
 
 publicRouter.get('/videos', async (req, res) => {
-  const { category, q, sort } = req.query as Record<string, string>;
+  const { category, q, sort, tag } = req.query as Record<string, string>;
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(60, Math.max(1, Number(req.query.limit) || 24));
-  const filter = await videoFilter({ q, category, publicOnly: true });
+  const filter = await videoFilter({ q, category, tag, publicOnly: true });
   // With a search the newest match comes first unless the visitor chose another order.
   const [items, total] = await Promise.all([
     db.find('media', { filter, sort: videoSort(sort), skip: (page - 1) * limit, limit }),

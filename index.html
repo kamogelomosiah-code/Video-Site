@@ -7,17 +7,24 @@
     <meta name="rating" content="adult" />
     <meta name="RATING" content="RTA-5042-1996-1400-1577-RTA" />
     <link rel="icon" href="/peach-svgrepo-com.svg" />
+    <!-- The server replaces everything between these markers with this page's title, description,
+         canonical address, social preview tags and structured data (see server/seo.ts). -->
+    <!--seo-->
     <title>Elysian</title>
-    <meta name="description" content="Discover verified creators and premium exclusive media." />
+    <meta name="description" content="Search and discover videos." />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Elysian" />
+    <!--/seo-->
     <meta name="google-adsense-account" content="ca-pub-6421372298185696" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <!-- The font loads without holding up the first paint (faster pages rank better). -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" /></noscript>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- The server puts readable content here for search engines; the app replaces it in the browser. -->
+    <div id="root"><!--app--></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

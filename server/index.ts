@@ -6,6 +6,9 @@ import { attachUser, ensureAdmin } from './auth';
 import { authRouter } from './routes/auth';
 import { publicRouter, getSettings, goHandler } from './routes/public';
 import { migrateVideos } from './videos';
+import { getIndexNowKey, htmlHandler, robotsTxt, sendCompressed, sitemapHandler } from './seo';
+import fs from 'fs';
+import zlib from 'zlib';
 import { adminRouter } from './routes/admin';
 
 const DEFAULT_CATEGORIES = [
@@ -26,6 +29,34 @@ async function seed() {
     console.log('[seed] Added default categories');
   }
 }
+
+/** Serves built JS/CSS compressed (brotli, else gzip), compressing each file once and keeping it in memory. */
+function precompressed(dir: string): express.RequestHandler {
+  const memo = new Map<string, { br: Buffer; gz: Buffer; raw: Buffer } | null>();
+  return (req, res, next) => {
+    const rel = path.normalize(decodeURIComponent(req.path)).replace(/^([/\\])+/, '');
+    if (rel.includes('..') || !/\.(js|css|svg|json|txt|html|map)$/.test(rel)) return next();
+    let f = memo.get(rel);
+    if (f === undefined) {
+      try {
+        const raw = fs.readFileSync(path.join(dir, rel));
+        f = { raw, br: zlib.brotliCompressSync(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 } }), gz: zlib.gzipSync(raw, { level: 9 }) };
+      } catch {
+        f = null;
+      }
+      memo.set(rel, f);
+    }
+    if (!f) return next();
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('Vary', 'Accept-Encoding');
+    res.type(path.extname(rel));
+    const accept = String(req.headers['accept-encoding'] || '');
+    if (/\bbr\b/.test(accept)) { res.setHeader('Content-Encoding', 'br'); return res.end(f.br); }
+    if (/\bgzip\b/.test(accept)) { res.setHeader('Content-Encoding', 'gzip'); return res.end(f.gz); }
+    res.end(f.raw);
+  };
+}
+void sendCompressed;
 
 async function main() {
   await connect();
@@ -71,34 +102,43 @@ async function main() {
     res.status(status).json({ error });
   });
 
-  // --- SEO helpers ---
-  const origin = (req: express.Request) => config.appUrl || `${req.protocol}://${req.get('host')}`;
+  // --- Search engines: robots.txt, sitemaps, IndexNow key ---
   app.get('/robots.txt', (req, res) => {
-    res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\n\nSitemap: ${origin(req)}/sitemap.xml\n`);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.type('text/plain').send(robotsTxt(req));
   });
   app.get('/ads.txt', async (_req, res) => {
     res.type('text/plain').send((await getSettings()).adsTxtContent || '');
   });
-  app.get('/sitemap.xml', (req, res) => {
-    // Videos open on their original sites, so the home page is the only page worth indexing.
-    res.type('application/xml').send(
-      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${origin(req)}/</loc></url>\n</urlset>\n`,
-    );
+  app.get(/^\/sitemap(-[a-z]+(-\d+)?)?\.xml$/, sitemapHandler);
+  app.get(/^\/[a-f0-9]{32}\.txt$/, async (req, res, next) => {
+    const key = await getIndexNowKey();
+    if (req.path !== `/${key}.txt`) return next();
+    res.type('text/plain').send(key);
   });
 
   // --- Apps hub: a static landing page that links to all my apps (open to everyone, no login) ---
   app.use('/hub', express.static(path.join(process.cwd(), 'hub'), { maxAge: '5m' }));
 
   // --- Front end ---
+  // Every page address gets real HTML for search engines (title, description, structured data, content).
+  const isPage = (p: string) => !/\.[a-z0-9]{1,8}$/i.test(p) && !p.startsWith('/@') && !p.startsWith('/src/') && !p.startsWith('/node_modules/');
   if (!config.isProd) {
     const { createServer } = await import('vite');
-    const vite = await createServer({ server: { middlewareMode: true }, appType: 'spa' });
+    const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom' });
     app.use(vite.middlewares);
+    const page = htmlHandler((url) => vite.transformIndexHtml(url, fs.readFileSync(path.join(process.cwd(), 'index.html'), 'utf8')));
+    app.get(/.*/, (req, res, next) => (isPage(req.path) ? page(req, res) : next()));
   } else {
     const dist = path.join(process.cwd(), 'dist');
+    // Built files have a fingerprint in their name, so browsers may keep them for a year; sent compressed.
+    app.use('/assets', precompressed(path.join(dist, 'assets')));
     app.use(express.static(dist, { index: false, maxAge: '1h' }));
-    app.get(/.*/, (_req, res) => res.sendFile(path.join(dist, 'index.html')));
+    const tpl = fs.readFileSync(path.join(dist, 'index.html'), 'utf8');
+    const page = htmlHandler(async () => tpl);
+    app.get(/.*/, (req, res, next) => (isPage(req.path) ? page(req, res) : next()));
   }
+  app.use((_req, res) => res.status(404).type('text/plain').send('Not found'));
 
   app.listen(config.port, '0.0.0.0', () => {
     console.log(`\n  Site running at http://localhost:${config.port}  (storage: ${storageMode()})\n`);

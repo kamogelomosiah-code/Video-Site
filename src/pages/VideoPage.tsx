@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ExternalLink, Eye, Film, Play, Share2, ThumbsDown, ThumbsUp } from 'lucide-react';
 import type { PublicVideo, VideoDetail } from '../../shared/types';
 import { api } from '../lib/api';
-import { usePageTitle } from '../lib/settings';
+import { useSeo } from '../lib/seo';
+import { categoryPath, summary, tagPath, videoPath } from '../../shared/seo';
 import { formatViews, timeAgo } from '../lib/utils';
 import { visitorId } from '../lib/visitor';
 import { AdSlot, Thumb, VideoGrid } from '../components/Media';
@@ -23,7 +24,23 @@ export default function VideoPage() {
   const [error, setError] = useState('');
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
-  usePageTitle(data?.video.title);
+  const nav = useNavigate();
+  const loc = useLocation();
+  const dv = data?.video;
+  useSeo(
+    dv
+      ? {
+          title: dv.title,
+          description: summary(dv.description || `${dv.title}${dv.creatorName ? ` by ${dv.creatorName}` : ''}. Watch it on ${dv.source || 'the original site'}.`),
+          path: videoPath(dv),
+          image: dv.thumbnailUrl,
+        }
+      : { noindex: true },
+  );
+  // Keep the address tidy: /v/<id>/<title-words> (old /v/<id> links still work).
+  useEffect(() => {
+    if (dv && decodeURIComponent(loc.pathname) !== decodeURIComponent(videoPath(dv))) nav(videoPath(dv) + loc.search, { replace: true });
+  }, [dv, loc.pathname, loc.search, nav]);
 
   useEffect(() => {
     let alive = true;
@@ -179,12 +196,12 @@ export default function VideoPage() {
         {(v.categoryName || tags.length > 0) && (
           <div className="mt-5 flex flex-wrap gap-2" aria-label="Tags">
             {v.categoryName && (
-              <Link to={`/?category=${encodeURIComponent(v.category || '')}`} className="ripple rounded-lg bg-brand-500/15 px-3 py-1.5 text-sm font-medium text-brand-300 transition-colors hover:bg-brand-500/25">
+              <Link to={categoryPath(v.category || '')} className="ripple rounded-lg bg-brand-500/15 px-3 py-1.5 text-sm font-medium text-brand-300 transition-colors hover:bg-brand-500/25">
                 {v.categoryName}
               </Link>
             )}
             {tags.slice(0, 12).map((t) => (
-              <Link key={t} to={`/?q=${encodeURIComponent(t)}`} className="ripple rounded-lg border border-zinc-700/80 px-3 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/[.06] hover:text-white">
+              <Link key={t} to={tagPath(t)} className="ripple rounded-lg border border-zinc-700/80 px-3 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/[.06] hover:text-white">
                 #{t}
               </Link>
             ))}

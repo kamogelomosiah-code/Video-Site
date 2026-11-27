@@ -94,6 +94,8 @@ export function toAdmin(m: any) {
 export interface VideoQuery {
   q?: string;
   category?: string;
+  /** Exact tag (tag pages). */
+  tag?: string;
   /** Admin only: all | published | draft | pinned */
   status?: string;
   publicOnly?: boolean;
@@ -113,6 +115,8 @@ export async function videoFilter(o: VideoQuery): Promise<Filter> {
     const list = [...keys];
     f.$or = [{ categoryKey: { $in: list } }, { tagKeys: { $in: list } }];
   }
+
+  if (o.tag) f.tagKeys = { $in: [String(o.tag).toLowerCase().slice(0, 60)] };
 
   const terms = String(o.q || '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 6);
   if (terms.length) f.searchText = { $regex: '^' + terms.map((t) => `(?=.*${escapeRegex(t)})`).join('') };

@@ -107,6 +107,10 @@ export interface SiteSettings {
   allowRegistration: boolean;
   metaTitle: string;
   metaDescription: string;
+  /** The code from Google Search Console (the content="…" part of its HTML tag). */
+  googleSiteVerification: string;
+  /** The code from Bing Webmaster Tools. */
+  bingSiteVerification: string;
   footerText: string;
   contactEmail: string;
   privacyPolicy: string;
@@ -139,6 +143,8 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   allowRegistration: true,
   metaTitle: '',
   metaDescription: 'Search and discover videos.',
+  googleSiteVerification: '',
+  bingSiteVerification: '',
   footerText: '',
   contactEmail: '',
   privacyPolicy: '',

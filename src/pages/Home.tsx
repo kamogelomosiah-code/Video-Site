@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { Check, Search, SearchX, Film, Flame, Play } from 'lucide-react';
 import type { Category, PublicVideo } from '../../shared/types';
 import { api } from '../lib/api';
-import { useSettings, usePageTitle } from '../lib/settings';
+import { useSettings } from '../lib/settings';
+import { useSeo } from '../lib/seo';
+import { categoryPath, tagPath, videoPath } from '../../shared/seo';
 import { useDebounced, useFetch } from '../lib/utils';
 import { AdSlot, GridSkeleton, Thumb, VideoGrid, VideoRow } from '../components/Media';
 import { Alert, Button, Empty, Spinner, cx } from '../components/ui';
@@ -50,7 +52,7 @@ function Slides({ items, callout }: { items: PublicVideo[]; callout: string }) {
       <div className="relative aspect-[4/3] max-h-[460px] w-full min-[480px]:aspect-video lg:aspect-[21/9]">
         {items.map((v, k) => (
           <div key={v.id} className={cx('absolute inset-0 transition-opacity duration-1000', k === i ? 'opacity-100' : 'opacity-0')} aria-hidden={k !== i}>
-            <Thumb src={v.thumbnailUrl} focus={v.thumbFocus} alt="" className={cx('h-full w-full', k === i && !reduce && 'animate-[heroZoom_7s_ease-out_both]')} />
+            <Thumb src={v.thumbnailUrl} focus={v.thumbFocus} alt="" priority={k === 0} className={cx('h-full w-full', k === i && !reduce && 'animate-[heroZoom_7s_ease-out_both]')} />
           </div>
         ))}
         <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent" />
@@ -61,7 +63,7 @@ function Slides({ items, callout }: { items: PublicVideo[]; callout: string }) {
           <h2 key={cur.id} className="mt-3 line-clamp-2 max-w-2xl text-2xl font-extrabold leading-tight drop-shadow-lg sm:text-4xl animate-[fadeUp_.6s_ease-out_both]">{cur.title}</h2>
           {cur.creatorName && <p className="mt-1 text-sm text-zinc-300">{cur.creatorName}</p>}
           <div className="mt-4 flex items-center justify-between gap-3">
-            <Link to={`/v/${encodeURIComponent(cur.id)}`} className="ripple inline-flex h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-bold text-zinc-950 shadow-lg transition-[background-color,transform] duration-200 ease-standard hover:bg-zinc-200 active:scale-95" data-testid="hero-watch">
+            <Link to={videoPath(cur)} className="ripple inline-flex h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-bold text-zinc-950 shadow-lg transition-[background-color,transform] duration-200 ease-standard hover:bg-zinc-200 active:scale-95" data-testid="hero-watch">
               <Play className="h-4 w-4 fill-current" /> Watch now
             </Link>
             {n > 1 && (
@@ -89,18 +91,24 @@ function Slides({ items, callout }: { items: PublicVideo[]; callout: string }) {
 }
 
 /** The top of the home page: rotating featured videos (if any), then the search box. */
-function Hero({ value, onSubmit, onChange, tags, slides }: {
+function Hero({ value, onSubmit, onChange, tags, slides, loading }: {
   value: string;
   onSubmit: (e: FormEvent) => void;
   onChange: (v: string) => void;
   tags: string[];
   slides: PublicVideo[];
+  /** The featured videos are still on their way: keep their space so nothing below jumps when they arrive. */
+  loading?: boolean;
 }) {
   const { settings } = useSettings();
-  const show = settings.heroSlides && slides.length > 0;
+  const show = settings.heroSlides && (slides.length > 0 || !!loading);
   return (
     <div className="mb-8" data-testid="hero">
-      {show && <Slides items={slides} callout={settings.heroCallout} />}
+      {show && (slides.length > 0 ? (
+        <Slides items={slides} callout={settings.heroCallout} />
+      ) : (
+        <div className="skeleton mb-5 aspect-[4/3] max-h-[460px] w-full rounded-3xl min-[480px]:aspect-video lg:aspect-[21/9]" aria-hidden data-testid="hero-placeholder" />
+      ))}
       <section className={cx(!show && 'rounded-2xl border border-zinc-900 bg-gradient-to-b from-zinc-900/70 to-zinc-950 px-5 py-10 text-center sm:py-14')}>
         <h1 className={cx('font-extrabold tracking-tight', show ? 'text-lg sm:text-xl' : 'text-3xl sm:text-4xl')}>{settings.heroHeadline}</h1>
         {settings.heroSubtext && <p className={cx('mt-1 text-sm text-zinc-400', !show && 'mx-auto mt-2 max-w-xl')}>{settings.heroSubtext}</p>}
@@ -135,11 +143,18 @@ function Hero({ value, onSubmit, onChange, tags, slides }: {
   );
 }
 
+/**
+ * The video lists: the home page (/), a category (/c/:slug), a tag (/tag/:tag) and search results (/?q=).
+ * Category and tag pages have their own addresses so search engines can list them as landing pages.
+ */
 export default function Home() {
   const { settings } = useSettings();
   const [params, setParams] = useSearchParams();
+  const route = useParams();
   const urlQ = params.get('q') || '';
-  const category = params.get('category') || 'all';
+  const legacyCategory = params.get('category');
+  const category = route.slug || 'all';
+  const tag = (route.tag || '').toLowerCase();
   const [box, setBox] = useState(urlQ);
   const q = useDebounced(box, 350).trim();
   const [page, setPage] = useState(1);
@@ -147,7 +162,6 @@ export default function Home() {
   const [meta, setMeta] = useState({ total: 0, pages: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  usePageTitle(q ? `Search: ${q}` : undefined);
 
   // Keep the box in step with back/forward navigation (?q= in the URL).
   useEffect(() => setBox(urlQ), [urlQ]);
@@ -160,7 +174,7 @@ export default function Home() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
-  useEffect(() => setPage(1), [q, category]);
+  useEffect(() => setPage(1), [q, category, tag]);
 
   const { data: categories } = useFetch(() => api.get<Category[]>('/categories'), []);
   const { data: trending } = useFetch(() => api.get<Trending>('/trending'), []);
@@ -176,6 +190,7 @@ export default function Home() {
     const qs = new URLSearchParams({ page: String(page), limit: '24' });
     if (q) qs.set('q', q);
     if (category !== 'all') qs.set('category', category);
+    if (tag) qs.set('tag', tag);
     api
       .get<Page>(`/videos?${qs}`)
       .then((r) => {
@@ -188,7 +203,7 @@ export default function Home() {
     return () => {
       alive = false;
     };
-  }, [q, category, page]);
+  }, [q, category, tag, page]);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -196,19 +211,53 @@ export default function Home() {
     setParams(box.trim() ? { q: box.trim() } : {}, { replace: true });
   };
 
-  const pickCategory = (slug: string) => {
-    const next = new URLSearchParams(params);
-    if (slug === 'all') next.delete('category');
-    else next.set('category', slug);
-    setParams(next, { replace: true });
-  };
+  const cat = categories?.find((c) => c.slug === category);
+  const listing = category !== 'all' || !!tag; // a category or tag landing page
+  const heading = tag ? `#${tag} videos` : cat ? `${cat.name} videos` : '';
+  useSeo(
+    q
+      ? { title: `${q} – search`, noindex: true }
+      : tag
+        ? { title: `#${tag} videos`, description: `${meta.total} videos tagged #${tag} on ${settings.siteName}. Browse and watch the best #${tag} videos.`, path: tagPath(tag), noindex: !loading && meta.total < 2 }
+        : cat
+          ? { title: `${cat.name} videos`, description: `Watch ${meta.total} ${cat.name} videos on ${settings.siteName}. New ${cat.name.toLowerCase()} videos added regularly – free to browse.`, path: categoryPath(cat.slug) }
+          : { path: '/' },
+  );
+
+  // Old links (?category=…) move to the category's own address.
+  if (legacyCategory && legacyCategory !== 'all') return <Navigate to={categoryPath(legacyCategory)} replace />;
 
   return (
     <div>
-      <Hero value={box} onChange={setBox} onSubmit={submit} tags={trending?.tags || []} slides={q ? [] : (trending?.items || []).filter((v) => v.thumbnailUrl).slice(0, 5)} />
+      {listing ? (
+        <header className="mb-6" data-testid="listing-header">
+          <nav className="mb-2 text-xs text-zinc-500" aria-label="Breadcrumb">
+            <Link to="/" className="hover:text-zinc-300">Home</Link> <span aria-hidden>›</span> <span className="text-zinc-400">{tag ? `#${tag}` : cat?.name || category}</span>
+          </nav>
+          <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{heading || `${category} videos`}</h1>
+          {!loading && <p className="mt-1 text-sm text-zinc-400">{meta.total.toLocaleString()} video{meta.total === 1 ? '' : 's'}</p>}
+        </header>
+      ) : (
+        <Hero value={box} onChange={setBox} onSubmit={submit} tags={trending?.tags || []} slides={q ? [] : (trending?.items || []).filter((v) => v.thumbnailUrl).slice(0, 5)} loading={!q && !trending} />
+      )}
       <AdSlot slot="home_top" className="mb-8" />
 
-      {!q && trending && trending.items.length > 0 && (
+      {/* Keep the Trending row's space while it loads, so the list below doesn't jump. */}
+      {!q && !listing && !trending && (
+        <section className="mb-10" aria-hidden data-testid="trending-placeholder">
+          <div className="skeleton mb-4 h-6 w-32 rounded-full" />
+          <div className="flex gap-3 overflow-hidden sm:grid sm:grid-cols-3 sm:gap-x-4 lg:grid-cols-4 xl:grid-cols-5">
+            {Array.from({ length: 5 }, (_, i) => (
+              <div key={i} className={cx('w-[44%] shrink-0 sm:w-auto', i >= 3 && 'sm:hidden', i === 3 && 'lg:block', i === 4 && 'xl:block')}>
+                <div className="skeleton aspect-video rounded-2xl" />
+                <div className="skeleton mt-3 h-3.5 w-11/12 rounded-full" />
+                <div className="skeleton mt-2 h-3 w-1/2 rounded-full" />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+      {!q && !listing && trending && trending.items.length > 0 && (
         <section id="trending" className="mb-10 scroll-mt-20" aria-labelledby="trending-title">
           <h2 id="trending-title" className="mb-4 flex items-center gap-2 text-lg font-bold">
             <Flame className="h-5 w-5 text-brand-400" /> Trending
@@ -219,17 +268,17 @@ export default function Home() {
 
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-bold">
-          {q ? <>Results for “{q}” <span className="text-sm font-normal text-zinc-500">({meta.total})</span></> : 'All videos'}
+          {q ? <>Results for “{q}” <span className="text-sm font-normal text-zinc-500">({meta.total})</span></> : listing ? 'Newest first' : 'All videos'}
         </h2>
         {!!categories?.length && (
           <div className="scrollbar-none -mx-4 flex max-w-full gap-2 overflow-x-auto px-4 sm:mx-0 sm:px-0" role="tablist" aria-label="Categories">
             {[{ slug: 'all', name: 'All' }, ...categories].map((c) => (
-              <button
+              // Real links, so search engines can follow them to each category page.
+              <Link
                 key={c.slug}
-                type="button"
+                to={c.slug === 'all' ? '/' : categoryPath(c.slug)}
                 role="tab"
                 aria-selected={category === c.slug}
-                onClick={() => pickCategory(c.slug)}
                 className={cx(
                   // Material filter chip: a check appears when it's on
                   'ripple flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3.5 text-sm transition-[background-color,border-color,color,padding] duration-200 ease-standard',
@@ -238,7 +287,7 @@ export default function Home() {
               >
                 {category === c.slug && <Check className="h-4 w-4 animate-pop" strokeWidth={2.6} />}
                 {c.name}
-              </button>
+              </Link>
             ))}
           </div>
         )}

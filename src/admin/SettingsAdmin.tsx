@@ -93,8 +93,13 @@ export default function SettingsAdmin() {
       </Section>
 
       <Section title="Search engines" description="How the site appears in Google and when shared.">
-        {text('metaTitle', 'Page title', 'Leave blank to use the site name.')}
-        {area('metaDescription', 'Description', undefined, 2)}
+        {text('metaTitle', 'Home page title', 'What Google shows as the link for your home page. Leave blank to use the site name and headline.')}
+        {area('metaDescription', 'Home page description', 'The two lines under the link in Google (about 150 characters).', 2)}
+        {text('googleSiteVerification', 'Google Search Console code', 'In Search Console choose “HTML tag” and paste the tag or just its code.')}
+        {text('bingSiteVerification', 'Bing Webmaster code', 'In Bing Webmaster Tools choose “Meta tag” and paste the tag or just its code.')}
+        <p className="text-xs text-zinc-500">
+          Your sitemap is at <code className="text-zinc-300">/sitemap.xml</code>. Submit it in Google Search Console and Bing Webmaster Tools. New videos are announced to Bing and other IndexNow search engines automatically.
+        </p>
       </Section>
 
       <Section title="Ads">
