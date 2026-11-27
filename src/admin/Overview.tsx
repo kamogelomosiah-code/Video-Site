@@ -53,7 +53,7 @@ export default function Overview() {
         ))}
       </div>
 
-      <section className="rounded-xl border border-zinc-900 bg-zinc-950 p-5" aria-labelledby="system-title">
+      <section className="min-w-0 rounded-xl border border-zinc-900 bg-zinc-950 p-5" aria-labelledby="system-title">
         <h2 id="system-title" className="mb-3 font-semibold">System</h2>
         <ul className="grid gap-3 text-sm sm:grid-cols-3">
           <li className="flex gap-2"><Database className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500" /><span>
@@ -75,7 +75,7 @@ export default function Overview() {
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-xl border border-zinc-900 bg-zinc-950 p-5">
+        <section className="min-w-0 rounded-xl border border-zinc-900 bg-zinc-950 p-5">
           <h2 className="mb-3 font-semibold">Most viewed</h2>
           {!data.topVideos.length ? (
             <p className="text-sm text-zinc-500">No videos yet.</p>
@@ -90,7 +90,7 @@ export default function Overview() {
             </ol>
           )}
         </section>
-        <section className="rounded-xl border border-zinc-900 bg-zinc-950 p-5">
+        <section className="min-w-0 rounded-xl border border-zinc-900 bg-zinc-950 p-5">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="font-semibold">Recent activity</h2>
             <Link to="/admin/activity" className="text-xs text-brand-400 hover:underline">View all</Link>
