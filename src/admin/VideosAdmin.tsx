@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useSearchParams } from 'react-router-dom';
-import { CheckSquare, ChevronDown, Download, ExternalLink, FileUp, Globe, MoreHorizontal, Pencil, Plus, Search, SlidersHorizontal, Star, Trash2 } from 'lucide-react';
+import { Check, CheckSquare, ChevronDown, Eye, EyeOff, Download, ExternalLink, FileUp, Globe, MoreHorizontal, Pencil, Plus, Search, SlidersHorizontal, Star, Trash2 } from 'lucide-react';
 import type { Category } from '../../shared/types';
 import type { Focus } from '../../shared/image';
 import { api, tokenStore } from '../lib/api';
@@ -518,47 +518,56 @@ export default function VideosAdmin() {
           {data.items.map((r) => {
             const on = selected.has(r.id) || allMatching;
             return (
-              <li key={r.id} className={cx('overflow-hidden rounded-2xl border transition-colors duration-200 ease-standard', on ? 'border-brand-500/60 bg-brand-500/10' : 'border-zinc-900 bg-zinc-950')} data-testid="admin-card">
+              <li
+                key={r.id}
+                className={cx('flex items-center overflow-hidden rounded-2xl border transition-colors duration-200 ease-standard', on ? 'border-brand-500/60 bg-brand-500/10' : 'border-zinc-900 bg-zinc-950')}
+                data-testid="admin-card"
+              >
+                {/* One compact row: tap to edit (or select); the two icons change it in place */}
                 <button
                   type="button"
                   onClick={() => (selectMode ? toggle(r.id) : setEditing(r))}
-                  className="ripple flex w-full items-center gap-3 p-3 text-left"
+                  className="ripple flex min-w-0 flex-1 items-center gap-3 p-2.5 text-left"
                   aria-label={selectMode ? `Select ${r.title}` : `Edit ${r.title}`}
                 >
                   {selectMode && (
-                    <span className={cx('flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2', on ? 'border-brand-500 bg-brand-500 text-zinc-950' : 'border-zinc-600')} aria-hidden>
-                      {on && <span className="text-xs font-bold">✓</span>}
+                    <span className={cx('flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors', on ? 'border-brand-500 bg-brand-500 text-zinc-950' : 'border-zinc-600')} aria-hidden>
+                      {on && <Check className="h-3.5 w-3.5 animate-pop" strokeWidth={3} />}
                     </span>
                   )}
-                  <Thumb src={r.thumbnailUrl} focus={r.thumbFocus} alt="" className="h-16 w-28 shrink-0 rounded-md" />
+                  <span className="relative shrink-0">
+                    <Thumb src={r.thumbnailUrl} focus={r.thumbFocus} alt="" className={cx('h-14 w-24 rounded-lg', !r.published && 'opacity-40 grayscale')} />
+                    {r.duration && <span className="absolute bottom-1 right-1 rounded bg-black/80 px-1 text-[10px] font-medium leading-4">{r.duration}</span>}
+                  </span>
                   <span className="min-w-0 flex-1">
-                    <span className="line-clamp-2 block text-[15px] font-medium leading-snug">{r.title}</span>
-                    <span className="mt-1 block truncate text-xs text-zinc-500">{[r.creatorName, r.duration, `${formatViews(r.views)} ${r.views === 1 ? 'view' : 'views'}`].filter(Boolean).join(' · ')}</span>
+                    <span className={cx('line-clamp-2 block text-sm font-medium leading-snug', !r.published && 'text-zinc-400')}>{r.title}</span>
+                    <span className="mt-1 flex items-center gap-1.5 truncate text-xs text-zinc-500">
+                      {!r.published && <span className="rounded bg-zinc-800 px-1.5 py-px font-medium text-zinc-300">Hidden</span>}
+                      {r.featured && <span className="rounded bg-brand-500/15 px-1.5 py-px font-medium text-brand-300">Trending</span>}
+                      <span className="truncate">{formatViews(r.views)} {r.views === 1 ? 'view' : 'views'}{r.creatorName ? ` · ${r.creatorName}` : ''}</span>
+                    </span>
                   </span>
                 </button>
                 {!selectMode && (
-                  <div className="flex items-center justify-between border-t border-zinc-900 pl-3 pr-1">
+                  <div className="flex shrink-0 flex-col pr-1">
+                    <button
+                      type="button"
+                      onClick={() => quick(r, r.featured ? 'unpin' : 'pin')}
+                      className={cx('ripple flex h-10 w-10 items-center justify-center rounded-full', r.featured ? 'text-brand-400' : 'text-zinc-500 hover:text-zinc-300')}
+                      aria-pressed={r.featured}
+                      aria-label={r.featured ? `Remove ${r.title} from Trending` : `Add ${r.title} to Trending`}
+                    >
+                      <Star className={cx('h-[18px] w-[18px]', r.featured && 'fill-current animate-pop')} />
+                    </button>
                     <button
                       type="button"
                       role="switch"
                       aria-checked={r.published}
                       onClick={() => quick(r, r.published ? 'unpublish' : 'publish')}
-                      className="flex min-h-11 items-center gap-2.5 text-sm"
+                      className={cx('ripple flex h-10 w-10 items-center justify-center rounded-full', r.published ? 'text-zinc-300' : 'text-zinc-600')}
                       aria-label={`${r.published ? 'Hide' : 'Show'} ${r.title}`}
                     >
-                      <span className={cx('relative h-6 w-11 rounded-full transition-colors', r.published ? 'bg-brand-500' : 'bg-zinc-700')} aria-hidden>
-                        <span className={cx('absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all', r.published ? 'left-[22px]' : 'left-0.5')} />
-                      </span>
-                      <span className={r.published ? 'text-zinc-200' : 'text-zinc-500'}>{r.published ? 'Shown' : 'Hidden'}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => quick(r, r.featured ? 'unpin' : 'pin')}
-                      className={cx('flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-sm', r.featured ? 'text-brand-400' : 'text-zinc-500')}
-                      aria-pressed={r.featured}
-                      aria-label={r.featured ? 'Remove from Trending' : 'Add to Trending'}
-                    >
-                      <Star className={cx('h-5 w-5', r.featured && 'fill-current')} /> Trending
+                      {r.published ? <Eye className="h-[18px] w-[18px]" /> : <EyeOff className="h-[18px] w-[18px]" />}
                     </button>
                   </div>
                 )}
