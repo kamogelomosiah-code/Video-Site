@@ -33,6 +33,22 @@ export const config = {
   resetCodeTtlMs: 15 * 60 * 1000,
   resetCodeMaxAttempts: 5,
   appUrl: process.env.APP_URL || '',
+  /**
+   * APP_URL only if it is a real public address. A local one (localhost, 127.0.0.1, a private network)
+   * is never used for redirects, canonical links or sitemaps — those must point at the live site.
+   */
+  get publicUrl(): string {
+    const raw = (process.env.APP_URL || '').trim().replace(/\/+$/, '');
+    try {
+      const u = new URL(raw);
+      const h = u.hostname;
+      const local = h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h === '0.0.0.0' || h === '::1' || h === '[::1]'
+        || /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h);
+      return /^https?:$/.test(u.protocol) && !local ? u.origin : '';
+    } catch {
+      return '';
+    }
+  },
   trustProxyHops: Number(process.env.TRUST_PROXY_HOPS ?? 1),
   admin: {
     email: env('ADMIN_EMAIL', 'admin@example.invalid').trim().toLowerCase(),
