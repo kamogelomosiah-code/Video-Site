@@ -202,7 +202,8 @@ export const db = {
   async put<T extends { id: string }>(name: string, doc: T): Promise<T> {
     if (mongo) {
       const { _id, ...clean } = doc as any;
-      await mongo.collection(name).updateOne({ id: doc.id }, { $set: clean }, { upsert: true });
+      // Replace, not $set, so fields deleted from the document are removed here too (same as data.json).
+      await mongo.collection(name).replaceOne({ id: doc.id }, clean, { upsert: true });
       return doc;
     }
     const col = jsonCol(name);

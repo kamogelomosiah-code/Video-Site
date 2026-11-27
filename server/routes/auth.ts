@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { db, newId } from '../db';
 import { config } from '../config';
 import { checkPassword } from '../../shared/password';
-import { sendResetCode } from '../mail/mailer.js';
+import { sendResetCode, mailProvider } from '../mail/mailer.js';
 import { randomInt, timingSafeEqual } from 'crypto';
 import { getSettings } from './public';
 import {
@@ -86,7 +86,15 @@ authRouter.post('/login', async (req, res) => {
   if (user.role === 'ADMIN' && user.pin) {
     // Asking for the PIN is a normal step, not a failed attempt.
     if (!pin) return res.status(401).json({ error: 'Enter your 6-digit security PIN', requiresPin: true });
-    if (String(pin).trim() !== String(user.pin)) return fail({ error: 'Incorrect PIN', requiresPin: true });
+    // Limit PIN guesses per account, so switching between email and username doesn't add tries.
+    const pinKey = `login-pin:${user.id}`;
+    const pinWait = lockedFor(pinKey, 5);
+    if (pinWait) return tooMany(res, pinWait);
+    if (String(pin).trim() !== String(user.pin)) {
+      hit(pinKey, 5, 15 * 60 * 1000);
+      return fail({ error: 'Incorrect PIN', requiresPin: true });
+    }
+    clearLimit(pinKey);
   }
   if (user.disabled) return res.status(403).json({ error: 'This account has been suspended.' });
   clearLimit(idKey);
@@ -124,16 +132,26 @@ authRouter.put('/profile', requireUser, async (req, res) => {
   if (pin !== undefined && pin !== '') {
     if (user.role !== 'ADMIN') return res.status(403).json({ error: 'Only admins have a PIN' });
     if (!/^\d{6}$/.test(String(pin))) return res.status(400).json({ error: 'PIN must be exactly 6 digits' });
+    if (!(await verifyPassword(String(currentPassword || ''), user.passwordHash))) {
+      return res.status(400).json({ error: 'Your current password is incorrect' });
+    }
     user.pin = String(pin);
   }
   await db.put('users', user);
+  if (password) {
+    // Sign out other devices, keep this one.
+    const current = bearer(req);
+    for (const s of await db.list('sessions', { userId: user.id })) {
+      if (s.token !== current) await deleteSession(s.token);
+    }
+  }
   res.json({ user: publicUser(user) });
 });
 
 // --- Password reset with an emailed 6-digit code ---
 // 1. POST /forgot-password { email }            → emails a code (same reply whether or not the account exists)
 // 2. POST /verify-reset-code { email, code }    → optional check so the page can move to "choose password"
-// 3. POST /reset-password { email, code, password } → sets the password and signs the user in
+// 3. POST /reset-password { email, code, password } → sets the password and signs in (PIN accounts sign in again)
 
 const codeHash = (userId: string, code: string) => sha256(`${userId}:${code}`);
 const sameHash = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -159,29 +177,29 @@ authRouter.post('/forgot-password', async (req, res) => {
       createdAt: new Date().toISOString(),
     });
     const settings = await getSettings();
-    const sent = await sendResetCode(user.email, code, { siteName: settings.siteName, minutes: config.resetCodeTtlMs / 60000 });
+    // Not awaited: waiting for the mail service would reveal (by timing) which accounts exist. Errors are logged.
+    void sendResetCode(user.email, code, { siteName: settings.siteName, minutes: config.resetCodeTtlMs / 60000 });
     // Local development without an email service: show the code on screen (never in production, never for admins).
-    if (sent.provider === 'console' && !config.isProd && user.role !== 'ADMIN') devCode = code;
+    if (mailProvider() === 'console' && !config.isProd && user.role !== 'ADMIN') devCode = code;
   }
   res.json({ ok: true, devCode });
 });
 
-/** Returns the reset record if the code is right; counts wrong guesses and locks after too many. */
-async function checkCode(email: string, code: string): Promise<{ user: any; row: any } | { error: string; status: number }> {
-  const generic = { error: 'That code is incorrect or has expired. Request a new one.', status: 400 };
+/**
+ * Returns the reset record if the code is right; counts wrong guesses and locks after too many.
+ * Every failure gives the same reply, so it can't be used to find out which accounts exist.
+ */
+async function checkCode(email: string, code: string): Promise<{ user: any } | { error: string; status: number }> {
+  const generic = { error: 'That code is incorrect or has expired. After 5 wrong tries you need a new code.', status: 400 };
   const user: any = await findByLogin(email);
-  if (!user || !/^\d{6}$/.test(code)) return generic;
+  if (!user || user.disabled || !/^\d{6}$/.test(code)) return generic;
   const row: any = await db.findOne('passwordResetCodes', { userId: user.id });
-  if (!row || new Date(row.expiresAt).getTime() < Date.now()) return generic;
-  if (row.attempts >= config.resetCodeMaxAttempts) {
-    return { error: 'Too many wrong codes. Request a new one.', status: 429 };
-  }
+  if (!row || new Date(row.expiresAt).getTime() < Date.now() || row.attempts >= config.resetCodeMaxAttempts) return generic;
   if (!sameHash(row.codeHash, codeHash(user.id, code))) {
     await db.put('passwordResetCodes', { ...row, attempts: (row.attempts || 0) + 1 });
-    const left = config.resetCodeMaxAttempts - (row.attempts || 0) - 1;
-    return { error: left > 0 ? `That code is incorrect. ${left} ${left === 1 ? 'try' : 'tries'} left.` : 'Too many wrong codes. Request a new one.', status: 400 };
+    return generic;
   }
-  return { user, row };
+  return { user };
 }
 
 authRouter.post('/verify-reset-code', async (req, res) => {
@@ -205,7 +223,9 @@ authRouter.post('/reset-password', async (req, res) => {
   user.passwordHash = await hashPassword(String(password));
   await db.put('users', user);
   await db.removeWhere('passwordResetCodes', { userId: user.id }); // one use only
-  await db.removeWhere('sessions', { userId: user.id }); // sign out everywhere else
+  await db.removeWhere('sessions', { userId: user.id }); // sign out everywhere
   await logActivity('update', `Password reset by email code for ${user.email}`, user.id);
+  // An emailed code must not skip the PIN: PIN accounts go back through normal sign-in.
+  if (user.role === 'ADMIN' && user.pin) return res.json({ requiresSignIn: true });
   res.json({ user: publicUser(user), token: await createSession(user.id) });
 });
