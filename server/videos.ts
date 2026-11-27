@@ -60,6 +60,8 @@ export function toPublic(m: any): PublicVideo {
     tags: m.tags || [],
     duration: m.duration || '',
     views: m.views || 0,
+    likes: Math.max(0, m.likes || 0),
+    dislikes: Math.max(0, m.dislikes || 0),
     creatorName: m.creatorName || '',
     featured: !!m.featured,
     createdAt: m.createdAt,
@@ -157,6 +159,29 @@ export async function resolveCategories(
     }
   }
   return { map, created };
+}
+
+// --- Similar videos ---
+
+/**
+ * Videos like this one: the most shared tags first (the same category counts as one tag),
+ * then the most viewed. Topped up with trending videos so the list is never empty.
+ */
+export async function similarTo(m: any, limit = 8): Promise<PublicVideo[]> {
+  const tags: string[] = (m.tagKeys || []).slice(0, 20);
+  const or: Filter[] = [];
+  if (m.categoryKey) or.push({ categoryKey: m.categoryKey });
+  if (tags.length) or.push({ tagKeys: { $in: tags } });
+  const out: any[] = [];
+  if (or.length) {
+    const pool: any[] = await db.find('media', { filter: { published: { $ne: false }, id: { $ne: m.id }, $or: or }, sort: { views: -1, createdAt: -1 }, limit: 60 });
+    const score = (x: any) => (x.tagKeys || []).filter((t: string) => tags.includes(t)).length + (m.categoryKey && x.categoryKey === m.categoryKey ? 1 : 0);
+    out.push(...pool.map((x) => ({ x, s: score(x) })).sort((a, b) => b.s - a.s).map((p) => p.x));
+  }
+  const seen = new Set<string>([m.id, ...out.map((x) => x.id)]);
+  const list = out.slice(0, limit).map(toPublic);
+  if (list.length < limit) for (const t of (await trending(limit + 2)).items) if (!seen.has(t.id) && list.length < limit) (seen.add(t.id), list.push(t));
+  return list;
 }
 
 // --- Trending & clicks ---

@@ -3,7 +3,8 @@ import multer from 'multer';
 import { db, saveFile, openFile } from '../db';
 import { requireAdmin, hit, clientIp, tooMany } from '../auth';
 import { DEFAULT_SETTINGS, type SiteSettings } from '../../shared/types';
-import { linkOf, recordClick, toPublic, trending, videoFilter, videoSort } from '../videos';
+import { linkOf, recordClick, similarTo, toPublic, trending, videoFilter, videoSort } from '../videos';
+import type { VideoDetail } from '../../shared/types';
 
 export const publicRouter = Router();
 
@@ -45,6 +46,51 @@ publicRouter.get('/videos', async (req, res) => {
 
 publicRouter.get('/trending', async (_req, res) => {
   res.json(await trending(10));
+});
+
+// --- One video: its page, similar videos, and likes ---
+
+/** A visitor's anonymous id (kept in their browser) so a like counts once and can be changed. */
+const visitorOf = (v: unknown) => (typeof v === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(v) ? v : '');
+const hostOf = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+
+publicRouter.get('/videos/:id', async (req, res) => {
+  const m: any = await db.get('media', String(req.params.id));
+  if (!m || m.published === false) return res.status(404).json({ error: 'This video is no longer available' });
+  // Opening the page counts as a view (once per visitor per video every 6 hours, shared with /go/).
+  recordClick(m.id, clientIp(req)).catch(() => {});
+  const visitor = visitorOf(req.query.visitor);
+  const [similar, mine, cat] = await Promise.all([
+    similarTo(m, 8),
+    visitor ? db.get('reactions', `${m.id}:${visitor}`) : null,
+    m.category ? db.findOne('categories', { slug: m.category }) : null,
+  ]);
+  const video: VideoDetail = { ...toPublic(m), description: m.description || '', source: hostOf(linkOf(m)), categoryName: (cat as any)?.name || '' };
+  res.json({ video, similar, mine: (mine as any)?.value || null });
+});
+
+/** POST /videos/:id/react { value: "like" | "dislike" | null, visitor } — one reaction per visitor, changeable. */
+publicRouter.post('/videos/:id/react', async (req, res) => {
+  const visitor = visitorOf(req.body?.visitor);
+  const value = req.body?.value ?? null;
+  if (!visitor) return res.status(400).json({ error: 'Missing visitor id' });
+  if (value !== null && value !== 'like' && value !== 'dislike') return res.status(400).json({ error: 'value must be like, dislike or null' });
+  const wait = hit(`react:${clientIp(req)}`, 60, 10 * 60 * 1000);
+  if (wait) return tooMany(res, wait);
+  const m: any = await db.get('media', String(req.params.id));
+  if (!m || m.published === false) return res.status(404).json({ error: 'This video is no longer available' });
+  const key = `${m.id}:${visitor}`;
+  const prev = ((await db.get('reactions', key)) as any)?.value || null;
+  if (prev !== value) {
+    const by: Record<string, number> = {};
+    if (prev) by[prev === 'like' ? 'likes' : 'dislikes'] = -1;
+    if (value) by[value === 'like' ? 'likes' : 'dislikes'] = (by[value === 'like' ? 'likes' : 'dislikes'] || 0) + 1;
+    await db.inc('media', m.id, by);
+    if (value) await db.put('reactions', { id: key, mediaId: m.id, value, at: new Date().toISOString() });
+    else await db.remove('reactions', key);
+  }
+  const now: any = await db.get('media', m.id);
+  res.json({ likes: Math.max(0, now?.likes || 0), dislikes: Math.max(0, now?.dislikes || 0), mine: value });
 });
 
 /**

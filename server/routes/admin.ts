@@ -3,7 +3,7 @@ import { db, newId, storageMode } from '../db';
 import { config } from '../config';
 import { requireAdmin, hashPassword, publicUser, logActivity, isEmail } from '../auth';
 import { checkPassword } from '../../shared/password';
-import { AD_SLOTS, DEFAULT_SETTINGS, type AdminStats } from '../../shared/types';
+import { AD_SLOTS, DEFAULT_SETTINGS, parseAdSizes, type AdminStats } from '../../shared/types';
 import { slugify } from '../../shared/video';
 import { cleanFocus } from '../../shared/image';
 import { getSettings } from './public';
@@ -242,6 +242,11 @@ adminRouter.put('/settings', async (req, res) => {
   }
   if (patch.adsContactLink && !/^(https?:\/\/|\/|mailto:)/i.test(patch.adsContactLink)) {
     return res.status(400).json({ error: '"Advertise here" link must start with https://, / or mailto:' });
+  }
+  if ('adSizes' in patch) {
+    // Keep only sensible sizes for known ad spaces; anything else is dropped (blank = defaults).
+    const clean = parseAdSizes(patch.adSizes);
+    patch.adSizes = Object.keys(clean).length ? JSON.stringify(clean) : '';
   }
   if (patch.announcementLink && !/^(https?:\/\/|\/)/i.test(patch.announcementLink)) {
     return res.status(400).json({ error: 'Announcement link must start with https:// or /' });

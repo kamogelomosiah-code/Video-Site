@@ -94,6 +94,7 @@ adminVideos.delete('/:id', async (req, res) => {
   const existing: any = await db.get('media', String(req.params.id));
   if (!existing) return res.status(404).json({ error: 'Not found' });
   await db.remove('media', existing.id);
+  await db.removeWhere('reactions', { mediaId: existing.id });
   clearTrendingCache();
   await logActivity('delete', `Deleted video: ${existing.title}`, user.id);
   res.json({ ok: true });
@@ -229,7 +230,12 @@ adminVideos.post('/bulk', async (req, res) => {
   }
 
   let count = 0;
-  if (action === 'delete') count = await db.removeWhere('media', filter);
+  if (action === 'delete') {
+    // Likes of deleted videos go too, so nothing is left behind.
+    const gone = (await db.find('media', { filter, limit: 100000 })).map((m: any) => m.id);
+    count = await db.removeWhere('media', filter);
+    for (let i = 0; i < gone.length; i += 1000) await db.removeWhere('reactions', { mediaId: { $in: gone.slice(i, i + 1000) } });
+  }
   else if (action === 'publish') count = await db.updateMany('media', filter, { published: true });
   else if (action === 'unpublish') count = await db.updateMany('media', filter, { published: false });
   else if (action === 'pin') count = await db.updateMany('media', filter, { featured: true, updatedAt: new Date().toISOString() });
