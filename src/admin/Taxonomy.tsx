@@ -104,6 +104,7 @@ export function AdsAdmin() {
                 ? [{ key: 'adsenseSlotId', label: 'AdSense slot ID', type: 'text', hint: 'Set the client ID under Site settings → Ads.' }]
                 : [
                     { key: 'imageUrl', label: 'Banner image', type: 'image', hint: size ? `Best size: ${size} pixels. Other sizes are cropped to fit.` : undefined },
+                    { key: 'imageFocus', label: 'Which part of the banner shows', type: 'focus', source: 'imageUrl', ratio: AD_SLOTS.find((s) => s.id === draft.slot)?.ratio ?? 16 / 9, hint: 'Drag to choose the part that matters, then zoom if you want it closer.' },
                     { key: 'targetUrl', label: 'Click-through link', type: 'url', placeholder: 'https://…' },
                   ]),
             { key: 'startsAt', label: 'Start date (optional)', type: 'date', half: true },

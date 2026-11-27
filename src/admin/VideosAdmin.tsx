@@ -2,14 +2,15 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronDown, Download, ExternalLink, FileUp, Globe, MoreHorizontal, Pencil, Plus, Search, SlidersHorizontal, Star, Trash2 } from 'lucide-react';
 import type { Category } from '../../shared/types';
+import type { Focus } from '../../shared/image';
 import { api, tokenStore } from '../lib/api';
 import { usePageTitle } from '../lib/settings';
 import { formatViews, useDebounced, useFetch } from '../lib/utils';
 import { Thumb } from '../components/Media';
-import { Alert, Badge, Button, Empty, Field, ImageInput, Input, Modal, Select, Spinner, Textarea, Toggle, cx, useToast } from '../components/ui';
+import { Alert, Badge, Button, Empty, Field, FocusPicker, ImageInput, Input, Modal, Select, Spinner, Textarea, Toggle, cx, useToast } from '../components/ui';
 
 type Row = {
-  id: string; title: string; externalUrl: string; thumbnailUrl: string; description: string; category: string;
+  id: string; title: string; externalUrl: string; thumbnailUrl: string; thumbFocus?: Focus | null; description: string; category: string;
   tags: string[]; duration: string; creatorName: string; views: number; published: boolean; featured: boolean; createdAt?: string;
 };
 type Page = { items: Row[]; total: number; page: number; pages: number };
@@ -116,6 +117,11 @@ function VideoForm({ initial, categories, onDone, onDelete }: { initial: Partial
       <Field label="Thumbnail" group>
         <ImageInput value={v.thumbnailUrl} onChange={(url) => set('thumbnailUrl', url)} label="Thumbnail" />
       </Field>
+      {v.thumbnailUrl && (
+        <Field label="Thumbnail crop" hint="Drag to choose the part that shows on the video card, then zoom if you want it closer." group>
+          <FocusPicker src={v.thumbnailUrl} value={v.thumbFocus} onChange={(f) => set('thumbFocus', f)} ratio={16 / 9} label="Thumbnail" />
+        </Field>
+      )}
       <Toggle label="Show on the site" hint="Off = hidden draft" checked={!!v.published} onChange={(x) => set('published', x)} />
 
       <button
@@ -486,7 +492,7 @@ export default function VideosAdmin() {
                       {on && <span className="text-xs font-bold">✓</span>}
                     </span>
                   )}
-                  <Thumb src={r.thumbnailUrl} alt="" className="h-16 w-28 shrink-0 rounded-md" />
+                  <Thumb src={r.thumbnailUrl} focus={r.thumbFocus} alt="" className="h-16 w-28 shrink-0 rounded-md" />
                   <span className="min-w-0 flex-1">
                     <span className="line-clamp-2 block text-[15px] font-medium leading-snug">{r.title}</span>
                     <span className="mt-1 block truncate text-xs text-zinc-500">{[r.creatorName, r.duration, `${formatViews(r.views)} views`].filter(Boolean).join(' · ')}</span>
@@ -549,7 +555,7 @@ export default function VideosAdmin() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex min-w-0 items-center gap-3">
-                        <Thumb src={r.thumbnailUrl} alt="" className="h-12 w-20 shrink-0 rounded-md" />
+                        <Thumb src={r.thumbnailUrl} focus={r.thumbFocus} alt="" className="h-12 w-20 shrink-0 rounded-md" />
                         <div className="min-w-0">
                           <p className="line-clamp-1 font-medium">{r.title}</p>
                           <p className="flex items-center gap-1 truncate text-xs text-zinc-500">

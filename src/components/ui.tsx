@@ -4,6 +4,7 @@ import {
 } from 'react';
 import { AlertCircle, CheckCircle2, ImagePlus, Loader2, X } from 'lucide-react';
 import { api } from '../lib/api';
+import { DEFAULT_FOCUS, cleanFocus, focusStyle, type Focus } from '../../shared/image';
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -279,5 +280,58 @@ export function Badge({ on, yes, no }: { on: boolean; yes: string; no: string })
     <span className={cx('rounded-full px-2 py-0.5 text-xs', on ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-800 text-zinc-400')}>
       {on ? yes : no}
     </span>
+  );
+}
+
+/**
+ * Shows an image in the exact shape it will appear, and lets you drag the part that matters
+ * (the face, the product, the headline) into view, and zoom in. Works with mouse, touch and pen.
+ */
+export function FocusPicker({ src, value, onChange, ratio = 16 / 9, label }: {
+  src?: string; value?: Focus | null; onChange: (f: Focus | null) => void; ratio?: number; label?: string;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ x: number; y: number; start: Focus } | null>(null);
+  const f = cleanFocus(value) ?? DEFAULT_FOCUS;
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
+  if (!src) return <p className="text-xs text-zinc-500">Add an image above, then you can choose which part shows.</p>;
+
+  // Dragging pans the picture: the part you grab moves with your finger or mouse.
+  const clamp = (n: number) => Math.round(Math.min(100, Math.max(0, n)));
+  const move = (e: React.PointerEvent) => {
+    const d = drag.current;
+    const r = box.current?.getBoundingClientRect();
+    if (!d || !r) return;
+    const dx = ((e.clientX - d.x) / r.width) * 100 / d.start.zoom;
+    const dy = ((e.clientY - d.y) / r.height) * 100 / d.start.zoom;
+    onChange({ ...d.start, x: clamp(d.start.x - dx), y: clamp(d.start.y - dy) });
+  };
+
+  return (
+    <div className="space-y-2">
+      <div
+        ref={box}
+        role="application"
+        aria-label={`${label || 'Image'}: drag to move the picture, zoom to get closer`}
+        data-testid="focus-picker"
+        className="relative w-full max-w-md cursor-move touch-none select-none overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900"
+        style={{ aspectRatio: String(ratio) }}
+        onPointerDown={(e) => { drag.current = { x: e.clientX, y: e.clientY, start: f }; e.currentTarget.setPointerCapture(e.pointerId); }}
+        onPointerMove={move}
+        onPointerUp={() => { drag.current = null; }}
+        onPointerCancel={() => { drag.current = null; }}
+      >
+        {!failed && <img src={src} alt="" draggable={false} onError={() => setFailed(true)} className="pointer-events-none h-full w-full object-cover" style={focusStyle(f)} />}
+        <span className="pointer-events-none absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/90 bg-brand-500/60 shadow-lg" aria-hidden />
+      </div>
+      <div className="flex max-w-md items-center gap-3">
+        <span className="w-12 text-xs text-zinc-400">Zoom</span>
+        <input type="range" min={1} max={3} step={0.05} value={f.zoom} onChange={(e) => onChange({ ...f, zoom: Number(e.target.value) })} className="flex-1 accent-amber-500" aria-label={`${label || 'Image'} zoom`} />
+        <span className="w-10 text-right text-xs tabular-nums text-zinc-400">{f.zoom.toFixed(1)}×</span>
+        <button type="button" onClick={() => onChange(null)} className="text-xs text-zinc-400 underline hover:text-zinc-200">Reset</button>
+      </div>
+      {failed && <p className="text-xs text-amber-400">This image couldn't be previewed. Check the link.</p>}
+    </div>
   );
 }

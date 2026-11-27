@@ -1,3 +1,4 @@
+import { cleanFocus, type Focus } from './image';
 /**
  * One place that decides what a valid video looks like.
  * Used by the server (authoritative) and by the admin import page (instant preview).
@@ -12,6 +13,7 @@ export interface CleanVideo {
   /** Where visitors are sent when they click the video (the original site). */
   link: string;
   thumbnailUrl: string;
+  thumbFocus?: Focus;
   description: string;
   category: string;
   tags: string[];
@@ -175,6 +177,7 @@ export function normalizeVideo(raw: unknown): NormalizeResult {
     if (extra || pick(names) !== undefined) present.push(k);
   };
   has('thumbnailUrl', KEYS.thumbnail);
+  if (pick(['thumbfocus']) !== undefined) present.push('thumbFocus');
   has('description', KEYS.description);
   has('category', KEYS.category);
   has('tags', KEYS.tags);
@@ -194,6 +197,7 @@ export function normalizeVideo(raw: unknown): NormalizeResult {
       title,
       link,
       thumbnailUrl,
+      thumbFocus: cleanFocus(pick(['thumbfocus'])),
       description: str(pick(KEYS.description), 5000),
       category: str(categoryRaw, 60),
       tags: parseTags(pick(KEYS.tags)),

@@ -6,8 +6,10 @@ import { api } from '../lib/api';
 import { formatViews } from '../lib/utils';
 import { hasAdConsent } from './ConsentBar';
 import { cx } from './ui';
+import { focusStyle } from '../../shared/image';
+import type { Focus } from '../../shared/image';
 
-export function Thumb({ src, alt, className }: { src?: string; alt: string; className?: string }) {
+export function Thumb({ src, alt, className, focus }: { src?: string; alt: string; className?: string; focus?: Focus | null }) {
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [src]);
   if (!src || failed) {
@@ -17,7 +19,7 @@ export function Thumb({ src, alt, className }: { src?: string; alt: string; clas
       </div>
     );
   }
-  return <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} className={cx('object-cover', className)} />;
+  return <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} className={cx('object-cover', className)} style={focusStyle(focus)} />;
 }
 
 /**
@@ -35,7 +37,7 @@ export function VideoCard({ item, className }: { item: PublicVideo; className?: 
       aria-label={`${item.title} — opens on the original site`}
     >
       <div className="relative aspect-video overflow-hidden rounded-xl bg-zinc-900">
-        <Thumb src={item.thumbnailUrl} alt="" className="h-full w-full transition-transform duration-300 group-hover:scale-105" />
+        <Thumb src={item.thumbnailUrl} focus={item.thumbFocus} alt="" className="h-full w-full transition-transform duration-300 group-hover:scale-105" />
         <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/30 group-hover:opacity-100">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-500 text-zinc-950">
             <Play className="h-6 w-6 fill-current" />
@@ -127,7 +129,7 @@ export function AdSlot({ slot, className, variant = 'banner' }: { slot: AdSlotId
     if (ad.type === 'image' && ad.imageUrl) {
       body = box(
         <a href={ad.targetUrl || '#'} target="_blank" rel="noopener noreferrer sponsored" onClick={click} className="block h-full">
-          <img src={ad.imageUrl} alt={ad.name} className="h-full w-full object-cover" />
+          <img src={ad.imageUrl} alt={ad.name} className="h-full w-full object-cover" style={focusStyle(ad.imageFocus)} />
         </a>,
       );
     } else if (ad.type === 'html' && ad.htmlSnippet) {
