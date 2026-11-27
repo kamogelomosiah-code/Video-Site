@@ -177,8 +177,10 @@ export function Alert({ kind = 'error', children }: { kind?: 'error' | 'success'
   );
 }
 
-export function Modal({ open, onClose, title, children, wide }: {
+export function Modal({ open, onClose, title, children, wide, sheet }: {
   open: boolean; onClose: () => void; title: string; children: ReactNode; wide?: boolean;
+  /** Fills the whole screen on phones (easier to type in), a normal window on larger screens. */
+  sheet?: boolean;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -192,12 +194,12 @@ export function Modal({ open, onClose, title, children, wide }: {
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm sm:items-center" onMouseDown={onClose}>
+    <div className={cx('fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-black/80 backdrop-blur-sm sm:items-center sm:p-4', sheet ? 'p-0' : 'p-4')} onMouseDown={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={cx('my-8 w-full rounded-xl border border-zinc-800 bg-zinc-950 shadow-2xl animate-fade-in', wide ? 'max-w-3xl' : 'max-w-lg')}
+        className={cx('w-full border border-zinc-800 bg-zinc-950 shadow-2xl animate-fade-in', sheet ? 'min-h-full rounded-none sm:min-h-0 sm:my-8 sm:rounded-xl' : 'my-8 rounded-xl', wide ? 'max-w-3xl' : 'max-w-lg')}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">

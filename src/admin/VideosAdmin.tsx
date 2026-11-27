@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Download, ExternalLink, FileUp, Globe, Pencil, Plus, Search, Star, Trash2 } from 'lucide-react';
+import { ChevronDown, Download, ExternalLink, FileUp, Globe, MoreHorizontal, Pencil, Plus, Search, SlidersHorizontal, Star, Trash2 } from 'lucide-react';
 import type { Category } from '../../shared/types';
 import { api, tokenStore } from '../lib/api';
 import { usePageTitle } from '../lib/settings';
@@ -24,7 +24,7 @@ const hostOf = (u: string) => {
   }
 };
 
-function VideoForm({ initial, categories, onDone }: { initial: Partial<Row>; categories: Category[]; onDone: () => void }) {
+function VideoForm({ initial, categories, onDone, onDelete }: { initial: Partial<Row>; categories: Category[]; onDone: () => void; onDelete?: () => void }) {
   const { toast } = useToast();
   const [v, setV] = useState<any>({ ...initial, tags: (initial.tags || []).join(', ') });
   const [busy, setBusy] = useState(false);
@@ -32,13 +32,15 @@ function VideoForm({ initial, categories, onDone }: { initial: Partial<Row>; cat
   const set = (k: string, val: any) => setV((x: any) => ({ ...x, [k]: val }));
   const isNew = !initial.id;
   const [fetching, setFetching] = useState(false);
+  // On phones the form starts with just the essentials; the rest is one tap away. Larger screens show it all.
+  const [more, setMore] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches);
 
   /** Reads the link's page and fills in any empty fields. */
-  const fetchDetails = async () => {
+  const fetchDetails = async (url: string = v.externalUrl) => {
     setFetching(true);
     setError('');
     try {
-      const { results } = await api.post<{ results: any[] }>('/admin/videos/scrape', { urls: [v.externalUrl] });
+      const { results } = await api.post<{ results: any[] }>('/admin/videos/scrape', { urls: [url] });
       const r = results[0];
       if (!r?.ok) throw new Error(r?.error || 'No details found');
       const d = r.videos[0];
@@ -79,48 +81,78 @@ function VideoForm({ initial, categories, onDone }: { initial: Partial<Row>; cat
 
   return (
     <form onSubmit={save} className="space-y-4">
-      <Field label="Title *">
-        <Input value={v.title} onChange={(e) => set('title', e.target.value)} required maxLength={200} />
-      </Field>
-      <Field label="Link to the original video *" hint="Visitors are sent here when they click the video. Paste the full address.">
+      <Field label="Link to the original video *" hint={isNew ? 'Paste the address and the details fill in by themselves.' : 'Visitors are sent here when they click the video.'}>
         <div className="flex gap-2">
-          <Input value={v.externalUrl} onChange={(e) => set('externalUrl', e.target.value)} placeholder="https://…" required />
-          <Button variant="secondary" className="shrink-0" loading={fetching} disabled={!v.externalUrl?.trim()} onClick={fetchDetails}>
+          <Input
+            value={v.externalUrl}
+            onChange={(e) => set('externalUrl', e.target.value)}
+            onPaste={(e) => {
+              // Pasting a link into a new video reads the page straight away.
+              const t = e.clipboardData.getData('text').trim();
+              if (isNew && !v.title && /^https?:\/\//i.test(t)) setTimeout(() => fetchDetails(t), 0);
+            }}
+            placeholder="https://…"
+            inputMode="url"
+            autoCapitalize="off"
+            required
+          />
+          <Button variant="secondary" className="shrink-0" loading={fetching} disabled={!v.externalUrl?.trim()} onClick={() => fetchDetails()}>
             {!fetching && <Globe className="h-4 w-4" />} Fetch details
           </Button>
         </div>
       </Field>
+      <Field label="Title *">
+        <Input value={v.title} onChange={(e) => set('title', e.target.value)} required maxLength={200} />
+      </Field>
       <Field label="Thumbnail" group>
         <ImageInput value={v.thumbnailUrl} onChange={(url) => set('thumbnailUrl', url)} label="Thumbnail" />
       </Field>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Category">
-          <Select value={v.category} onChange={(e) => set('category', e.target.value)}>
-            <option value="">— None —</option>
-            {categories.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
-          </Select>
-        </Field>
-        <Field label="Duration" hint="e.g. 12:30">
-          <Input value={v.duration} onChange={(e) => set('duration', e.target.value)} />
-        </Field>
-        <Field label="Creator">
-          <Input value={v.creatorName} onChange={(e) => set('creatorName', e.target.value)} />
-        </Field>
-        <Field label="Tags" hint="Separate with commas">
-          <Input value={v.tags} onChange={(e) => set('tags', e.target.value)} />
-        </Field>
-      </div>
-      <Field label="Description">
-        <Textarea rows={3} value={v.description} onChange={(e) => set('description', e.target.value)} />
-      </Field>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Toggle label="Show on the site" hint="Off = hidden draft" checked={!!v.published} onChange={(x) => set('published', x)} />
-        <Toggle label="Trending" hint="Shows at the top of Trending" checked={!!v.featured} onChange={(x) => set('featured', x)} />
-      </div>
+      <Toggle label="Show on the site" hint="Off = hidden draft" checked={!!v.published} onChange={(x) => set('published', x)} />
+
+      <button
+        type="button"
+        onClick={() => setMore((m) => !m)}
+        aria-expanded={more}
+        className="flex w-full items-center justify-between rounded-lg border border-zinc-800 px-3.5 py-3 text-sm font-medium text-zinc-300 hover:bg-zinc-900"
+      >
+        More details <ChevronDown className={cx('h-4 w-4 transition-transform', more && 'rotate-180')} />
+      </button>
+      {more && (
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Category">
+              <Select value={v.category} onChange={(e) => set('category', e.target.value)}>
+                <option value="">— None —</option>
+                {categories.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+              </Select>
+            </Field>
+            <Field label="Duration" hint="e.g. 12:30">
+              <Input value={v.duration} onChange={(e) => set('duration', e.target.value)} />
+            </Field>
+            <Field label="Creator">
+              <Input value={v.creatorName} onChange={(e) => set('creatorName', e.target.value)} />
+            </Field>
+            <Field label="Tags" hint="Separate with commas">
+              <Input value={v.tags} onChange={(e) => set('tags', e.target.value)} />
+            </Field>
+          </div>
+          <Field label="Description">
+            <Textarea rows={3} value={v.description} onChange={(e) => set('description', e.target.value)} />
+          </Field>
+          <Toggle label="Trending" hint="Shows at the top of Trending" checked={!!v.featured} onChange={(x) => set('featured', x)} />
+        </div>
+      )}
+
       {error && <Alert>{error}</Alert>}
-      <div className="flex justify-end gap-2 border-t border-zinc-900 pt-4">
-        <Button variant="secondary" onClick={onDone}>Cancel</Button>
-        <Button type="submit" loading={busy}>{isNew ? 'Add video' : 'Save changes'}</Button>
+      {/* Stays in view while scrolling, so saving is always one tap away */}
+      <div className="sticky bottom-0 -mx-5 -mb-5 flex items-center gap-2 border-t border-zinc-800 bg-zinc-950/95 px-5 py-3 backdrop-blur">
+        {onDelete && (
+          <Button variant="danger" onClick={onDelete} aria-label="Delete this video"><Trash2 className="h-4 w-4" /></Button>
+        )}
+        <div className="ml-auto flex gap-2">
+          <Button variant="secondary" onClick={onDone}>Cancel</Button>
+          <Button type="submit" loading={busy}>{isNew ? 'Add video' : 'Save'}</Button>
+        </div>
       </div>
     </form>
   );
@@ -144,6 +176,8 @@ export default function VideosAdmin() {
   const [allMatching, setAllMatching] = useState(false);
   const [editing, setEditing] = useState<Partial<Row> | null>(null);
   const [bulkCat, setBulkCat] = useState('');
+  const [selectMode, setSelectMode] = useState(false); // phones: checkboxes only appear when asked for
+  const [showFilters, setShowFilters] = useState(false);
   const [busyBulk, setBusyBulk] = useState(false);
   const [version, setVersion] = useState(0);
   const { data: categories } = useFetch(() => api.get<Category[]>('/admin/categories'), []);
@@ -231,12 +265,14 @@ export default function VideosAdmin() {
 
   const remove = async (row: Row) => {
     if (!(await confirm(`Delete “${row.title}”?`, { confirmLabel: 'Delete' }))) return;
+    // Disappears at once; comes back (with the error) only if the server refuses.
+    setData((d) => d && { ...d, items: d.items.filter((x) => x.id !== row.id), total: Math.max(0, d.total - 1) });
     try {
       await api.del(`/admin/videos/${row.id}`);
       toast('Video deleted');
-      reload();
     } catch (x: any) {
       toast(x.message, 'error');
+      reload();
     }
   };
 
@@ -258,42 +294,71 @@ export default function VideosAdmin() {
 
   const filtersActive = !!q || status !== 'all' || category !== 'all';
 
+  const closeMenu = (e: React.MouseEvent<HTMLElement>) => e.currentTarget.closest('details')?.removeAttribute('open');
+  const STATUS_CHIPS = [['all', 'All'], ['published', 'Shown'], ['draft', 'Hidden'], ['pinned', 'Trending']] as const;
+  const moreFiltersActive = category !== 'all' || sort !== 'newest';
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className={cx('space-y-4', selectionCount > 0 && 'pb-24 md:pb-0')}>
+      <div className="flex items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Videos</h1>
           <p className="text-sm text-zinc-400">{data ? `${data.total.toLocaleString()} video${data.total === 1 ? '' : 's'}${filtersActive ? ' match' : ''}` : ' '}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={exportAll}><Download className="h-4 w-4" /> Export</Button>
-          <Link to="/admin/videos/scrape" className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm hover:bg-zinc-700">
-            <Globe className="h-4 w-4" /> Add from URL
-          </Link>
-          <Link to="/admin/videos/import" className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm hover:bg-zinc-700">
-            <FileUp className="h-4 w-4" /> Import file
-          </Link>
+        <div className="flex items-center gap-2">
+          <div className="hidden flex-wrap gap-2 md:flex">
+            <Button variant="secondary" onClick={exportAll}><Download className="h-4 w-4" /> Export</Button>
+            <Link to="/admin/videos/scrape" className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm hover:bg-zinc-700">
+              <Globe className="h-4 w-4" /> Add from URL
+            </Link>
+            <Link to="/admin/videos/import" className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm hover:bg-zinc-700">
+              <FileUp className="h-4 w-4" /> Import file
+            </Link>
+          </div>
+          {/* Phones: the less common actions live in one small menu */}
+          <details className="relative md:hidden">
+            <summary className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 [&::-webkit-details-marker]:hidden" aria-label="More actions">
+              <MoreHorizontal className="h-5 w-5" />
+            </summary>
+            <div className="absolute right-0 z-30 mt-2 w-52 rounded-xl border border-zinc-800 bg-zinc-950 p-1 shadow-2xl">
+              <Link to="/admin/videos/scrape" className="flex items-center gap-2 rounded-lg px-3 py-3 text-sm hover:bg-zinc-900"><Globe className="h-4 w-4" /> Add from URL</Link>
+              <Link to="/admin/videos/import" className="flex items-center gap-2 rounded-lg px-3 py-3 text-sm hover:bg-zinc-900"><FileUp className="h-4 w-4" /> Import file</Link>
+              <button type="button" onClick={(e) => { closeMenu(e); exportAll(); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-3 text-left text-sm hover:bg-zinc-900"><Download className="h-4 w-4" /> Export all</button>
+            </div>
+          </details>
           <Button onClick={() => setEditing({ ...EMPTY })}><Plus className="h-4 w-4" /> Add video</Button>
         </div>
       </div>
 
       <div className="flex flex-col gap-2 lg:flex-row">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-          <Input value={box} onChange={(e) => setBox(e.target.value)} placeholder="Search title, tags, creator, description…" className="pl-9" aria-label="Search videos" />
+        <div className="flex flex-1 gap-2">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+            <Input value={box} onChange={(e) => setBox(e.target.value)} placeholder="Search videos…" className="pl-9" aria-label="Search videos" type="search" />
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowFilters((x) => !x)}
+            aria-expanded={showFilters}
+            aria-label="More filters"
+            className={cx('relative flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border md:hidden', showFilters ? 'border-brand-500 text-brand-400' : 'border-zinc-700 bg-zinc-800')}
+          >
+            <SlidersHorizontal className="h-5 w-5" />
+            {moreFiltersActive && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-brand-500" />}
+          </button>
         </div>
-        <Select value={status} onChange={(e) => setFilter('status', e.target.value, 'all')} className="lg:w-40" aria-label="Status">
+        <Select value={status} onChange={(e) => setFilter('status', e.target.value, 'all')} className="hidden md:block lg:w-40" aria-label="Status">
           <option value="all">All statuses</option>
           <option value="published">Shown</option>
           <option value="draft">Hidden</option>
           <option value="pinned">Trending</option>
         </Select>
-        <Select value={category} onChange={(e) => setFilter('category', e.target.value, 'all')} className="lg:w-48" aria-label="Category">
+        <Select value={category} onChange={(e) => setFilter('category', e.target.value, 'all')} className="hidden md:block lg:w-48" aria-label="Category">
           <option value="all">All categories</option>
           <option value="__none">No category</option>
           {(categories || []).map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
         </Select>
-        <Select value={sort} onChange={(e) => setFilter('sort', e.target.value, 'newest')} className="lg:w-40" aria-label="Sort">
+        <Select value={sort} onChange={(e) => setFilter('sort', e.target.value, 'newest')} className="hidden md:block lg:w-40" aria-label="Sort">
           <option value="newest">Newest first</option>
           <option value="oldest">Oldest first</option>
           <option value="views">Most viewed</option>
@@ -301,8 +366,46 @@ export default function VideosAdmin() {
         </Select>
       </div>
 
+      {/* Phones: one-tap status chips, plus Select for bulk actions */}
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:hidden" role="group" aria-label="Show videos">
+        {STATUS_CHIPS.map(([val, label]) => (
+          <button
+            key={val}
+            type="button"
+            onClick={() => setFilter('status', val, 'all')}
+            aria-pressed={status === val}
+            className={cx('h-10 shrink-0 rounded-full border px-4 text-sm', status === val ? 'border-brand-500 bg-brand-500/15 text-brand-300' : 'border-zinc-800 bg-zinc-950 text-zinc-300')}
+          >
+            {label}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => { setSelectMode((m) => !m); setSelected(new Set()); setAllMatching(false); }}
+          aria-pressed={selectMode}
+          className={cx('ml-auto h-10 shrink-0 rounded-full border px-4 text-sm', selectMode ? 'border-brand-500 bg-brand-500 text-zinc-950' : 'border-zinc-800 bg-zinc-950 text-zinc-300')}
+        >
+          {selectMode ? 'Done' : 'Select'}
+        </button>
+      </div>
+      {showFilters && (
+        <div className="grid grid-cols-2 gap-2 md:hidden">
+          <Select value={category} onChange={(e) => setFilter('category', e.target.value, 'all')} aria-label="Filter by category">
+            <option value="all">All categories</option>
+            <option value="__none">No category</option>
+            {(categories || []).map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+          </Select>
+          <Select value={sort} onChange={(e) => setFilter('sort', e.target.value, 'newest')} aria-label="Sort order">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="views">Most viewed</option>
+            <option value="title">Title A–Z</option>
+          </Select>
+        </div>
+      )}
+
       {selectionCount > 0 && (
-        <div className="sticky top-14 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-brand-500/40 bg-zinc-950 p-3 shadow-lg lg:top-2" data-testid="bulk-bar">
+        <div className="fixed inset-x-0 bottom-0 z-30 mb-0 flex items-center gap-2 overflow-x-auto border-t border-brand-500/40 bg-zinc-950 p-3 shadow-2xl md:sticky md:inset-x-auto md:bottom-auto md:top-14 md:mb-4 md:flex-wrap md:overflow-visible md:rounded-xl md:border md:shadow-lg lg:top-2 [&>*]:shrink-0 [&>*]:whitespace-nowrap" data-testid="bulk-bar">
           <span className="text-sm font-medium">{selectionCount.toLocaleString()} selected</span>
           <Button variant="secondary" loading={busyBulk} onClick={() => bulk('publish')}>Show</Button>
           <Button variant="secondary" loading={busyBulk} onClick={() => bulk('unpublish')}>Hide</Button>
@@ -317,7 +420,7 @@ export default function VideosAdmin() {
             <Button variant="secondary" disabled={!bulkCat} loading={busyBulk} onClick={() => { bulk('category', { category: bulkCat === '__none' ? '' : bulkCat }); setBulkCat(''); }}>Move</Button>
           </span>
           <Button variant="danger" loading={busyBulk} onClick={() => bulk('delete')}><Trash2 className="h-4 w-4" /> Delete</Button>
-          <Button variant="ghost" className="ml-auto" onClick={() => { setSelected(new Set()); setAllMatching(false); }}>Clear selection</Button>
+          <Button variant="ghost" className="md:ml-auto" onClick={() => { setSelected(new Set()); setAllMatching(false); }}>Clear</Button>
         </div>
       )}
 
@@ -350,40 +453,61 @@ export default function VideosAdmin() {
         </Empty>
       ) : (
         <>
-        {/* Phones: one card per video, so nothing is cut off and every action is reachable */}
+        {/* Phones: tap a card to edit it. Show/Hide and Trending are one tap on the card. */}
         <ul className={cx('space-y-2 md:hidden', loading && 'opacity-60')} data-testid="admin-cards">
+          {selectMode && (
+            <li className="flex items-center justify-between px-1 text-sm text-zinc-400">
+              <span>Tap videos to select them</span>
+              <button type="button" className="font-medium text-brand-400" onClick={() => setSelected(new Set(ids))}>Select this page</button>
+            </li>
+          )}
           {data.items.map((r) => {
-            const catName = (categories || []).find((c) => c.slug === r.category)?.name || r.category || '—';
             const on = selected.has(r.id) || allMatching;
             return (
-              <li key={r.id} className={cx('rounded-xl border p-3', on ? 'border-brand-500/40 bg-brand-500/5' : 'border-zinc-900 bg-zinc-950')} data-testid="admin-card">
-                <div className="flex gap-3">
-                  <input type="checkbox" aria-label={`Select ${r.title}`} className="mt-1 shrink-0 accent-amber-500" checked={on} onChange={() => toggle(r.id)} />
-                  <Thumb src={r.thumbnailUrl} alt="" className="h-16 w-24 shrink-0 rounded-md" />
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 font-medium leading-snug">{r.title}</p>
-                    <p className="mt-0.5 truncate text-xs text-zinc-500">
-                      {r.creatorName && <span>{r.creatorName} · </span>}
-                      <a href={r.externalUrl} target="_blank" rel="noopener noreferrer" className="hover:text-zinc-300">{hostOf(r.externalUrl)}</a>
-                    </p>
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-zinc-400">
-                      <span>{catName}</span><span>·</span><span>{formatViews(r.views)} views</span>
-                    </div>
+              <li key={r.id} className={cx('overflow-hidden rounded-xl border', on ? 'border-brand-500/60 bg-brand-500/5' : 'border-zinc-900 bg-zinc-950')} data-testid="admin-card">
+                <button
+                  type="button"
+                  onClick={() => (selectMode ? toggle(r.id) : setEditing(r))}
+                  className="flex w-full items-center gap-3 p-3 text-left active:bg-zinc-900"
+                  aria-label={selectMode ? `Select ${r.title}` : `Edit ${r.title}`}
+                >
+                  {selectMode && (
+                    <span className={cx('flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2', on ? 'border-brand-500 bg-brand-500 text-zinc-950' : 'border-zinc-600')} aria-hidden>
+                      {on && <span className="text-xs font-bold">✓</span>}
+                    </span>
+                  )}
+                  <Thumb src={r.thumbnailUrl} alt="" className="h-16 w-28 shrink-0 rounded-md" />
+                  <span className="min-w-0 flex-1">
+                    <span className="line-clamp-2 block text-[15px] font-medium leading-snug">{r.title}</span>
+                    <span className="mt-1 block truncate text-xs text-zinc-500">{[r.creatorName, r.duration, `${formatViews(r.views)} views`].filter(Boolean).join(' · ')}</span>
+                  </span>
+                </button>
+                {!selectMode && (
+                  <div className="flex items-center justify-between border-t border-zinc-900 pl-3 pr-1">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={r.published}
+                      onClick={() => quick(r, r.published ? 'unpublish' : 'publish')}
+                      className="flex min-h-11 items-center gap-2.5 text-sm"
+                      aria-label={`${r.published ? 'Hide' : 'Show'} ${r.title}`}
+                    >
+                      <span className={cx('relative h-6 w-11 rounded-full transition-colors', r.published ? 'bg-brand-500' : 'bg-zinc-700')} aria-hidden>
+                        <span className={cx('absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all', r.published ? 'left-[22px]' : 'left-0.5')} />
+                      </span>
+                      <span className={r.published ? 'text-zinc-200' : 'text-zinc-500'}>{r.published ? 'Shown' : 'Hidden'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => quick(r, r.featured ? 'unpin' : 'pin')}
+                      className={cx('flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-sm', r.featured ? 'text-brand-400' : 'text-zinc-500')}
+                      aria-pressed={r.featured}
+                      aria-label={r.featured ? 'Remove from Trending' : 'Add to Trending'}
+                    >
+                      <Star className={cx('h-5 w-5', r.featured && 'fill-current')} /> Trending
+                    </button>
                   </div>
-                </div>
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-900 pt-3">
-                  <button type="button" onClick={() => quick(r, r.published ? 'unpublish' : 'publish')} aria-label={r.published ? `Hide ${r.title}` : `Show ${r.title}`}>
-                    <Badge on={r.published} yes="Shown" no="Hidden" />
-                  </button>
-                  <div className="flex items-center gap-1">
-                    {r.featured && <span className="mr-1 inline-flex items-center gap-1 rounded-full bg-brand-500/15 px-2 py-0.5 text-xs text-brand-300"><Star className="h-3 w-3 fill-current" /> Trending</span>}
-                    <Button variant="ghost" className="px-2.5" onClick={() => quick(r, r.featured ? 'unpin' : 'pin')} aria-label={r.featured ? 'Remove from Trending' : 'Add to Trending'}>
-                      <Star className={cx('h-4 w-4', r.featured && 'fill-brand-400 text-brand-400')} />
-                    </Button>
-                    <Button variant="ghost" className="px-2.5" onClick={() => setEditing(r)} aria-label="Edit video"><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" className="px-2.5 hover:text-red-400" onClick={() => remove(r)} aria-label="Delete video"><Trash2 className="h-4 w-4" /></Button>
-                  </div>
-                </div>
+                )}
               </li>
             );
           })}
@@ -471,12 +595,13 @@ export default function VideosAdmin() {
         </div>
       )}
 
-      <Modal open={!!editing} onClose={() => setEditing(null)} title={editing?.id ? 'Edit video' : 'Add video'} wide>
+      <Modal open={!!editing} onClose={() => setEditing(null)} title={editing?.id ? 'Edit video' : 'Add video'} wide sheet>
         {editing && (
           <VideoForm
             key={editing.id || 'new'}
             initial={editing}
             categories={categories || []}
+            onDelete={editing.id ? () => { const row = editing as Row; setEditing(null); remove(row); } : undefined}
             onDone={() => {
               setEditing(null);
               reload();
