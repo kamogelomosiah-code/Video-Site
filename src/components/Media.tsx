@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Eye, Play } from 'lucide-react';
-import { AD_SLOTS, type AdSlotId, type AdUnit, type PublicVideo } from '../../shared/types';
+import { Link } from 'react-router-dom';
+import { AD_SLOTS, adSlotSize, type AdSlotId, type AdUnit, type PublicVideo } from '../../shared/types';
 import { useSettings } from '../lib/settings';
 import { api } from '../lib/api';
 import { formatViews } from '../lib/utils';
@@ -22,20 +23,10 @@ export function Thumb({ src, alt, className, focus }: { src?: string; alt: strin
   return <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} className={cx('object-cover', className)} style={focusStyle(focus)} />;
 }
 
-/**
- * A video. It's a normal link to /go/:id, which counts the click and sends the visitor to the
- * original website — so it opens in a new tab and works even before the page's JavaScript loads.
- */
+/** A video. Opens its page on this site; from there, one more tap watches it on the original website. */
 export function VideoCard({ item, className }: { item: PublicVideo; className?: string }) {
   return (
-    <a
-      href={`/go/${item.id}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={cx('group block', className)}
-      data-testid="video-card"
-      aria-label={`${item.title} — opens on the original site`}
-    >
+    <Link to={`/v/${encodeURIComponent(item.id)}`} className={cx('group block', className)} data-testid="video-card">
       <div className="relative aspect-video overflow-hidden rounded-xl bg-zinc-900">
         <Thumb src={item.thumbnailUrl} focus={item.thumbFocus} alt="" className="h-full w-full transition-transform duration-300 group-hover:scale-105" />
         <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/30 group-hover:opacity-100">
@@ -50,7 +41,18 @@ export function VideoCard({ item, className }: { item: PublicVideo; className?: 
         {item.creatorName && <span className="min-w-0 truncate">{item.creatorName} ·</span>}
         <Eye className="h-3 w-3 shrink-0" /> {formatViews(item.views)}
       </p>
-    </a>
+    </Link>
+  );
+}
+
+/** A row you swipe sideways on phones; a normal grid on larger screens. */
+export function VideoRow({ items }: { items: PublicVideo[] }) {
+  return (
+    <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-x-4 sm:gap-y-6 sm:overflow-visible sm:px-0 lg:grid-cols-4 xl:grid-cols-5" data-testid="video-row">
+      {items.map((m, i) => (
+        <VideoCard key={m.id} item={m} className={cx('w-[44%] shrink-0 snap-start sm:w-auto', i >= 5 ? 'sm:hidden' : i === 4 ? 'sm:hidden xl:block' : i === 3 ? 'sm:hidden lg:block' : '')} />
+      ))}
+    </div>
   );
 }
 
@@ -72,9 +74,25 @@ export function VideoGrid({ items, insert }: { items: PublicVideo[]; insert?: { 
  * running it shows an "Advertise here" box — if that's switched on in Site settings — so the
  * space is visible to potential advertisers.
  */
+/** True on phone-sized screens (under 640px), kept up to date when the window is resized or rotated. */
+export function useIsPhone() {
+  const q = '(max-width: 639px)';
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia(q);
+    const on = () => setPhone(m.matches);
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  }, []);
+  return phone;
+}
+
 export function AdSlot({ slot, className, variant = 'banner' }: { slot: AdSlotId; className?: string; variant?: 'banner' | 'card' }) {
   const { settings } = useSettings();
-  const def = AD_SLOTS.find((s) => s.id === slot)!;
+  const phone = useIsPhone();
+  const info = AD_SLOTS.find((s) => s.id === slot)!;
+  // The admin can set their own sizes (Admin → Ads → Ad spaces), separately for phones and larger screens.
+  const def = { ...adSlotSize(slot, settings.adSizes, phone), label: info.label };
   const [ad, setAd] = useState<(AdUnit & { adsenseClientId?: string }) | null | undefined>(undefined);
   const insRef = useRef<HTMLModElement>(null);
   useEffect(() => {
@@ -110,7 +128,7 @@ export function AdSlot({ slot, className, variant = 'banner' }: { slot: AdSlotId
     const text = (
       <span className="flex h-full min-h-14 w-full flex-col items-center justify-center gap-0.5 rounded-xl border border-dashed border-zinc-700 bg-zinc-900/40 px-3 text-center text-zinc-400 transition-colors hover:border-brand-500 hover:text-brand-300">
         <span className="text-sm font-semibold">{settings.adsPlaceholderText || 'Advertise here'}</span>
-        <span className="text-[11px] text-zinc-500">{def.label} · {def.size}</span>
+        <span className="text-[11px] text-zinc-500">{def.label} · {adSlotSize(slot, settings.adSizes, phone).label}</span>
       </span>
     );
     body = (

@@ -9,6 +9,7 @@ import { ForgotPasswordPage, LoginPage, RegisterPage } from './pages/AuthPages';
 import AccountPage from './pages/Account';
 import { LegalPage, MaintenancePage, NotFoundPage } from './pages/Misc';
 import AdvertisePage from './pages/Advertise';
+import VideoPage from './pages/VideoPage';
 
 const AdminApp = lazy(() => import('./admin/AdminApp'));
 
@@ -17,7 +18,7 @@ function legacyTarget(search: string): string | null {
   const p = new URLSearchParams(search);
   const page = p.get('page');
   if (!page) return null;
-  if (page === 'view' && p.get('mediaId')) return `/go/${encodeURIComponent(p.get('mediaId')!)}`;
+  if (page === 'view' && p.get('mediaId')) return `/v/${encodeURIComponent(p.get('mediaId')!)}`;
   const map: Record<string, string> = {
     media: '/',
     directory: '/',
@@ -61,6 +62,7 @@ export default function App() {
       />
       <Route element={<Layout />}>
         <Route index element={<Home />} />
+        <Route path="v/:id" element={<VideoPage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
         <Route path="forgot-password" element={<ForgotPasswordPage />} />

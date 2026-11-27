@@ -20,7 +20,7 @@ export interface ScrapedVideo {
 }
 
 export type ScrapeResult =
-  | { url: string; ok: true; source: 'json-ld' | 'opengraph' | 'html'; videos: ScrapedVideo[] }
+  | { url: string; ok: true; source: 'json-ld' | 'opengraph' | 'html' | 'oembed'; videos: ScrapedVideo[] }
   | { url: string; ok: false; error: string };
 
 const MAX_BYTES = 3 * 1024 * 1024;
@@ -187,7 +187,7 @@ export function extractVideos(html: string, pageUrl: string): { source: 'json-ld
   const { first, meta, canonical, title } = readMeta(html);
   const siteName = first('og:site_name');
   const pageLink = abs(first('og:url') || canonical, pageUrl) || pageUrl;
-  const metaTags = [...(meta.get('video:tag') || []), ...(meta.get('og:video:tag') || [])];
+  const metaTags = [...(meta.get('video:tag') || []), ...(meta.get('og:video:tag') || []), ...(meta.get('article:tag') || [])];
   const keywords = first('keywords');
 
   const objects = readJsonLd(html);
@@ -222,7 +222,7 @@ export function extractVideos(html: string, pageUrl: string): { source: 'json-ld
     link: pageLink,
     thumbnail: abs(first('og:image:secure_url', 'og:image', 'twitter:image', 'twitter:image:src'), pageUrl),
     description: first('og:description', 'twitter:description', 'description').slice(0, 5000),
-    duration: Number(first('og:video:duration', 'video:duration')) || undefined,
+    duration: Number(first('og:video:duration', 'video:duration')) || isoSeconds(first('duration')) || undefined,
     tags: (metaTags.length ? metaTags : keywords.split(',')).map((t) => t.trim()).filter(Boolean).slice(0, 30),
     creator: first('author', 'article:author') || siteName,
   };
@@ -235,15 +235,87 @@ function dedupe(list: ScrapedVideo[]) {
   return list.filter((v) => (seen.has(v.link) ? false : (seen.add(v.link), true)));
 }
 
+// --- oEmbed: the official "tell me about this link" service many video sites offer ---
+
+const OEMBED_PROVIDERS: Array<[RegExp, (u: string) => string]> = [
+  [/(^|\.)(youtube\.com|youtu\.be)$/i, (u) => `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(u)}`],
+  [/(^|\.)vimeo\.com$/i, (u) => `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(u)}`],
+  [/(^|\.)(dailymotion\.com|dai\.ly)$/i, (u) => `https://www.dailymotion.com/services/oembed?format=json&url=${encodeURIComponent(u)}`],
+  [/(^|\.)tiktok\.com$/i, (u) => `https://www.tiktok.com/oembed?url=${encodeURIComponent(u)}`],
+];
+
+/** The page's own oEmbed link, or a known provider's, for this address. */
+export function oembedUrlFor(pageUrl: string, html = ''): string {
+  for (const m of html.matchAll(/<link\b[^>]*>/gi)) {
+    const a = attrs(m[0]);
+    if (/json\+oembed/i.test(a.type || '') && a.href) return abs(a.href, pageUrl);
+  }
+  let host = '';
+  try { host = new URL(pageUrl).hostname; } catch { return ''; }
+  const hit = OEMBED_PROVIDERS.find(([re]) => re.test(host));
+  return hit ? hit[1](pageUrl) : '';
+}
+
+async function fetchJson(input: string): Promise<any> {
+  let url = new URL(input);
+  for (let hop = 0; hop <= 3; hop++) {
+    await assertPublic(url);
+    const res = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(TIMEOUT_MS), headers: { 'User-Agent': UA, Accept: 'application/json' } });
+    if (res.status >= 300 && res.status < 400 && res.headers.get('location')) { url = new URL(res.headers.get('location')!, url); continue; }
+    if (!res.ok) throw new Error(`oEmbed answered ${res.status}`);
+    const text = await res.text();
+    if (text.length > 1024 * 1024) throw new Error('oEmbed reply too large');
+    return JSON.parse(text);
+  }
+  throw new Error('Too many redirects');
+}
+
+/** Fills the gaps in a scraped video from an oEmbed reply. */
+function mergeOembed(v: ScrapedVideo | undefined, o: any, link: string, preferTitle = false): ScrapedVideo | undefined {
+  if (!o || typeof o !== 'object') return v;
+  const str = (x: unknown) => (typeof x === 'string' ? decode(x) : '');
+  const out: ScrapedVideo = v ? { ...v } : { title: '', link };
+  // A bare <title> is often "Video - Site name"; the video's own oEmbed title is better.
+  out.title = (preferTitle && str(o.title)) || out.title || str(o.title);
+  out.creator ||= str(o.author_name) || str(o.provider_name);
+  out.thumbnail ||= /^https?:\/\//i.test(String(o.thumbnail_url || '')) ? String(o.thumbnail_url) : '';
+  if (!out.duration && Number(o.duration) > 0) out.duration = Math.round(Number(o.duration));
+  out.description ||= str(o.description).slice(0, 5000);
+  return out.title ? out : v;
+}
+
 export async function scrapeUrl(input: string): Promise<ScrapeResult> {
   const url = input.trim();
   try {
     if (/^[a-z][a-z0-9+.-]*:\/\//i.test(url) && !/^https?:\/\//i.test(url)) {
       return { url, ok: false, error: 'Only http and https links can be fetched' };
     }
-    const { finalUrl, html } = await fetchPage(/^https?:\/\//i.test(url) ? url : `https://${url}`);
-    const { source, videos } = extractVideos(html, finalUrl);
-    if (!videos.length) return { url, ok: false, error: 'No video details found on that page' };
+    const start = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+    new URL(start); // throws ERR_INVALID_URL for nonsense
+    // Read the page. Some sites (YouTube, for one) block or hide details from simple fetches,
+    // so a failed page read is not the end: their oEmbed service may still answer.
+    let page: { finalUrl: string; html: string } | null = null;
+    let pageError: any = null;
+    try { page = await fetchPage(start); } catch (e) { pageError = e; }
+    const found = page ? extractVideos(page.html, page.finalUrl) : { source: 'html' as const, videos: [] as ScrapedVideo[] };
+    let source: 'json-ld' | 'opengraph' | 'html' | 'oembed' = found.source;
+    let videos = found.videos;
+    if (videos.length <= 1) {
+      const pageUrl = page?.finalUrl || start;
+      const oUrl = oembedUrlFor(pageUrl, page?.html);
+      if (oUrl) {
+        const o = await fetchJson(oUrl).catch(() => null);
+        const merged = mergeOembed(videos[0], o, pageUrl, found.source === 'html');
+        if (merged) {
+          if (!videos.length) source = 'oembed';
+          videos = [merged];
+        }
+      }
+    }
+    if (!videos.length) {
+      if (pageError) throw pageError;
+      return { url, ok: false, error: 'No video details found on that page' };
+    }
     return { url, ok: true, source, videos: videos.slice(0, 200) };
   } catch (e: any) {
     const msg =

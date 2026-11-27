@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ChevronDown, Download, ExternalLink, FileUp, Globe, MoreHorizontal, Pencil, Plus, Search, SlidersHorizontal, Star, Trash2 } from 'lucide-react';
+import { CheckSquare, ChevronDown, Download, ExternalLink, FileUp, Globe, MoreHorizontal, Pencil, Plus, Search, SlidersHorizontal, Star, Trash2 } from 'lucide-react';
 import type { Category } from '../../shared/types';
 import type { Focus } from '../../shared/image';
 import { api, tokenStore } from '../lib/api';
@@ -34,8 +34,8 @@ function VideoForm({ initial, categories, onDone, onDelete }: { initial: Partial
   const isNew = !initial.id;
   const [fetching, setFetching] = useState(false);
   const lastFetched = useRef('');   // the last link we read, so leaving the field twice doesn't read it twice
-  // On phones the form starts with just the essentials; the rest is one tap away. Larger screens show it all.
-  const [more, setMore] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches);
+  // The form starts with just the essentials; the rest is one tap away (open when editing a video that has them).
+  const [more, setMore] = useState(() => !!(initial.description || initial.creatorName || initial.duration));
 
   /** Reads the link's page and fills in any empty fields. */
   const fetchDetails = async (url: string = v.externalUrl) => {
@@ -56,6 +56,7 @@ function VideoForm({ initial, categories, onDone, onDelete }: { initial: Partial
         creatorName: x.creatorName || d.creator || '',
         tags: x.tags || (d.tags || []).join(', '),
       }));
+      if (d.description || d.creator || dur) setMore(true); // show what was found
       toast('Details filled in from the page');
     } catch (x: any) {
       setError(`Couldn't fetch details: ${x.message}`);
@@ -122,7 +123,22 @@ function VideoForm({ initial, categories, onDone, onDelete }: { initial: Partial
           <FocusPicker src={v.thumbnailUrl} value={v.thumbFocus} onChange={(f) => set('thumbFocus', f)} ratio={16 / 9} label="Thumbnail" />
         </Field>
       )}
-      <Toggle label="Show on the site" hint="Off = hidden draft" checked={!!v.published} onChange={(x) => set('published', x)} />
+      {/* The essentials: where it goes, and how it's found */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Category">
+          <Select value={v.category} onChange={(e) => set('category', e.target.value)}>
+            <option value="">— None —</option>
+            {categories.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Tags" hint="Separate with commas — shown on the video page">
+          <Input value={v.tags} onChange={(e) => set('tags', e.target.value)} placeholder="funny, live, football" />
+        </Field>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Toggle label="Show on the site" hint="Off = hidden draft" checked={!!v.published} onChange={(x) => set('published', x)} />
+        <Toggle label="Trending" hint="Pinned to Trending and the big pictures at the top" checked={!!v.featured} onChange={(x) => set('featured', x)} />
+      </div>
 
       <button
         type="button"
@@ -130,31 +146,21 @@ function VideoForm({ initial, categories, onDone, onDelete }: { initial: Partial
         aria-expanded={more}
         className="flex w-full items-center justify-between rounded-lg border border-zinc-800 px-3.5 py-3 text-sm font-medium text-zinc-300 hover:bg-zinc-900"
       >
-        More details <ChevronDown className={cx('h-4 w-4 transition-transform', more && 'rotate-180')} />
+        More details <span className="ml-1 mr-auto text-xs font-normal text-zinc-500">duration, creator, description</span><ChevronDown className={cx('h-4 w-4 transition-transform', more && 'rotate-180')} />
       </button>
       {more && (
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Category">
-              <Select value={v.category} onChange={(e) => set('category', e.target.value)}>
-                <option value="">— None —</option>
-                {categories.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
-              </Select>
-            </Field>
             <Field label="Duration" hint="e.g. 12:30">
               <Input value={v.duration} onChange={(e) => set('duration', e.target.value)} />
             </Field>
             <Field label="Creator">
               <Input value={v.creatorName} onChange={(e) => set('creatorName', e.target.value)} />
             </Field>
-            <Field label="Tags" hint="Separate with commas">
-              <Input value={v.tags} onChange={(e) => set('tags', e.target.value)} />
-            </Field>
           </div>
           <Field label="Description">
             <Textarea rows={3} value={v.description} onChange={(e) => set('description', e.target.value)} />
           </Field>
-          <Toggle label="Trending" hint="Shows at the top of Trending" checked={!!v.featured} onChange={(x) => set('featured', x)} />
         </div>
       )}
 
@@ -341,7 +347,16 @@ export default function VideosAdmin() {
               <button type="button" onClick={(e) => { closeMenu(e); exportAll(); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-3 text-left text-sm hover:bg-zinc-900"><Download className="h-4 w-4" /> Export all</button>
             </div>
           </details>
-          <Button onClick={() => setEditing({ ...EMPTY })}><Plus className="h-4 w-4" /> Add video</Button>
+          <button
+            type="button"
+            onClick={() => { setSelectMode((m) => !m); setSelected(new Set()); setAllMatching(false); }}
+            aria-pressed={selectMode}
+            data-testid="select-mode"
+            className={cx('flex h-11 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium md:hidden', selectMode ? 'border-brand-500 bg-brand-500 text-zinc-950' : 'border-zinc-700 bg-zinc-800 text-zinc-200')}
+          >
+            {selectMode ? 'Done' : <><CheckSquare className="h-4 w-4" /> Select</>}
+          </button>
+          <Button onClick={() => setEditing({ ...EMPTY })} aria-label="Add video"><Plus className="h-4 w-4" /> <span className="hidden sm:inline">Add video</span><span className="sm:hidden">Add</span></Button>
         </div>
       </div>
 
@@ -381,7 +396,7 @@ export default function VideosAdmin() {
         </Select>
       </div>
 
-      {/* Phones: one-tap status chips, plus Select for bulk actions */}
+      {/* Phones: one-tap status chips (Select for bulk actions is in the header) */}
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:hidden" role="group" aria-label="Show videos">
         {STATUS_CHIPS.map(([val, label]) => (
           <button
@@ -394,14 +409,6 @@ export default function VideosAdmin() {
             {label}
           </button>
         ))}
-        <button
-          type="button"
-          onClick={() => { setSelectMode((m) => !m); setSelected(new Set()); setAllMatching(false); }}
-          aria-pressed={selectMode}
-          className={cx('ml-auto h-10 shrink-0 rounded-full border px-4 text-sm', selectMode ? 'border-brand-500 bg-brand-500 text-zinc-950' : 'border-zinc-800 bg-zinc-950 text-zinc-300')}
-        >
-          {selectMode ? 'Done' : 'Select'}
-        </button>
       </div>
       {showFilters && (
         <div className="grid grid-cols-2 gap-2 md:hidden">
@@ -426,9 +433,21 @@ export default function VideosAdmin() {
           <Button variant="danger" loading={busyBulk} onClick={() => bulk('delete')}><Trash2 className="h-4 w-4" /> Delete</Button>
           <Button variant="secondary" loading={busyBulk} onClick={() => bulk('publish')}>Show</Button>
           <Button variant="secondary" loading={busyBulk} onClick={() => bulk('unpublish')}>Hide</Button>
-          <Button variant="secondary" loading={busyBulk} onClick={() => bulk('pin')}>Trending</Button>
-          <Button variant="secondary" loading={busyBulk} onClick={() => bulk('unpin')}>Remove from Trending</Button>
-          <span className="flex items-center gap-1">
+          <details className="relative md:hidden">
+            <summary className="flex h-11 cursor-pointer list-none items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 text-sm [&::-webkit-details-marker]:hidden">More <ChevronDown className="h-4 w-4" /></summary>
+            <div className="absolute bottom-full left-0 z-40 mb-2 w-56 rounded-xl border border-zinc-800 bg-zinc-950 p-1 shadow-2xl">
+              <button type="button" className="w-full rounded-lg px-3 py-3 text-left text-sm hover:bg-zinc-900" onClick={(e) => { closeMenu(e); bulk('pin'); }}>Add to Trending</button>
+              <button type="button" className="w-full rounded-lg px-3 py-3 text-left text-sm hover:bg-zinc-900" onClick={(e) => { closeMenu(e); bulk('unpin'); }}>Remove from Trending</button>
+              {(categories || []).map((c) => (
+                <button key={c.slug} type="button" className="w-full rounded-lg px-3 py-3 text-left text-sm hover:bg-zinc-900" onClick={(e) => { closeMenu(e); bulk('category', { category: c.slug }); }}>Move to {c.name}</button>
+              ))}
+            </div>
+          </details>
+          <span className="hidden gap-2 md:flex">
+            <Button variant="secondary" loading={busyBulk} onClick={() => bulk('pin')}>Trending</Button>
+            <Button variant="secondary" loading={busyBulk} onClick={() => bulk('unpin')}>Remove from Trending</Button>
+          </span>
+          <span className="hidden items-center gap-1 md:flex">
             <Select value={bulkCat} onChange={(e) => setBulkCat(e.target.value)} className="w-44" aria-label="Move to category">
               <option value="">Move to category…</option>
               <option value="__none">No category</option>
@@ -473,8 +492,11 @@ export default function VideosAdmin() {
         <ul className={cx('space-y-2 md:hidden', loading && 'opacity-60')} data-testid="admin-cards">
           {selectMode && (
             <li className="flex items-center justify-between px-1 text-sm text-zinc-400">
-              <span>Tap videos to select them</span>
-              <button type="button" className="font-medium text-brand-400" onClick={() => setSelected(new Set(ids))}>Select this page</button>
+              <span>Tap videos to select</span>
+              <span className="flex gap-3">
+                <button type="button" className="font-medium text-brand-400" onClick={() => setSelected(new Set(ids))}>This page</button>
+                {data.total > ids.length && <button type="button" className="font-medium text-brand-400" onClick={() => { setSelected(new Set(ids)); setAllMatching(true); }}>All {data.total.toLocaleString()}</button>}
+              </span>
             </li>
           )}
           {data.items.map((r) => {
@@ -495,7 +517,7 @@ export default function VideosAdmin() {
                   <Thumb src={r.thumbnailUrl} focus={r.thumbFocus} alt="" className="h-16 w-28 shrink-0 rounded-md" />
                   <span className="min-w-0 flex-1">
                     <span className="line-clamp-2 block text-[15px] font-medium leading-snug">{r.title}</span>
-                    <span className="mt-1 block truncate text-xs text-zinc-500">{[r.creatorName, r.duration, `${formatViews(r.views)} views`].filter(Boolean).join(' · ')}</span>
+                    <span className="mt-1 block truncate text-xs text-zinc-500">{[r.creatorName, r.duration, `${formatViews(r.views)} ${r.views === 1 ? 'view' : 'views'}`].filter(Boolean).join(' · ')}</span>
                   </span>
                 </button>
                 {!selectMode && (

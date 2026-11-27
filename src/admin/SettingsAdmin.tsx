@@ -72,7 +72,9 @@ export default function SettingsAdmin() {
         {text('footerText', 'Footer text', 'Leave blank for “© year Site name”.')}
       </Section>
 
-      <Section title="Home page" description="The search box at the top of the home page.">
+      <Section title="Home page" description="The top of the home page: rotating featured videos, then the search box.">
+        <Toggle label="Rotating featured videos" hint="Big pictures of your Trending videos (the ones you pin first) that change every few seconds." checked={s.heroSlides} onChange={(v) => set('heroSlides', v)} />
+        {text('heroCallout', 'Call-out label', 'The small badge on the pictures, e.g. “New today” or “Trending now”.', 'Trending now')}
         {text('heroHeadline', 'Headline', undefined, 'Find something to watch')}
         {area('heroSubtext', 'Text under the headline', undefined, 2)}
       </Section>
