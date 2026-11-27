@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
-import { Check, Search, SearchX, Film, Flame, Play } from 'lucide-react';
+import { ArrowUp, Check, ChevronRight, Search, SearchX, Film, Flame, Play } from 'lucide-react';
 import type { Category, PublicVideo } from '../../shared/types';
 import { api } from '../lib/api';
 import { useSettings } from '../lib/settings';
@@ -12,6 +12,71 @@ import { Alert, Button, Empty, Spinner, cx } from '../components/ui';
 
 type Page = { items: PublicVideo[]; total: number; page: number; pages: number };
 type Trending = { items: PublicVideo[]; tags: string[] };
+
+const chunk = <T,>(list: T[], n: number) => Array.from({ length: Math.ceil(list.length / n) }, (_, i) => list.slice(i * n, i * n + n));
+
+function RowSkeleton() {
+  return (
+    <div className="flex gap-3 overflow-hidden sm:grid sm:grid-cols-3 sm:gap-x-4 lg:grid-cols-4 xl:grid-cols-5" aria-hidden>
+      {Array.from({ length: 5 }, (_, i) => (
+        <div key={i} className={cx('w-[44%] shrink-0 sm:w-auto', i >= 3 && 'sm:hidden', i === 3 && 'lg:block', i === 4 && 'xl:block')}>
+          <div className="skeleton aspect-video rounded-2xl" />
+          <div className="skeleton mt-3 h-3.5 w-11/12 rounded-full" />
+          <div className="skeleton mt-2 h-3 w-1/2 rounded-full" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** "More in <category>": a swipeable row that loads only when it is about to scroll into view. */
+function CategoryRow({ cat }: { cat: Category }) {
+  const ref = useRef<HTMLElement>(null);
+  const [items, setItems] = useState<PublicVideo[] | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const load = () => api.get<Page>(`/videos?category=${encodeURIComponent(cat.slug)}&sort=views&limit=10`).then((r) => setItems(r.items)).catch(() => setItems([]));
+    if (typeof IntersectionObserver === 'undefined') return void load();
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { io.disconnect(); load(); } }, { rootMargin: '600px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [cat.slug]);
+  if (items && items.length < 3) return <div className="h-8" />;
+  return (
+    <section ref={ref} className="my-10 rounded-3xl bg-zinc-900/40 p-4 sm:p-5" aria-label={`More in ${cat.name}`} data-testid="category-row">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-base font-bold sm:text-lg">More in {cat.name}</h2>
+        <Link to={categoryPath(cat.slug)} className="ripple flex h-9 items-center gap-1 rounded-full px-3 text-sm font-semibold text-brand-300 hover:bg-white/[.05]">
+          See all <ChevronRight className="h-4 w-4" />
+        </Link>
+      </div>
+      {items ? <VideoRow items={items} /> : <RowSkeleton />}
+    </section>
+  );
+}
+
+/** A small round button that appears after scrolling a long way, to jump back to the top. */
+function BackToTop() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const on = () => setShow(window.scrollY > 1600);
+    window.addEventListener('scroll', on, { passive: true });
+    return () => window.removeEventListener('scroll', on);
+  }, []);
+  if (!show) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+      aria-label="Back to top"
+      data-testid="back-to-top"
+      className="ripple fixed bottom-[calc(96px+env(safe-area-inset-bottom))] right-4 z-[110] flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-800 text-zinc-100 shadow-xl shadow-black/50 animate-dialog hover:bg-zinc-700 md:bottom-8"
+    >
+      <ArrowUp className="h-5 w-5" />
+    </button>
+  );
+}
 
 /** Big rotating pictures of the pinned / trending videos, with a call-out, to catch the eye. */
 function Slides({ items, callout }: { items: PublicVideo[]; callout: string }) {
@@ -31,7 +96,7 @@ function Slides({ items, callout }: { items: PublicVideo[]; callout: string }) {
   const cur = items[i] || items[0];
   return (
     <section
-      className="relative mb-5 overflow-hidden rounded-3xl bg-zinc-900"
+      className="relative mb-4 overflow-hidden rounded-3xl bg-zinc-900"
       aria-roledescription="carousel"
       aria-label="Featured videos"
       data-testid="hero-slides"
@@ -107,34 +172,33 @@ function Hero({ value, onSubmit, onChange, tags, slides, loading }: {
       {show && (slides.length > 0 ? (
         <Slides items={slides} callout={settings.heroCallout} />
       ) : (
-        <div className="skeleton mb-5 aspect-[4/3] max-h-[460px] w-full rounded-3xl min-[480px]:aspect-video lg:aspect-[21/9]" aria-hidden data-testid="hero-placeholder" />
+        <div className="skeleton mb-4 aspect-[4/3] max-h-[460px] w-full rounded-3xl min-[480px]:aspect-video lg:aspect-[21/9]" aria-hidden data-testid="hero-placeholder" />
       ))}
-      <section className={cx(!show && 'rounded-2xl border border-zinc-900 bg-gradient-to-b from-zinc-900/70 to-zinc-950 px-5 py-10 text-center sm:py-14')}>
-        <h1 className={cx('font-extrabold tracking-tight', show ? 'text-lg sm:text-xl' : 'text-3xl sm:text-4xl')}>{settings.heroHeadline}</h1>
-        {settings.heroSubtext && <p className={cx('mt-1 text-sm text-zinc-400', !show && 'mx-auto mt-2 max-w-xl')}>{settings.heroSubtext}</p>}
-        <form onSubmit={onSubmit} role="search" className={cx('mt-4 flex gap-2', !show && 'mx-auto mt-6 max-w-2xl')}>
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-500" />
-            <input
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              placeholder="Search videos…"
-              aria-label="Search videos"
-              type="search"
-              enterKeyHint="search"
-              className="h-12 w-full rounded-full border border-zinc-800 bg-zinc-900 pl-12 pr-4 text-base placeholder:text-zinc-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
-            />
-          </div>
-          <Button type="submit" className="h-12 rounded-full px-5 sm:px-6" aria-label="Search">
-            <Search className="h-5 w-5 sm:hidden" /><span className="hidden sm:inline">Search</span>
-          </Button>
+      <section className={cx(!show && 'rounded-3xl border border-zinc-900 bg-gradient-to-b from-zinc-900/70 to-zinc-950 px-5 py-10 text-center sm:py-14')}>
+        {/* With the pictures showing, the headline is for search engines and screen readers; the page stays minimal. */}
+        <h1 className={cx(show ? 'sr-only' : 'text-3xl font-extrabold tracking-tight sm:text-4xl')}>{settings.heroHeadline}</h1>
+        {!show && settings.heroSubtext && <p className="mx-auto mt-2 max-w-xl text-sm text-zinc-400">{settings.heroSubtext}</p>}
+        <form onSubmit={onSubmit} role="search" className={cx('relative', !show && 'mx-auto mt-6 max-w-2xl')}>
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-500" />
+          <input
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Search videos, tags, creators…"
+            aria-label="Search videos"
+            type="search"
+            enterKeyHint="search"
+            className="h-12 w-full rounded-full border border-zinc-800 bg-zinc-900 pl-12 pr-14 text-base placeholder:text-zinc-500 transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+          />
+          <button type="submit" aria-label="Search" className="ripple absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-brand-500 text-zinc-950 transition-colors hover:bg-brand-400">
+            <Search className="h-[18px] w-[18px]" strokeWidth={2.4} />
+          </button>
         </form>
         {tags.length > 0 && (
           <div className={cx('scrollbar-none -mx-4 mt-3 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0', !show && 'sm:justify-center')}>
             {tags.map((t) => (
-              <button key={t} type="button" onClick={() => onChange(t)} className="ripple h-8 shrink-0 rounded-lg border border-zinc-700/80 px-3 text-xs text-zinc-300 transition-colors hover:bg-white/[.06] hover:text-white">
+              <Link key={t} to={tagPath(t)} className="ripple flex h-8 shrink-0 items-center rounded-lg border border-zinc-800 px-3 text-xs text-zinc-300 transition-colors hover:bg-white/[.06] hover:text-white">
                 #{t}
-              </button>
+              </Link>
             ))}
           </div>
         )}
@@ -212,6 +276,19 @@ export default function Home() {
   };
 
   const cat = categories?.find((c) => c.slug === category);
+  // Categories for the "More in …" rows: only ones that have videos in the list (so a row is never empty).
+  const inList = new Set(items.map((v) => v.category).filter(Boolean));
+  const others = (categories || []).filter((c) => c.slug !== category && inList.has(c.slug));
+
+  // Load the next page a little before the visitor reaches the end.
+  const sentinel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el || loading || page >= meta.pages || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([e]) => e.isIntersecting && setPage((p) => p + 1), { rootMargin: '900px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [loading, page, meta.pages]);
   const listing = category !== 'all' || !!tag; // a category or tag landing page
   const heading = tag ? `#${tag} videos` : cat ? `${cat.name} videos` : '';
   useSeo(
@@ -240,38 +317,31 @@ export default function Home() {
       ) : (
         <Hero value={box} onChange={setBox} onSubmit={submit} tags={trending?.tags || []} slides={q ? [] : (trending?.items || []).filter((v) => v.thumbnailUrl).slice(0, 5)} loading={!q && !trending} />
       )}
-      <AdSlot slot="home_top" className="mb-8" />
-
       {/* Keep the Trending row's space while it loads, so the list below doesn't jump. */}
       {!q && !listing && !trending && (
-        <section className="mb-10" aria-hidden data-testid="trending-placeholder">
+        <section className="mb-8" aria-hidden data-testid="trending-placeholder">
           <div className="skeleton mb-4 h-6 w-32 rounded-full" />
-          <div className="flex gap-3 overflow-hidden sm:grid sm:grid-cols-3 sm:gap-x-4 lg:grid-cols-4 xl:grid-cols-5">
-            {Array.from({ length: 5 }, (_, i) => (
-              <div key={i} className={cx('w-[44%] shrink-0 sm:w-auto', i >= 3 && 'sm:hidden', i === 3 && 'lg:block', i === 4 && 'xl:block')}>
-                <div className="skeleton aspect-video rounded-2xl" />
-                <div className="skeleton mt-3 h-3.5 w-11/12 rounded-full" />
-                <div className="skeleton mt-2 h-3 w-1/2 rounded-full" />
-              </div>
-            ))}
-          </div>
+          <RowSkeleton />
         </section>
       )}
       {!q && !listing && trending && trending.items.length > 0 && (
-        <section id="trending" className="mb-10 scroll-mt-20" aria-labelledby="trending-title">
-          <h2 id="trending-title" className="mb-4 flex items-center gap-2 text-lg font-bold">
-            <Flame className="h-5 w-5 text-brand-400" /> Trending
+        <section id="trending" className="mb-8 scroll-mt-20" aria-labelledby="trending-title">
+          <h2 id="trending-title" className="mb-3 flex items-center gap-2 text-lg font-bold">
+            <Flame className="h-5 w-5 text-brand-400" /> Trending now
           </h2>
           <VideoRow items={trending.items.slice(0, 10)} />
         </section>
       )}
+      {/* The first ad comes after something worth watching, not before it (home page only). */}
+      {!q && !listing && <AdSlot slot="home_top" className="mb-8" />}
 
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-bold">
-          {q ? <>Results for “{q}” <span className="text-sm font-normal text-zinc-500">({meta.total})</span></> : listing ? 'Newest first' : 'All videos'}
-        </h2>
-        {!!categories?.length && (
-          <div className="scrollbar-none -mx-4 flex max-w-full gap-2 overflow-x-auto px-4 sm:mx-0 sm:px-0" role="tablist" aria-label="Categories">
+      <h2 className="mb-1 text-lg font-bold" id="list-title">
+        {q ? <>Results for “{q}” <span className="text-sm font-normal text-zinc-500">({meta.total})</span></> : listing ? 'Newest first' : 'Fresh picks'}
+      </h2>
+      {/* The category chips stay just under the top bar while you scroll, so switching is always one tap away. */}
+      {!!categories?.length && !tag && (
+        <div className="sticky top-16 z-30 -mx-4 mb-4 bg-zinc-950/90 px-4 py-2.5 backdrop-blur-xl" data-testid="chip-bar">
+          <div className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4" role="tablist" aria-label="Categories">
             {[{ slug: 'all', name: 'All' }, ...categories].map((c) => (
               // Real links, so search engines can follow them to each category page.
               <Link
@@ -282,7 +352,7 @@ export default function Home() {
                 className={cx(
                   // Material filter chip: a check appears when it's on
                   'ripple flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3.5 text-sm transition-[background-color,border-color,color,padding] duration-200 ease-standard',
-                  category === c.slug ? 'border-transparent bg-brand-500/20 pl-2.5 font-semibold text-brand-200' : 'border-zinc-700 text-zinc-300 hover:bg-white/[.04]',
+                  category === c.slug ? 'border-transparent bg-brand-500/20 pl-2.5 font-semibold text-brand-200' : 'border-zinc-800 text-zinc-300 hover:bg-white/[.04]',
                 )}
               >
                 {category === c.slug && <Check className="h-4 w-4 animate-pop" strokeWidth={2.6} />}
@@ -290,8 +360,9 @@ export default function Home() {
               </Link>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+      {(!categories?.length || tag) && <div className="mb-4" />}
 
       {error && <Alert>{error}</Alert>}
       {loading && page === 1 ? (
@@ -304,20 +375,42 @@ export default function Home() {
         )
       ) : (
         <>
-          <VideoGrid items={items.slice(0, 12)} insert={items.length > 5 ? { at: 5, node: <AdSlot key="infeed" slot="home_infeed" variant="card" /> } : undefined} />
-          {items.length > 12 && (
-            <>
-              <AdSlot slot="home_mid" className="my-8" />
-              <VideoGrid items={items.slice(12)} />
-            </>
-          )}
-          {page < meta.pages && (
-            <div className="mt-10 flex justify-center">
-              <Button variant="secondary" loading={loading} onClick={() => setPage((p) => p + 1)}>Load more</Button>
+          {/* The list in blocks of 12. Between blocks: a row from another category (on the home page) or an ad,
+              so there is always something new a little further down. */}
+          {chunk(items, 12).map((block, i) => {
+            const extra = !q && !listing && others.length ? others[i % others.length] : null;
+            return (
+              <Fragment key={i}>
+                <VideoGrid items={block} insert={i === 0 && block.length > 5 ? { at: 5, node: <AdSlot key="infeed" slot="home_infeed" variant="card" /> } : undefined} />
+                {(i < chunk(items, 12).length - 1 || page >= meta.pages) && (
+                  i % 2 === 0 && extra ? <CategoryRow key={`row-${extra.slug}-${i}`} cat={extra} /> : i % 2 === 1 ? <AdSlot slot="home_mid" className="my-10" /> : <div className="h-8" />
+                )}
+              </Fragment>
+            );
+          })}
+          {/* Endless list: more videos load as you near the bottom */}
+          {page < meta.pages ? (
+            <div ref={sentinel} className="mt-6" data-testid="load-more">
+              {loading ? <GridSkeleton count={4} /> : (
+                <div className="flex justify-center"><Button variant="secondary" onClick={() => setPage((p) => p + 1)}>Show more</Button></div>
+              )}
             </div>
+          ) : (
+            items.length > 12 && (
+              <div className="mt-12 rounded-3xl border border-zinc-900 bg-zinc-900/40 p-6 text-center" data-testid="end-of-list">
+                <p className="font-semibold">You’re all caught up</p>
+                <p className="mt-1 text-sm text-zinc-400">Try another category:</p>
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  {(categories || []).filter((c) => c.slug !== category).map((c) => (
+                    <Link key={c.slug} to={categoryPath(c.slug)} className="ripple rounded-lg border border-zinc-800 px-3.5 py-2 text-sm text-zinc-200 hover:bg-white/[.05]">{c.name}</Link>
+                  ))}
+                </div>
+              </div>
+            )
           )}
         </>
       )}
+      <BackToTop />
     </div>
   );
 }

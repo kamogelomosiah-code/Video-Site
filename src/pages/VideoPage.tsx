@@ -125,8 +125,9 @@ export default function VideoPage() {
   };
 
   return (
-    <div data-testid="video-page">
-      <article className="mx-auto max-w-3xl">
+    // Phones: one column. Larger screens: the video on the left, "Up next" on the right (keeps people watching).
+    <div data-testid="video-page" className="mx-auto max-w-6xl lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-8">
+      <article className="mx-auto w-full max-w-3xl lg:max-w-none">
         {/* The picture is a big "play" button that opens the video where it lives. */}
         <a
           href={watch}
@@ -218,15 +219,31 @@ export default function VideoPage() {
             )}
           </div>
         )}
+        <AdSlot slot="home_mid" className="mt-8" />
       </article>
 
-      <AdSlot slot="home_mid" className="my-8" />
-
       {similar.length > 0 && (
-        <section aria-labelledby="similar-title" className="mt-8">
-          <h2 id="similar-title" className="mb-4 text-lg font-bold">More like this</h2>
-          <VideoGrid items={similar} />
-        </section>
+        <aside aria-labelledby="similar-title" className="mt-10 lg:mt-0">
+          <h2 id="similar-title" className="mb-4 text-lg font-bold">Up next</h2>
+          {/* Phones/tablets: a grid of cards. Large screens: a compact list beside the video. */}
+          <div className="lg:hidden"><VideoGrid items={similar} /></div>
+          <ul className="hidden space-y-3 lg:block">
+            {similar.map((s) => (
+              <li key={s.id}>
+                <Link to={videoPath(s)} className="ripple group flex gap-3 rounded-xl p-1.5 transition-colors hover:bg-white/[.04]">
+                  <span className="relative shrink-0 overflow-hidden rounded-lg">
+                    <Thumb src={s.thumbnailUrl} focus={s.thumbFocus} alt="" className="h-[84px] w-[150px]" />
+                    {s.duration && <span className="absolute bottom-1 right-1 rounded bg-black/80 px-1 text-[11px] font-medium">{s.duration}</span>}
+                  </span>
+                  <span className="min-w-0 py-0.5">
+                    <span className="line-clamp-2 text-sm font-semibold leading-snug group-hover:text-brand-300">{s.title}</span>
+                    <span className="mt-1 block truncate text-xs text-zinc-500">{[s.creatorName, `${formatViews(s.views)} views`].filter(Boolean).join(' · ')}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </aside>
       )}
     </div>
   );

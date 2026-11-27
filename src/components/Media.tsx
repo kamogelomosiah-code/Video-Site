@@ -28,7 +28,7 @@ export function Thumb({ src, alt, className, focus, priority }: { src?: string; 
       alt={alt}
       loading={priority ? 'eager' : 'lazy'}
       decoding="async"
-      {...({ fetchpriority: priority ? 'high' : 'auto' } as any)}
+      fetchPriority={priority ? 'high' : 'auto'}
       onError={() => setFailed(true)}
       className={cx('object-cover', className)}
       style={focusStyle(focus)}
@@ -62,7 +62,7 @@ export function VideoCard({ item, className, style }: { item: PublicVideo; class
 /** A row you swipe sideways on phones; a normal grid on larger screens. */
 export function VideoRow({ items }: { items: PublicVideo[] }) {
   return (
-    <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-x-4 sm:gap-y-6 sm:overflow-visible sm:px-0 lg:grid-cols-4 xl:grid-cols-5" data-testid="video-row">
+    <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-x-4 sm:gap-y-6 sm:overflow-visible sm:px-0 lg:grid-cols-4 xl:grid-cols-5" data-testid="video-row">
       {items.map((m, i) => (
         <VideoCard key={m.id} item={m} className={cx('w-[44%] shrink-0 snap-start sm:w-auto', i >= 5 ? 'sm:hidden' : i === 4 ? 'sm:hidden xl:block' : i === 3 ? 'sm:hidden lg:block' : '')} />
       ))}
