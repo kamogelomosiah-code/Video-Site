@@ -86,6 +86,9 @@ async function main() {
     );
   });
 
+  // --- Apps hub: a static landing page that links to all my apps (open to everyone, no login) ---
+  app.use('/hub', express.static(path.join(process.cwd(), 'hub'), { maxAge: '5m' }));
+
   // --- Front end ---
   if (!config.isProd) {
     const { createServer } = await import('vite');

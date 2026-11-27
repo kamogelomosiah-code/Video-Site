@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kamo's Apps</title>
+<meta name="description" content="Kamogelo Mosia, software and IT solutions engineer. Open any of my apps from one place.">
+<meta name="color-scheme" content="dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#0b0d12; --panel:#141821; --panel2:#1b2030; --line:#262c3b; --text:#eceef4; --muted:#9aa3b5; --accent:#f59e0b; --ink:#1a1304; --ok:#22c55e; }
+  * { box-sizing:border-box }
+  html { scroll-behavior:smooth }
+  #about, #apps { scroll-margin-top:72px }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.6 'Poppins', system-ui, sans-serif; -webkit-font-smoothing:antialiased }
+  a { color:inherit; text-decoration:none }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:8px }
+  .wrap { width:min(1080px, 100% - 32px); margin-inline:auto }
+
+  /* Top bar */
+  header { position:sticky; top:0; z-index:10; background:rgba(11,13,18,.85); backdrop-filter:blur(10px); border-bottom:1px solid var(--line) }
+  header .wrap { display:flex; align-items:center; justify-content:space-between; height:58px }
+  .logo { font-weight:600; letter-spacing:-.01em } .logo span { color:var(--accent) }
+  nav { display:flex; gap:4px }
+  nav a { padding:8px 14px; border-radius:99px; color:var(--muted); font-size:.9rem }
+  nav a:hover { color:var(--text); background:var(--panel) }
+
+  /* About */
+  .hero { padding:56px 0 40px; display:grid; gap:28px; grid-template-columns:auto 1fr; align-items:start }
+  .avatar { width:104px; height:104px; border-radius:30px; background:linear-gradient(135deg,#f59e0b,#ef4444); display:grid; place-items:center; font-size:2.6rem; font-weight:700; color:#1a1304 }
+  h1 { margin:0 0 4px; font-size:clamp(1.9rem, 5vw, 2.8rem); line-height:1.15; letter-spacing:-.02em }
+  .role { color:var(--accent); font-weight:500; margin:0 0 14px }
+  .bio { color:var(--muted); max-width:62ch; margin:0 0 18px }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px }
+  .pill { display:inline-flex; align-items:center; gap:8px; padding:5px 12px; border-radius:99px; background:var(--panel); border:1px solid var(--line); font-size:.82rem; color:var(--muted) }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--ok); flex:none }
+  .cta { display:flex; flex-wrap:wrap; gap:10px }
+  .btn { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:0 20px; border-radius:99px; font-weight:500; border:1px solid var(--line); background:var(--panel); transition:.15s }
+  .btn:hover { border-color:var(--accent) }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--ink); font-weight:600 }
+  .btn.primary:hover { filter:brightness(1.08) }
+  @media (max-width:640px) { .hero { grid-template-columns:1fr; padding-top:36px } .avatar { width:84px; height:84px; border-radius:24px; font-size:2.1rem } }
+
+  /* Apps */
+  section.apps { padding:24px 0 72px }
+  .head { display:flex; flex-wrap:wrap; align-items:end; justify-content:space-between; gap:14px; margin-bottom:18px }
+  h2 { margin:0; font-size:1.5rem; letter-spacing:-.01em }
+  .sub { margin:2px 0 0; color:var(--muted); font-size:.92rem }
+  .filters { display:flex; gap:8px; overflow-x:auto; padding-bottom:2px }
+  .filters button { flex:none; min-height:40px; padding:0 16px; border-radius:99px; border:1px solid var(--line); background:var(--panel); color:var(--muted); font:inherit; font-size:.88rem; cursor:pointer }
+  .filters button[aria-pressed=true] { border-color:var(--accent); color:var(--accent); background:rgba(245,158,11,.1) }
+  .grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)) }
+  .card { display:flex; flex-direction:column; gap:14px; padding:18px; border-radius:20px; background:var(--panel); border:1px solid var(--line); transition:border-color .15s, transform .15s }
+  .card:hover { border-color:#3a4258; transform:translateY(-2px) }
+  .top { display:flex; gap:14px; align-items:center }
+  .icon { width:56px; height:56px; border-radius:16px; display:grid; place-items:center; flex:none; color:#fff }
+  .icon svg { width:28px; height:28px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round }
+  .card h3 { margin:0; font-size:1.05rem; line-height:1.25 }
+  .tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px }
+  .tag { font-size:.7rem; padding:2px 9px; border-radius:99px; background:var(--panel2); color:var(--muted); border:1px solid var(--line) }
+  .tag.live { color:#86efac; border-color:#1e5b36; background:rgba(34,197,94,.08) }
+  .tag.warn { color:#fca5a5; border-color:#6b2a2a; background:rgba(239,68,68,.08) }
+  .desc { margin:0; color:var(--muted); font-size:.9rem; flex:1 }
+  .actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center }
+  .actions .btn { min-height:40px; padding:0 18px; font-size:.9rem }
+  .actions .link { color:var(--muted); font-size:.85rem; padding:8px 6px; border-radius:8px }
+  .actions .link:hover { color:var(--accent) }
+  .empty { display:none; text-align:center; color:var(--muted); padding:40px 0 }
+
+  footer { border-top:1px solid var(--line); padding:26px 0 40px; color:var(--muted); font-size:.85rem }
+  footer .wrap { display:flex; flex-wrap:wrap; justify-content:space-between; gap:10px }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior:auto } .card, .btn { transition:none } .card:hover { transform:none } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <a class="logo" href="#top" aria-label="Back to top">Kamo<span>.</span></a>
+    <nav aria-label="Sections"><a href="#about">About</a><a href="#apps">Apps</a></nav>
+  </div>
+</header>
+
+<main id="top">
+  <div class="wrap">
+    <section class="hero" id="about" aria-labelledby="name">
+      <div class="avatar" aria-hidden="true">K</div>
+      <div>
+        <h1 id="name">Kamogelo Mosia</h1>
+        <p class="role">Software &amp; IT Solutions Engineer</p>
+        <p class="bio">Final-year BSc IT student in Johannesburg. I build web apps, backends and AI tools: software configuration, hardware troubleshooting, full-stack development and AI integration. Everything below is something I built. Open any of it.</p>
+        <div class="chips">
+          <span class="pill"><span class="dot" aria-hidden="true"></span>Available for IT internships, full-stack contracts and permanent roles</span>
+          <span class="pill">Johannesburg, South Africa</span>
+        </div>
+        <div class="cta">
+          <a class="btn primary" href="#apps">Browse my apps</a>
+          <a class="btn" href="https://portfolio-q5ji.onrender.com" target="_blank" rel="noopener noreferrer">Chat with my AI</a>
+          <a class="btn" href="https://github.com/kamogelomosiah-code" target="_blank" rel="noopener noreferrer">GitHub</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="apps" id="apps" aria-labelledby="apps-title">
+      <div class="head">
+        <div>
+          <h2 id="apps-title">My apps</h2>
+          <p class="sub">Tap Open to try one.</p>
+        </div>
+        <div class="filters" role="group" aria-label="Filter apps" id="filters"></div>
+      </div>
+      <div class="grid" id="grid"></div>
+      <p class="empty" id="empty">Nothing here yet.</p>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© <span id="year"></span> Kamogelo Mosia</span>
+    <span>Free servers sleep when idle, so an app can take about 30 seconds to open the first time.</span>
+  </div>
+</footer>
+
+<script>
+'use strict';
+/* ------------------------------------------------------------------
+   Add or change an app here. Nothing else needs editing.
+   url: where "Open" goes ("/" means this same website).
+   kind: "live" or "prototype". extra: optional extra links.
+   ------------------------------------------------------------------ */
+const APPS = [
+  { name: 'Portfolio & AI chat', icon: 'chat', color: ['#f59e0b', '#ef4444'], kind: 'live', tags: ['Web app', 'AI'],
+    text: 'Chat with my AI assistant, browse my projects and CV, and try my API live.',
+    url: 'https://portfolio-q5ji.onrender.com' },
+  { name: 'MasterAPI', icon: 'server', color: ['#6366f1', '#8b5cf6'], kind: 'live', tags: ['API', 'Backend'],
+    text: 'The shared backend behind my apps: data, user accounts, settings and webhooks, with a console and a live tester.',
+    url: 'https://masterapi-main.onrender.com/',
+    extra: [{ label: 'Try it', url: 'https://masterapi-main.onrender.com/try' }, { label: 'Docs', url: 'https://masterapi-main.onrender.com/api/docs' }] },
+  { name: 'Elysian', icon: 'play', color: ['#ec4899', '#f43f5e'], kind: 'live', tags: ['Web app', '18+'], adult: true,
+    text: 'A searchable video directory with a full admin panel. Adults only.',
+    url: '/',
+    extra: [{ label: 'Admin', url: '/admin' }] },
+  { name: 'Household budget', icon: 'wallet', color: ['#10b981', '#059669'], kind: 'live', tags: ['Phone app'],
+    text: 'A money app for couples: balance, bills and lists, saved on the phone and synced between two phones.',
+    url: 'https://kamogelomosiah-code.github.io/kamo-portfolio-ai/' },
+  { name: 'CV Maker', icon: 'file', color: ['#0ea5e9', '#2563eb'], kind: 'live', tags: ['Web app'],
+    text: 'Build, preview and export a formatted CV.',
+    url: 'https://cvmaker-v371.onrender.com/' },
+  { name: 'UJ Stock Manager', icon: 'box', color: ['#f97316', '#ea580c'], kind: 'prototype', tags: ['Prototype'],
+    text: 'Stock, orders and history for a cafeteria, with a barcode scanner and an AI assistant.',
+    url: 'https://ujstockmanager.onrender.com/' },
+  { name: 'Realtime Chat', icon: 'send', color: ['#14b8a6', '#0d9488'], kind: 'prototype', tags: ['Prototype'],
+    text: 'Private one-to-one chat over websockets, with online users and typing indicators.',
+    url: 'https://s-c4nk.onrender.com/' },
+];
+
+const ICONS = {
+  chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  server: '<rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/>',
+  play: '<circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4z"/>',
+  wallet: '<path d="M20 12V8H6a2 2 0 0 1 0-4h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/>',
+  file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>',
+  box: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/>',
+  send: '<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/>',
+};
+
+const FILTERS = [['all', 'All'], ['live', 'Live'], ['prototype', 'Prototypes']];
+const $ = (id) => document.getElementById(id);
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) { if (v != null && v !== false) e.setAttribute(k, v === true ? '' : v); }
+  for (const kid of kids.flat()) if (kid != null) e.append(kid.nodeType ? kid : document.createTextNode(kid));
+  return e;
+};
+const external = (url) => /^https?:\/\//i.test(url);
+const linkAttrs = (url) => (external(url) ? { href: url, target: '_blank', rel: 'noopener noreferrer' } : { href: url });
+
+function card(a) {
+  const icon = el('div', { class: 'icon', style: `background:linear-gradient(135deg,${a.color[0]},${a.color[1]})`, 'aria-hidden': 'true' });
+  icon.innerHTML = `<svg viewBox="0 0 24 24">${ICONS[a.icon] || ICONS.box}</svg>`;
+  const tags = el('div', { class: 'tags' },
+    el('span', { class: 'tag ' + (a.kind === 'live' ? 'live' : '') }, a.kind === 'live' ? 'Live' : 'Prototype'),
+    a.tags.filter((t) => t !== 'Prototype').map((t) => el('span', { class: 'tag ' + (t === '18+' ? 'warn' : '') }, t)));
+  return el('article', { class: 'card', 'data-kind': a.kind },
+    el('div', { class: 'top' }, icon, el('div', {}, el('h3', {}, a.name), tags)),
+    el('p', { class: 'desc' }, a.text),
+    el('div', { class: 'actions' },
+      el('a', { class: 'btn primary', ...linkAttrs(a.url), 'aria-label': `Open ${a.name}` }, 'Open'),
+      (a.extra || []).map((x) => el('a', { class: 'link', ...linkAttrs(x.url), 'aria-label': `${x.label} for ${a.name}` }, x.label))));
+}
+
+let current = 'all';
+function render() {
+  const grid = $('grid'); grid.replaceChildren();
+  const list = APPS.filter((a) => current === 'all' || a.kind === current);
+  list.forEach((a) => grid.append(card(a)));
+  $('empty').style.display = list.length ? 'none' : 'block';
+  document.querySelectorAll('#filters button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.f === current)));
+}
+FILTERS.forEach(([f, label]) => {
+  const b = el('button', { type: 'button', 'data-f': f, 'aria-pressed': String(f === current) }, label);
+  b.addEventListener('click', () => { current = f; render(); });
+  $('filters').append(b);
+});
+$('year').textContent = new Date().getFullYear();
+render();
+</script>
+</body>
+</html>
