@@ -4,6 +4,7 @@ import { ExternalLink, Eye, Film, Play, Share2, ThumbsDown, ThumbsUp } from 'luc
 import type { PublicVideo, VideoDetail } from '../../shared/types';
 import { api } from '../lib/api';
 import { useSeo } from '../lib/seo';
+import { useSettings } from '../lib/settings';
 import { categoryPath, summary, tagPath, videoPath } from '../../shared/seo';
 import { formatViews, timeAgo } from '../lib/utils';
 import { visitorId } from '../lib/visitor';
@@ -20,6 +21,7 @@ type Loaded = { video: VideoDetail; similar: PublicVideo[]; mine: Reaction };
 export default function VideoPage() {
   const { id = '' } = useParams();
   const { toast } = useToast();
+  const { settings } = useSettings();
   const [data, setData] = useState<Loaded | null>(null);
   const [error, setError] = useState('');
   const [more, setMore] = useState(false);
@@ -31,7 +33,11 @@ export default function VideoPage() {
     dv
       ? {
           title: dv.title,
-          description: summary(dv.description || `${dv.title}${dv.creatorName ? ` by ${dv.creatorName}` : ''}. Watch it on ${dv.source || 'the original site'}.`),
+          category: dv.categoryName,
+          description: summary(
+            dv.description ||
+              `Watch ${dv.title}${dv.creatorName ? ` by ${dv.creatorName}` : ''}${dv.duration ? ` (${dv.duration})` : ''}${dv.categoryName ? `, a ${dv.categoryName.toLowerCase()} video` : ''}${dv.tags?.length ? ` about ${dv.tags.slice(0, 3).join(', ')}` : ''}. Free to browse on ${settings.siteName}, then watch on ${dv.source || 'the original site'}.`,
+          ),
           path: videoPath(dv),
           image: dv.thumbnailUrl,
         }
@@ -147,7 +153,13 @@ export default function VideoPage() {
           {v.duration && <span className="absolute bottom-3 right-3 rounded-md bg-black/80 px-2 py-0.5 text-xs font-semibold">{v.duration}</span>}
         </a>
 
-        <h1 className="mt-4 text-xl font-bold leading-snug sm:text-2xl">{v.title}</h1>
+        {/* Breadcrumbs: where this video sits on the site (also given to search engines) */}
+        <nav className="mt-4 flex min-w-0 items-center gap-1 text-xs text-zinc-500" aria-label="Breadcrumb">
+          <Link to="/" className="shrink-0 hover:text-zinc-300">Home</Link>
+          {v.categoryName && (<><span aria-hidden>›</span><Link to={categoryPath(v.category || '')} className="shrink-0 hover:text-zinc-300">{v.categoryName}</Link></>)}
+          <span aria-hidden>›</span><span className="truncate text-zinc-400">{v.title}</span>
+        </nav>
+        <h1 className="mt-1.5 text-xl font-bold leading-snug sm:text-2xl">{v.title}</h1>
         <p className="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-sm text-zinc-400">
           {v.creatorName && <span className="font-medium text-zinc-300">{v.creatorName}</span>}
           {v.creatorName && <span aria-hidden>·</span>}

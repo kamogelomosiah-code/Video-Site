@@ -15,10 +15,15 @@ function setMeta(attr: 'name' | 'property', key: string, value?: string) {
   el.content = value;
 }
 
-export function useSeo(o: { title?: string; description?: string; path?: string; noindex?: boolean; image?: string }) {
+export function useSeo(o: { title?: string; description?: string; path?: string; noindex?: boolean; image?: string; category?: string }) {
   const { settings: s } = useSettings();
   useEffect(() => {
-    const title = o.title ? `${o.title} – ${s.siteName}` : s.metaTitle || `${s.siteName} – ${s.heroHeadline}`;
+    // Same rule as the server (server/seo.ts): short video titles get their category added.
+    const title = o.title
+      ? o.category && o.title.length + o.category.length + s.siteName.length < 52
+        ? `${o.title} – ${o.category} video – ${s.siteName}`
+        : `${o.title} – ${s.siteName}`
+      : s.metaTitle || `${s.siteName} – ${s.heroHeadline}`;
     const description = o.description ?? s.metaDescription;
     document.title = title;
     setMeta('name', 'description', description);
@@ -36,5 +41,5 @@ export function useSeo(o: { title?: string; description?: string; path?: string;
       link.href = window.location.origin + o.path;
       setMeta('property', 'og:url', link.href);
     } else link?.remove();
-  }, [o.title, o.description, o.path, o.noindex, o.image, s.siteName, s.metaTitle, s.metaDescription, s.heroHeadline]);
+  }, [o.title, o.category, o.description, o.path, o.noindex, o.image, s.siteName, s.metaTitle, s.metaDescription, s.heroHeadline]);
 }

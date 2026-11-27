@@ -6,7 +6,7 @@ import { attachUser, ensureAdmin } from './auth';
 import { authRouter } from './routes/auth';
 import { publicRouter, getSettings, goHandler } from './routes/public';
 import { migrateVideos } from './videos';
-import { getIndexNowKey, htmlHandler, robotsTxt, sendCompressed, sitemapHandler } from './seo';
+import { feedHandler, getIndexNowKey, htmlHandler, manifestHandler, robotsTxt, sendCompressed, sitemapHandler } from './seo';
 import fs from 'fs';
 import zlib from 'zlib';
 import { adminRouter } from './routes/admin';
@@ -75,6 +75,21 @@ async function main() {
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     next();
   });
+  // One address per page: search engines see a single site (your own domain, https, no trailing slash).
+  const appUrl = (() => { try { return config.appUrl ? new URL(config.appUrl) : null; } catch { return null; } })();
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    if (config.isProd && appUrl) {
+      // e.g. yoursite.onrender.com -> yoursite.com (the health check and API keep working on any address)
+      if (req.hostname !== appUrl.hostname && !req.path.startsWith('/api/')) return res.redirect(301, appUrl.origin + req.originalUrl);
+      if (appUrl.protocol === 'https:') res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+    }
+    if (req.path.length > 1 && req.path.endsWith('/') && !req.path.startsWith('/api/') && !req.path.startsWith('/hub')) {
+      const q = req.originalUrl.slice(req.path.length);
+      return res.redirect(301, req.path.replace(/\/+$/, '') + q);
+    }
+    next();
+  });
   app.use(attachUser);
 
   app.get('/api/health', async (_req, res) => {
@@ -111,6 +126,8 @@ async function main() {
     res.type('text/plain').send((await getSettings()).adsTxtContent || '');
   });
   app.get(/^\/sitemap(-[a-z]+(-\d+)?)?\.xml$/, sitemapHandler);
+  app.get('/feed.xml', feedHandler);
+  app.get('/manifest.webmanifest', manifestHandler);
   app.get(/^\/[a-f0-9]{32}\.txt$/, async (req, res, next) => {
     const key = await getIndexNowKey();
     if (req.path !== `/${key}.txt`) return next();
