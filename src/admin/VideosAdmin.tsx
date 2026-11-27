@@ -349,7 +349,46 @@ export default function VideosAdmin() {
           )}
         </Empty>
       ) : (
-        <div className={cx('overflow-x-auto rounded-xl border border-zinc-900', loading && 'opacity-60')}>
+        <>
+        {/* Phones: one card per video, so nothing is cut off and every action is reachable */}
+        <ul className={cx('space-y-2 md:hidden', loading && 'opacity-60')} data-testid="admin-cards">
+          {data.items.map((r) => {
+            const catName = (categories || []).find((c) => c.slug === r.category)?.name || r.category || '—';
+            const on = selected.has(r.id) || allMatching;
+            return (
+              <li key={r.id} className={cx('rounded-xl border p-3', on ? 'border-brand-500/40 bg-brand-500/5' : 'border-zinc-900 bg-zinc-950')} data-testid="admin-card">
+                <div className="flex gap-3">
+                  <input type="checkbox" aria-label={`Select ${r.title}`} className="mt-1 shrink-0 accent-amber-500" checked={on} onChange={() => toggle(r.id)} />
+                  <Thumb src={r.thumbnailUrl} alt="" className="h-16 w-24 shrink-0 rounded-md" />
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 font-medium leading-snug">{r.title}</p>
+                    <p className="mt-0.5 truncate text-xs text-zinc-500">
+                      {r.creatorName && <span>{r.creatorName} · </span>}
+                      <a href={r.externalUrl} target="_blank" rel="noopener noreferrer" className="hover:text-zinc-300">{hostOf(r.externalUrl)}</a>
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-zinc-400">
+                      <span>{catName}</span><span>·</span><span>{formatViews(r.views)} views</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-900 pt-3">
+                  <button type="button" onClick={() => quick(r, r.published ? 'unpublish' : 'publish')} aria-label={r.published ? `Hide ${r.title}` : `Show ${r.title}`}>
+                    <Badge on={r.published} yes="Shown" no="Hidden" />
+                  </button>
+                  <div className="flex items-center gap-1">
+                    {r.featured && <span className="mr-1 inline-flex items-center gap-1 rounded-full bg-brand-500/15 px-2 py-0.5 text-xs text-brand-300"><Star className="h-3 w-3 fill-current" /> Trending</span>}
+                    <Button variant="ghost" className="px-2.5" onClick={() => quick(r, r.featured ? 'unpin' : 'pin')} aria-label={r.featured ? 'Remove from Trending' : 'Add to Trending'}>
+                      <Star className={cx('h-4 w-4', r.featured && 'fill-brand-400 text-brand-400')} />
+                    </Button>
+                    <Button variant="ghost" className="px-2.5" onClick={() => setEditing(r)} aria-label="Edit video"><Pencil className="h-4 w-4" /></Button>
+                    <Button variant="ghost" className="px-2.5 hover:text-red-400" onClick={() => remove(r)} aria-label="Delete video"><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        <div className={cx('hidden overflow-x-auto rounded-xl border border-zinc-900 md:block', loading && 'opacity-60')}>
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="bg-zinc-900/70 text-xs uppercase tracking-wide text-zinc-500">
               <tr>
@@ -413,6 +452,7 @@ export default function VideosAdmin() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {data && data.pages > 1 && (
