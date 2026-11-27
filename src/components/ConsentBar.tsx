@@ -48,7 +48,7 @@ export default function ConsentBar() {
     setChoice(v);
   };
   return (
-    <div className="fixed inset-x-0 bottom-0 z-[150] border-t border-zinc-800 bg-zinc-950/95 p-4 backdrop-blur">
+    <div className="fixed inset-x-0 bottom-0 z-[150] border-t border-zinc-800 bg-zinc-950/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur animate-snack">
       <div className="mx-auto flex max-w-5xl flex-col items-start gap-3 sm:flex-row sm:items-center">
         <p className="flex-1 text-sm text-zinc-400">
           We use cookies for advertising and to understand how the site is used. See our{' '}

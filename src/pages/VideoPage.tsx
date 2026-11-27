@@ -7,7 +7,7 @@ import { usePageTitle } from '../lib/settings';
 import { formatViews, timeAgo } from '../lib/utils';
 import { visitorId } from '../lib/visitor';
 import { AdSlot, Thumb, VideoGrid } from '../components/Media';
-import { Empty, Spinner, cx, useToast } from '../components/ui';
+import { Empty, cx, useToast } from '../components/ui';
 
 type Reaction = 'like' | 'dislike' | null;
 type Loaded = { video: VideoDetail; similar: PublicVideo[]; mine: Reaction };
@@ -49,7 +49,17 @@ export default function VideoPage() {
     );
   }
   if (error) return <Empty title="Couldn't load this video">{error}</Empty>;
-  if (!data) return <Spinner className="min-h-[50vh] items-center" />;
+  if (!data) {
+    return (
+      <div className="mx-auto max-w-3xl" aria-busy="true" aria-label="Loading video" data-testid="video-skeleton">
+        <div className="skeleton aspect-video rounded-2xl sm:rounded-3xl" />
+        <div className="skeleton mt-5 h-6 w-4/5 rounded-full" />
+        <div className="skeleton mt-3 h-4 w-2/5 rounded-full" />
+        <div className="mt-5 flex gap-2"><div className="skeleton h-11 w-36 rounded-full" /><div className="skeleton h-11 w-24 rounded-full" /></div>
+        <div className="skeleton mt-4 h-12 w-full rounded-full" />
+      </div>
+    );
+  }
 
   const { video: v, similar, mine } = data;
   const tags = v.tags || [];
@@ -105,7 +115,7 @@ export default function VideoPage() {
           href={watch}
           target="_blank"
           rel="noopener noreferrer"
-          className="group relative block aspect-video overflow-hidden rounded-2xl bg-zinc-900 sm:rounded-3xl"
+          className="ripple group relative block aspect-video overflow-hidden rounded-2xl bg-zinc-900 shadow-xl shadow-black/40 sm:rounded-3xl"
           aria-label={`Watch “${v.title}” on ${site}`}
           data-testid="video-poster"
         >
@@ -134,9 +144,9 @@ export default function VideoPage() {
               onClick={() => react('like')}
               aria-pressed={mine === 'like'}
               data-testid="like"
-              className={cx('flex h-11 items-center gap-2 px-4 text-sm font-semibold transition-colors', mine === 'like' ? 'bg-brand-500 text-zinc-950' : 'text-zinc-200 hover:bg-zinc-800')}
+              className={cx('ripple flex h-11 items-center gap-2 px-4 text-sm font-semibold transition-colors duration-200 ease-standard', mine === 'like' ? 'bg-brand-500 text-zinc-950' : 'text-zinc-200 hover:bg-white/[.06]')}
             >
-              <ThumbsUp className={cx('h-4 w-4', mine === 'like' && 'fill-current')} /> {formatViews(v.likes)}
+              <ThumbsUp key={`l${mine}`} className={cx('h-4 w-4', mine === 'like' && 'fill-current animate-pop')} /> {formatViews(v.likes)}
               <span className="sr-only">likes</span>
             </button>
             <span className="w-px bg-zinc-800" aria-hidden />
@@ -145,13 +155,13 @@ export default function VideoPage() {
               onClick={() => react('dislike')}
               aria-pressed={mine === 'dislike'}
               data-testid="dislike"
-              className={cx('flex h-11 items-center gap-2 px-4 text-sm font-semibold transition-colors', mine === 'dislike' ? 'bg-zinc-200 text-zinc-950' : 'text-zinc-200 hover:bg-zinc-800')}
+              className={cx('ripple flex h-11 items-center gap-2 px-4 text-sm font-semibold transition-colors duration-200 ease-standard', mine === 'dislike' ? 'bg-zinc-200 text-zinc-950' : 'text-zinc-200 hover:bg-white/[.06]')}
             >
-              <ThumbsDown className={cx('h-4 w-4', mine === 'dislike' && 'fill-current')} /> {formatViews(v.dislikes)}
+              <ThumbsDown key={`d${mine}`} className={cx('h-4 w-4', mine === 'dislike' && 'fill-current animate-pop')} /> {formatViews(v.dislikes)}
               <span className="sr-only">dislikes</span>
             </button>
           </div>
-          <button type="button" onClick={share} className="flex h-11 items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900 px-4 text-sm font-semibold text-zinc-200 hover:bg-zinc-800">
+          <button type="button" onClick={share} className="ripple flex h-11 items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900 px-4 text-sm font-semibold text-zinc-200 transition-colors hover:bg-zinc-800">
             <Share2 className="h-4 w-4" /> Share
           </button>
         </div>
@@ -160,7 +170,7 @@ export default function VideoPage() {
           href={watch}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-brand-500 px-6 text-base font-bold text-zinc-950 shadow-lg shadow-brand-500/20 transition hover:bg-brand-400 active:scale-[.99] sm:w-auto sm:inline-flex"
+          className="ripple mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-brand-500 px-6 text-base font-bold text-zinc-950 shadow-lg shadow-brand-500/20 transition-[background-color,box-shadow,transform] duration-200 ease-standard hover:bg-brand-400 hover:shadow-xl hover:shadow-brand-500/25 active:scale-[.98] sm:w-auto sm:inline-flex"
           data-testid="watch"
         >
           Watch on {site} <ExternalLink className="h-4 w-4" />
@@ -169,12 +179,12 @@ export default function VideoPage() {
         {(v.categoryName || tags.length > 0) && (
           <div className="mt-5 flex flex-wrap gap-2" aria-label="Tags">
             {v.categoryName && (
-              <Link to={`/?category=${encodeURIComponent(v.category || '')}`} className="rounded-full bg-brand-500/15 px-3 py-1.5 text-sm font-medium text-brand-300 hover:bg-brand-500/25">
+              <Link to={`/?category=${encodeURIComponent(v.category || '')}`} className="ripple rounded-lg bg-brand-500/15 px-3 py-1.5 text-sm font-medium text-brand-300 transition-colors hover:bg-brand-500/25">
                 {v.categoryName}
               </Link>
             )}
             {tags.slice(0, 12).map((t) => (
-              <Link key={t} to={`/?q=${encodeURIComponent(t)}`} className="rounded-full bg-zinc-800/80 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-700 hover:text-white">
+              <Link key={t} to={`/?q=${encodeURIComponent(t)}`} className="ripple rounded-lg border border-zinc-700/80 px-3 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/[.06] hover:text-white">
                 #{t}
               </Link>
             ))}

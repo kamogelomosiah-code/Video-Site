@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { LogOut, Menu, Search, Shield, User as UserIcon, X } from 'lucide-react';
+import { Flame, Home as HomeIcon, LogOut, Search, Shield, User as UserIcon, X } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { useSettings } from '../lib/settings';
 import AgeGate from './AgeGate';
@@ -20,7 +20,7 @@ export function Logo() {
   );
 }
 
-function SearchBox({ onDone }: { onDone?: () => void }) {
+function SearchBox({ onDone, autoFocus }: { onDone?: () => void; autoFocus?: boolean }) {
   const navigate = useNavigate();
   const loc = useLocation();
   const [q, setQ] = useState(() => new URLSearchParams(loc.search).get('q') || '');
@@ -37,7 +37,10 @@ function SearchBox({ onDone }: { onDone?: () => void }) {
         onChange={(e) => setQ(e.target.value)}
         placeholder="Search videos, tags, creators…"
         aria-label="Search"
-        className="w-full rounded-full border border-zinc-800 bg-zinc-900 py-2 pl-9 pr-4 text-sm placeholder:text-zinc-500 focus:border-brand-500 focus:outline-none"
+        type="search"
+        enterKeyHint="search"
+        autoFocus={autoFocus}
+        className="h-11 w-full rounded-full border border-transparent bg-zinc-900 pl-9 pr-4 text-sm transition-colors duration-200 ease-standard placeholder:text-zinc-500 hover:bg-zinc-800/80 focus:border-brand-500/60 focus:bg-zinc-900 focus:outline-none"
       />
     </form>
   );
@@ -154,23 +157,81 @@ function Footer() {
   );
 }
 
+/**
+ * The Material navigation bar for phones: four destinations, a pill behind the active one.
+ * It slides away while you scroll down to read, and comes back as soon as you scroll up.
+ */
+function BottomNav({ onSearch, searchOpen }: { onSearch: () => void; searchOpen: boolean }) {
+  const { user } = useAuth();
+  const loc = useLocation();
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    let last = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (Math.abs(y - last) < 8) return;
+      setHidden(y > last && y > 120);
+      last = y;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  const onHome = loc.pathname === '/';
+  const items = [
+    { key: 'home', label: 'Home', icon: HomeIcon, to: '/', active: onHome && loc.hash !== '#trending' && !searchOpen },
+    { key: 'search', label: 'Search', icon: Search, active: searchOpen },
+    { key: 'trending', label: 'Trending', icon: Flame, to: '/#trending', active: onHome && loc.hash === '#trending' && !searchOpen },
+    { key: 'you', label: user ? 'You' : 'Sign in', icon: UserIcon, to: user ? '/account' : '/login', active: ['/account', '/login', '/register'].includes(loc.pathname) && !searchOpen },
+  ];
+  return (
+    <nav
+      aria-label="Main"
+      data-testid="bottom-nav"
+      className={cx(
+        'fixed inset-x-0 bottom-0 z-[120] border-t border-white/5 bg-zinc-900/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl transition-transform duration-300 ease-emphasized md:hidden',
+        hidden && !searchOpen && 'translate-y-full',
+      )}
+    >
+      <ul className="mx-auto grid h-20 max-w-md grid-cols-4">
+        {items.map(({ key, label, icon: Icon, to, active }) => {
+          const inner = (
+            <>
+              <span className={cx('flex h-8 w-16 items-center justify-center rounded-full transition-[background-color,width] duration-300 ease-emphasized', active ? 'bg-brand-500/20 text-brand-300' : 'text-zinc-400')}>
+                <Icon className={cx('h-[22px] w-[22px]', active && 'animate-pop')} strokeWidth={active ? 2.4 : 2} />
+              </span>
+              <span className={cx('text-xs', active ? 'font-semibold text-zinc-100' : 'text-zinc-400')}>{label}</span>
+            </>
+          );
+          const cls = 'ripple flex h-full w-full flex-col items-center justify-center gap-1 rounded-2xl';
+          return (
+            <li key={key} className="flex">
+              {to ? (
+                <Link to={to} className={cls} aria-current={active ? 'page' : undefined}>{inner}</Link>
+              ) : (
+                <button type="button" onClick={onSearch} className={cls} aria-expanded={searchOpen}>{inner}</button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
 export default function Layout() {
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const loc = useLocation();
   useEffect(() => {
-    setMobileOpen(false);
-    window.scrollTo(0, 0);
-  }, [loc.pathname]);
+    setSearchOpen(false);
+    if (!loc.hash) window.scrollTo(0, 0);
+  }, [loc.pathname, loc.search]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex min-h-screen flex-col">
       <AgeGate />
       <Announcement />
-      <header className="sticky top-0 z-40 border-b border-zinc-900 bg-zinc-950/90 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-white/5 bg-zinc-950/85 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4">
-          <button type="button" className="rounded-md p-2 hover:bg-zinc-800 md:hidden" onClick={() => setMobileOpen((o) => !o)} aria-label="Menu" aria-expanded={mobileOpen}>
-            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
           <Logo />
           <nav className="hidden items-center gap-1 md:flex" aria-label="Main">
             {NAV.map((n) => (
@@ -178,7 +239,7 @@ export default function Layout() {
                 key={n.to}
                 to={n.to}
                 end={n.end}
-                className={({ isActive }) => cx('rounded-lg px-3 py-2 text-sm', isActive ? 'text-white' : 'text-zinc-400 hover:text-white')}
+                className={({ isActive }) => cx('ripple rounded-full px-4 py-2 text-sm transition-colors', isActive ? 'bg-white/[.06] text-white' : 'text-zinc-400 hover:bg-white/[.04] hover:text-white')}
               >
                 {n.label}
               </NavLink>
@@ -191,26 +252,26 @@ export default function Layout() {
             <AccountMenu />
           </div>
         </div>
-        {mobileOpen && (
-          <div className="space-y-3 border-t border-zinc-900 px-4 py-4 md:hidden">
-            <SearchBox onDone={() => setMobileOpen(false)} />
-            <nav className="flex flex-col" aria-label="Main mobile">
-              {NAV.map((n) => (
-                <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => cx('rounded-lg px-3 py-2.5', isActive ? 'bg-zinc-900 text-white' : 'text-zinc-400')}>
-                  {n.label}
-                </NavLink>
-              ))}
-            </nav>
+        {searchOpen && (
+          <div className="flex items-center gap-2 border-t border-white/5 px-4 py-3 animate-fade-in md:hidden" data-testid="mobile-search">
+            <SearchBox autoFocus onDone={() => setSearchOpen(false)} />
+            <button type="button" onClick={() => setSearchOpen(false)} className="ripple flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-white/[.06]" aria-label="Close search">
+              <X className="h-5 w-5" />
+            </button>
           </div>
         )}
       </header>
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">
+      {/* Each page rises in as you arrive (keyed by the address, so search typing doesn't re-animate). */}
+      <main key={loc.pathname} className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 animate-page">
         <Outlet />
       </main>
       <div className="mx-auto w-full max-w-3xl px-4">
         <AdSlot slot="footer" />
       </div>
       <Footer />
+      {/* room for the phone navigation bar */}
+      <div className="h-[calc(80px+env(safe-area-inset-bottom))] md:hidden" aria-hidden />
+      <BottomNav searchOpen={searchOpen} onSearch={() => { setSearchOpen((o) => !o); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
       <ConsentBar />
     </div>
   );

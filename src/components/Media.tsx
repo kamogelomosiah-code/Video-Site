@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Eye, Play } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { AD_SLOTS, adSlotSize, type AdSlotId, type AdUnit, type PublicVideo } from '../../shared/types';
@@ -24,13 +24,14 @@ export function Thumb({ src, alt, className, focus }: { src?: string; alt: strin
 }
 
 /** A video. Opens its page on this site; from there, one more tap watches it on the original website. */
-export function VideoCard({ item, className }: { item: PublicVideo; className?: string }) {
+export function VideoCard({ item, className, style }: { item: PublicVideo; className?: string; style?: CSSProperties }) {
   return (
-    <Link to={`/v/${encodeURIComponent(item.id)}`} className={cx('group block', className)} data-testid="video-card">
-      <div className="relative aspect-video overflow-hidden rounded-xl bg-zinc-900">
-        <Thumb src={item.thumbnailUrl} focus={item.thumbFocus} alt="" className="h-full w-full transition-transform duration-300 group-hover:scale-105" />
-        <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/30 group-hover:opacity-100">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-500 text-zinc-950">
+    <Link style={style} to={`/v/${encodeURIComponent(item.id)}`} className={cx('group block rounded-2xl outline-offset-4', className)} data-testid="video-card">
+      {/* Material card: lifts on hover, presses in on tap, ripple from the finger */}
+      <div className="ripple relative aspect-video overflow-hidden rounded-2xl bg-zinc-900 shadow-md shadow-black/30 transition-[transform,box-shadow] duration-300 ease-emphasized group-hover:-translate-y-1 group-hover:shadow-xl group-hover:shadow-black/50 group-active:scale-[.97]">
+        <Thumb src={item.thumbnailUrl} focus={item.thumbFocus} alt="" className="h-full w-full transition-[filter] duration-300 group-hover:brightness-110" />
+        <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition duration-300 ease-emphasized group-hover:bg-black/25 group-hover:opacity-100">
+          <span className="flex h-12 w-12 scale-75 items-center justify-center rounded-full bg-brand-500 text-zinc-950 shadow-lg transition-transform duration-300 ease-emphasized group-hover:scale-100">
             <Play className="h-6 w-6 fill-current" />
           </span>
         </span>
@@ -62,8 +63,24 @@ export function VideoGrid({ items, insert }: { items: PublicVideo[]; insert?: { 
       {items.map((m, i) => (
         <Fragment key={m.id}>
           {insert && i === insert.at && insert.node}
-          <VideoCard item={m} />
+          {/* cards rise in one after another (only the first dozen wait, so long lists stay quick) */}
+          <VideoCard item={m} className="animate-card" style={{ animationDelay: `${Math.min(i, 12) * 35}ms` }} />
         </Fragment>
+      ))}
+    </div>
+  );
+}
+
+/** Shimmering placeholders in the shape of the grid, while videos load. */
+export function GridSkeleton({ count = 10 }: { count?: number }) {
+  return (
+    <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 sm:gap-x-4 lg:grid-cols-4 xl:grid-cols-5" aria-busy="true" aria-label="Loading videos" data-testid="grid-skeleton">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i}>
+          <div className="skeleton aspect-video rounded-2xl" />
+          <div className="skeleton mt-3 h-3.5 w-11/12 rounded-full" />
+          <div className="skeleton mt-2 h-3 w-1/2 rounded-full" />
+        </div>
       ))}
     </div>
   );

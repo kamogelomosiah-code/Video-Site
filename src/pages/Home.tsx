@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { Search, SearchX, Film, Flame, Play } from 'lucide-react';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Check, Search, SearchX, Film, Flame, Play } from 'lucide-react';
 import type { Category, PublicVideo } from '../../shared/types';
 import { api } from '../lib/api';
 import { useSettings, usePageTitle } from '../lib/settings';
 import { useDebounced, useFetch } from '../lib/utils';
-import { AdSlot, Thumb, VideoGrid, VideoRow } from '../components/Media';
+import { AdSlot, GridSkeleton, Thumb, VideoGrid, VideoRow } from '../components/Media';
 import { Alert, Button, Empty, Spinner, cx } from '../components/ui';
 
 type Page = { items: PublicVideo[]; total: number; page: number; pages: number };
@@ -61,7 +61,7 @@ function Slides({ items, callout }: { items: PublicVideo[]; callout: string }) {
           <h2 key={cur.id} className="mt-3 line-clamp-2 max-w-2xl text-2xl font-extrabold leading-tight drop-shadow-lg sm:text-4xl animate-[fadeUp_.6s_ease-out_both]">{cur.title}</h2>
           {cur.creatorName && <p className="mt-1 text-sm text-zinc-300">{cur.creatorName}</p>}
           <div className="mt-4 flex items-center justify-between gap-3">
-            <Link to={`/v/${encodeURIComponent(cur.id)}`} className="inline-flex h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-bold text-zinc-950 shadow-lg transition hover:bg-zinc-200 active:scale-95" data-testid="hero-watch">
+            <Link to={`/v/${encodeURIComponent(cur.id)}`} className="ripple inline-flex h-11 items-center gap-2 rounded-full bg-white px-5 text-sm font-bold text-zinc-950 shadow-lg transition-[background-color,transform] duration-200 ease-standard hover:bg-zinc-200 active:scale-95" data-testid="hero-watch">
               <Play className="h-4 w-4 fill-current" /> Watch now
             </Link>
             {n > 1 && (
@@ -124,7 +124,7 @@ function Hero({ value, onSubmit, onChange, tags, slides }: {
         {tags.length > 0 && (
           <div className={cx('scrollbar-none -mx-4 mt-3 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0', !show && 'sm:justify-center')}>
             {tags.map((t) => (
-              <button key={t} type="button" onClick={() => onChange(t)} className="h-8 shrink-0 rounded-full bg-zinc-800/80 px-3 text-xs text-zinc-300 hover:bg-zinc-700 hover:text-white">
+              <button key={t} type="button" onClick={() => onChange(t)} className="ripple h-8 shrink-0 rounded-lg border border-zinc-700/80 px-3 text-xs text-zinc-300 transition-colors hover:bg-white/[.06] hover:text-white">
                 #{t}
               </button>
             ))}
@@ -164,6 +164,10 @@ export default function Home() {
 
   const { data: categories } = useFetch(() => api.get<Category[]>('/categories'), []);
   const { data: trending } = useFetch(() => api.get<Trending>('/trending'), []);
+  const loc = useLocation();
+  useEffect(() => {
+    if (loc.hash === '#trending' && trending) document.getElementById('trending')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [loc.hash, loc.key, trending]);
 
   useEffect(() => {
     let alive = true;
@@ -205,7 +209,7 @@ export default function Home() {
       <AdSlot slot="home_top" className="mb-8" />
 
       {!q && trending && trending.items.length > 0 && (
-        <section className="mb-10" aria-labelledby="trending-title">
+        <section id="trending" className="mb-10 scroll-mt-20" aria-labelledby="trending-title">
           <h2 id="trending-title" className="mb-4 flex items-center gap-2 text-lg font-bold">
             <Flame className="h-5 w-5 text-brand-400" /> Trending
           </h2>
@@ -227,10 +231,12 @@ export default function Home() {
                 aria-selected={category === c.slug}
                 onClick={() => pickCategory(c.slug)}
                 className={cx(
-                  'shrink-0 rounded-full border px-3.5 py-1 text-sm transition-colors',
-                  category === c.slug ? 'border-brand-500 bg-brand-500 font-semibold text-zinc-950' : 'border-zinc-800 text-zinc-300 hover:border-zinc-600',
+                  // Material filter chip: a check appears when it's on
+                  'ripple flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3.5 text-sm transition-[background-color,border-color,color,padding] duration-200 ease-standard',
+                  category === c.slug ? 'border-transparent bg-brand-500/20 pl-2.5 font-semibold text-brand-200' : 'border-zinc-700 text-zinc-300 hover:bg-white/[.04]',
                 )}
               >
+                {category === c.slug && <Check className="h-4 w-4 animate-pop" strokeWidth={2.6} />}
                 {c.name}
               </button>
             ))}
@@ -240,7 +246,7 @@ export default function Home() {
 
       {error && <Alert>{error}</Alert>}
       {loading && page === 1 ? (
-        <Spinner />
+        <GridSkeleton />
       ) : items.length === 0 && !error ? (
         q ? (
           <Empty title="No videos match your search" icon={<SearchX className="h-10 w-10" />}>Try a different word or browse the categories.</Empty>
