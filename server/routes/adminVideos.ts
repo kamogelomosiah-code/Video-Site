@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db, newId } from '../db';
 import { logActivity } from '../auth';
+import { scrapeMany } from '../scrape';
 import { linkKey, normalizeVideo, slugify } from '../../shared/video';
 import {
   applyClean, clearTrendingCache, prepareVideo, resolveCategories, toAdmin, videoFilter, videoSort,
@@ -42,6 +43,18 @@ adminVideos.get('/export', async (_req, res) => {
     if (batch.length < 1000) break;
   }
   res.end(']');
+});
+
+// --- Add from URL: read video details from web pages ---
+
+/** Body: { urls: string[] } (up to 25). Returns what each page says about its video(s); nothing is saved. */
+adminVideos.post('/scrape', async (req, res) => {
+  const urls = (Array.isArray(req.body?.urls) ? req.body.urls : [])
+    .map((u: unknown) => String(u || '').trim())
+    .filter(Boolean);
+  if (!urls.length) return res.status(400).json({ error: 'Paste at least one link' });
+  if (urls.length > 25) return res.status(400).json({ error: 'Paste at most 25 links at a time' });
+  res.json({ results: await scrapeMany([...new Set<string>(urls)]) });
 });
 
 // --- Add / edit / delete one video ---

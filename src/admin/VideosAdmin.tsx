@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Download, ExternalLink, FileUp, Pencil, Plus, Search, Star, Trash2 } from 'lucide-react';
+import { Download, ExternalLink, FileUp, Globe, Pencil, Plus, Search, Star, Trash2 } from 'lucide-react';
 import type { Category } from '../../shared/types';
 import { api, tokenStore } from '../lib/api';
 import { usePageTitle } from '../lib/settings';
@@ -31,6 +31,34 @@ function VideoForm({ initial, categories, onDone }: { initial: Partial<Row>; cat
   const [error, setError] = useState('');
   const set = (k: string, val: any) => setV((x: any) => ({ ...x, [k]: val }));
   const isNew = !initial.id;
+  const [fetching, setFetching] = useState(false);
+
+  /** Reads the link's page and fills in any empty fields. */
+  const fetchDetails = async () => {
+    setFetching(true);
+    setError('');
+    try {
+      const { results } = await api.post<{ results: any[] }>('/admin/videos/scrape', { urls: [v.externalUrl] });
+      const r = results[0];
+      if (!r?.ok) throw new Error(r?.error || 'No details found');
+      const d = r.videos[0];
+      const dur = typeof d.duration === 'number' ? `${Math.floor(d.duration / 60)}:${String(d.duration % 60).padStart(2, '0')}` : d.duration || '';
+      setV((x: any) => ({
+        ...x,
+        title: x.title || d.title || '',
+        thumbnailUrl: x.thumbnailUrl || d.thumbnail || '',
+        description: x.description || d.description || '',
+        duration: x.duration || dur,
+        creatorName: x.creatorName || d.creator || '',
+        tags: x.tags || (d.tags || []).join(', '),
+      }));
+      toast('Details filled in from the page');
+    } catch (x: any) {
+      setError(`Couldn't fetch details: ${x.message}`);
+    } finally {
+      setFetching(false);
+    }
+  };
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
@@ -55,7 +83,12 @@ function VideoForm({ initial, categories, onDone }: { initial: Partial<Row>; cat
         <Input value={v.title} onChange={(e) => set('title', e.target.value)} required maxLength={200} />
       </Field>
       <Field label="Link to the original video *" hint="Visitors are sent here when they click the video. Paste the full address.">
-        <Input value={v.externalUrl} onChange={(e) => set('externalUrl', e.target.value)} placeholder="https://…" required />
+        <div className="flex gap-2">
+          <Input value={v.externalUrl} onChange={(e) => set('externalUrl', e.target.value)} placeholder="https://…" required />
+          <Button variant="secondary" className="shrink-0" loading={fetching} disabled={!v.externalUrl?.trim()} onClick={fetchDetails}>
+            {!fetching && <Globe className="h-4 w-4" />} Fetch details
+          </Button>
+        </div>
       </Field>
       <Field label="Thumbnail" group>
         <ImageInput value={v.thumbnailUrl} onChange={(url) => set('thumbnailUrl', url)} label="Thumbnail" />
@@ -186,6 +219,16 @@ export default function VideosAdmin() {
     }
   };
 
+  /** One-click show/hide or Trending from the row itself. */
+  const quick = async (row: Row, action: 'publish' | 'unpublish' | 'pin' | 'unpin') => {
+    try {
+      await api.post('/admin/videos/bulk', { action, ids: [row.id] });
+      setData((d) => d && { ...d, items: d.items.map((x) => (x.id === row.id ? { ...x, published: action === 'publish' ? true : action === 'unpublish' ? false : x.published, featured: action === 'pin' ? true : action === 'unpin' ? false : x.featured } : x)) });
+    } catch (x: any) {
+      toast(x.message, 'error');
+    }
+  };
+
   const remove = async (row: Row) => {
     if (!(await confirm(`Delete “${row.title}”?`, { confirmLabel: 'Delete' }))) return;
     try {
@@ -224,8 +267,11 @@ export default function VideosAdmin() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={exportAll}><Download className="h-4 w-4" /> Export</Button>
+          <Link to="/admin/videos/scrape" className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm hover:bg-zinc-700">
+            <Globe className="h-4 w-4" /> Add from URL
+          </Link>
           <Link to="/admin/videos/import" className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2.5 text-sm hover:bg-zinc-700">
-            <FileUp className="h-4 w-4" /> Import
+            <FileUp className="h-4 w-4" /> Import file
           </Link>
           <Button onClick={() => setEditing({ ...EMPTY })}><Plus className="h-4 w-4" /> Add video</Button>
         </div>
@@ -346,12 +392,17 @@ export default function VideosAdmin() {
                     <td className="px-4 py-3 text-zinc-400">{formatViews(r.views)}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
-                        <Badge on={r.published} yes="Shown" no="Hidden" />
+                        <button type="button" onClick={() => quick(r, r.published ? 'unpublish' : 'publish')} title={r.published ? 'Click to hide' : 'Click to show'} aria-label={r.published ? `Hide ${r.title}` : `Show ${r.title}`}>
+                          <Badge on={r.published} yes="Shown" no="Hidden" />
+                        </button>
                         {r.featured && <span className="inline-flex items-center gap-1 rounded-full bg-brand-500/15 px-2 py-0.5 text-xs text-brand-300"><Star className="h-3 w-3 fill-current" /> Trending</span>}
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-1">
+                        <Button variant="ghost" className="px-2.5" onClick={() => quick(r, r.featured ? 'unpin' : 'pin')} aria-label={r.featured ? 'Remove from Trending' : 'Add to Trending'} title={r.featured ? 'Remove from Trending' : 'Add to Trending'}>
+                          <Star className={cx('h-4 w-4', r.featured && 'fill-brand-400 text-brand-400')} />
+                        </Button>
                         <Button variant="ghost" className="px-2.5" onClick={() => setEditing(r)} aria-label="Edit video"><Pencil className="h-4 w-4" /></Button>
                         <Button variant="ghost" className="px-2.5 hover:text-red-400" onClick={() => remove(r)} aria-label="Delete video"><Trash2 className="h-4 w-4" /></Button>
                       </div>

@@ -163,7 +163,7 @@ export default function Home() {
         )
       ) : (
         <>
-          <VideoGrid items={items.slice(0, 12)} />
+          <VideoGrid items={items.slice(0, 12)} insert={items.length > 5 ? { at: 5, node: <AdSlot key="infeed" slot="home_infeed" variant="card" /> } : undefined} />
           {items.length > 12 && (
             <>
               <AdSlot slot="home_mid" className="my-8" />
