@@ -7,7 +7,7 @@ interface AuthState {
   loading: boolean;
   isAdmin: boolean;
   login: (email: string, password: string, pin?: string) => Promise<User>;
-  register: (data: { name: string; email: string; password: string; role: string }) => Promise<User>;
+  register: (data: { name: string; email: string; password: string; role: string; source?: string }) => Promise<User>;
   logout: () => Promise<void>;
   setSession: (user: User, token: string) => void;
   setUser: (user: User) => void;
@@ -51,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return r.user;
   }, [setSession]);
 
-  const register = useCallback(async (data: { name: string; email: string; password: string; role: string }) => {
+  const register = useCallback(async (data: { name: string; email: string; password: string; role: string; source?: string }) => {
     const r = await api.post<{ user: User; token: string }>('/auth/register', data);
     setSession(r.user, r.token);
     return r.user;

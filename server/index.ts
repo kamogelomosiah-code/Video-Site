@@ -6,6 +6,7 @@ import { attachUser, ensureAdmin } from './auth';
 import { authRouter } from './routes/auth';
 import { publicRouter, getSettings, goHandler } from './routes/public';
 import { migrateVideos } from './videos';
+import { pruneAnalytics, trackRouter } from './analytics';
 import { feedHandler, getIndexNowKey, htmlHandler, manifestHandler, robotsTxt, sendCompressed, sitemapHandler } from './seo';
 import fs from 'fs';
 import zlib from 'zlib';
@@ -62,6 +63,7 @@ async function main() {
   await connect();
   await seed();
   await migrateVideos();
+  await pruneAnalytics().catch(() => {});
 
   const app = express();
   app.disable('x-powered-by');
@@ -98,6 +100,7 @@ async function main() {
   app.get('/api/health', async (_req, res) => {
     res.json({ ok: true, storage: storageMode(), db: await db.ping() });
   });
+  app.use('/api', trackRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api', publicRouter);

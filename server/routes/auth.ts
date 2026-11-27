@@ -1,3 +1,4 @@
+import { bump } from '../analytics';
 import { Router } from 'express';
 import { db, newId } from '../db';
 import { config } from '../config';
@@ -60,6 +61,7 @@ authRouter.post('/register', async (req, res) => {
   };
   await db.put('users', user);
   await logActivity('signup', `New ${user.role.toLowerCase()} account: ${user.email}`, user.id);
+  bump({ signups: 1, signupsGate: req.body?.source === 'gate' ? 1 : 0 });
   res.status(201).json({ user: publicUser(user), token: await createSession(user.id) });
 });
 

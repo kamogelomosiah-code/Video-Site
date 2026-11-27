@@ -6,6 +6,9 @@ import { DEFAULT_SETTINGS, type SiteSettings } from '../../shared/types';
 import { linkOf, recordClick, similarTo, toPublic, trending, videoFilter, videoSort } from '../videos';
 import type { VideoDetail } from '../../shared/types';
 import { searchVideos, suggest } from '../search';
+import { categoriesWithCounts, smartPage, topics } from '../discover';
+import { bump, bumpVideo, isBot, trackSearch } from '../analytics';
+import { videoPath } from '../../shared/seo';
 
 export const publicRouter = Router();
 
@@ -25,9 +28,16 @@ publicRouter.get('/settings', async (_req, res) => {
   res.json(await getSettings());
 });
 
+/** Categories that have videos (empty ones are hidden), with counts. */
 publicRouter.get('/categories', async (_req, res) => {
-  const cats = (await db.list('categories')).filter((c: any) => c.active !== false && c.slug !== 'all');
-  res.json(cats.sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0)));
+  res.setHeader('Cache-Control', 'public, max-age=60');
+  res.json(await categoriesWithCounts());
+});
+
+/** Topics made automatically from the videos' tags. */
+publicRouter.get('/topics', async (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=120');
+  res.json(await topics(Math.min(30, Number(req.query.limit) || 12)));
 });
 
 // --- Videos ---
@@ -37,8 +47,20 @@ publicRouter.get('/videos', async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(60, Math.max(1, Number(req.query.limit) || 24));
   // A search uses the site search (relevance, plurals, accents, categories, close matches).
-  if (q && q.trim()) return res.json(await searchVideos(q, { category, tag, page, limit, sort }));
+  if (q && q.trim()) {
+    const r = await searchVideos(q, { category, tag, page, limit, sort });
+    if (page === 1 && !isBot(req)) trackSearch(q, r.total);
+    return res.json(r);
+  }
+  // "smart": what's good right now, tuned to the tags the visitor likes (?for=tag1,tag2).
+  if (sort === 'smart') {
+    const likes = String(req.query.for || '').split(',').map((t) => t.trim()).filter(Boolean).slice(0, 10);
+    return res.json(await smartPage({ category, tag, page, limit, likes }));
+  }
   const filter = await videoFilter({ q, category, tag, publicOnly: true });
+  // ?since=<date>: only videos added after it ("new since your last visit").
+  const since = String(req.query.since || '');
+  if (/^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(since)) filter.createdAt = { $gt: since };
   const [items, total] = await Promise.all([
     db.find('media', { filter, sort: videoSort(sort), skip: (page - 1) * limit, limit }),
     db.count('media', filter),
@@ -62,6 +84,14 @@ publicRouter.get('/trending', async (_req, res) => {
 const visitorOf = (v: unknown) => (typeof v === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(v) ? v : '');
 const hostOf = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
 
+/** Videos like this one, without counting a view (for "Because you watched …"). */
+publicRouter.get('/videos/:id/similar', async (req, res) => {
+  const m: any = await db.get('media', String(req.params.id));
+  if (!m || m.published === false) return res.json({ items: [] });
+  res.setHeader('Cache-Control', 'public, max-age=120');
+  res.json({ items: await similarTo(m, Math.min(20, Number(req.query.limit) || 12)) });
+});
+
 publicRouter.get('/videos/:id', async (req, res) => {
   const m: any = await db.get('media', String(req.params.id));
   if (!m || m.published === false) return res.status(404).json({ error: 'This video is no longer available' });
@@ -74,7 +104,25 @@ publicRouter.get('/videos/:id', async (req, res) => {
     m.category ? db.findOne('categories', { slug: m.category }) : null,
   ]);
   const video: VideoDetail = { ...toPublic(m), description: m.description || '', source: hostOf(linkOf(m)), categoryName: (cat as any)?.name || '' };
+  if (!isBot(req)) { bump({ videoViews: 1 }); bumpVideo(m.id, { views: 1 }); }
   res.json({ video, similar, mine: (mine as any)?.value || null });
+});
+
+/**
+ * POST /videos/:id/watch — the address of the video on its original website, for the "Watch" button.
+ * When sign-up to watch is on, only signed-in visitors get it (others get { gate: true }).
+ */
+publicRouter.post('/videos/:id/watch', async (req, res) => {
+  const m: any = await db.get('media', String(req.params.id));
+  const link = m && m.published !== false ? linkOf(m) : '';
+  if (!/^https?:\/\//i.test(link)) return res.status(404).json({ error: 'This video is no longer available' });
+  if ((await getSettings()).requireSignupToWatch && !(req as any).user) {
+    return res.status(401).json({ error: 'Create a free account to watch', gate: true });
+  }
+  recordClick(m.id, clientIp(req)).catch(() => {});
+  if (!isBot(req)) { bump({ clicks: 1 }); bumpVideo(m.id, { clicks: 1 }); }
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ url: link });
 });
 
 /** POST /videos/:id/react { value: "like" | "dislike" | null, visitor } — one reaction per visitor, changeable. */
@@ -94,6 +142,7 @@ publicRouter.post('/videos/:id/react', async (req, res) => {
     if (prev) by[prev === 'like' ? 'likes' : 'dislikes'] = -1;
     if (value) by[value === 'like' ? 'likes' : 'dislikes'] = (by[value === 'like' ? 'likes' : 'dislikes'] || 0) + 1;
     await db.inc('media', m.id, by);
+    if (value) bump({ [value === 'like' ? 'likes' : 'dislikes']: 1 });
     if (value) await db.put('reactions', { id: key, mediaId: m.id, value, at: new Date().toISOString() });
     else await db.remove('reactions', key);
   }
@@ -109,7 +158,13 @@ export async function goHandler(req: Request, res: Response) {
   const m: any = await db.get('media', String(req.params.id));
   const link = m && m.published !== false ? linkOf(m) : '';
   if (!/^https?:\/\//i.test(link)) return res.redirect(302, '/');
+  // Sign-up to watch: a plain link carries no login, so it opens the video page, which asks to sign up.
+  if ((await getSettings()).requireSignupToWatch && !(req as any).user) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.redirect(302, `${videoPath(m)}?watch=1`);
+  }
   recordClick(m.id, clientIp(req)).catch(() => {});
+  if (!isBot(req)) { bump({ clicks: 1 }); bumpVideo(m.id, { clicks: 1 }); }
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Cache-Control', 'no-store');
   res.redirect(302, link);

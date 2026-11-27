@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
-import { Activity, ExternalLink, FileUp, Film, Globe, LayoutDashboard, Megaphone, Menu, Settings, Tags, User, Users, X } from 'lucide-react';
+import { Activity, BarChart3, ExternalLink, FileUp, Film, Globe, LayoutDashboard, Megaphone, Menu, Settings, Tags, User, Users, X } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { usePageTitle } from '../lib/settings';
 import { Logo } from '../components/Layout';
 import { cx } from '../components/ui';
 import { AccountForms } from '../pages/Account';
 import Overview from './Overview';
+import Analytics from './Analytics';
 import VideosAdmin from './VideosAdmin';
 import ImportVideos from './ImportVideos';
 import AddFromUrl from './AddFromUrl';
@@ -17,6 +18,7 @@ import ActivityAdmin from './ActivityAdmin';
 
 const NAV = [
   { to: '', label: 'Overview', icon: LayoutDashboard, end: true },
+  { to: 'analytics', label: 'Analytics', icon: BarChart3 },
   { to: 'videos', label: 'Videos', icon: Film, end: true },
   { to: 'videos/scrape', label: 'Add from URL', icon: Globe },
   { to: 'videos/import', label: 'Import file', icon: FileUp },
@@ -96,6 +98,7 @@ export default function AdminApp() {
         <main key={loc.pathname} className="mx-auto max-w-6xl p-4 pb-28 animate-page sm:p-6 lg:p-8">
           <Routes>
             <Route index element={<Overview />} />
+            <Route path="analytics" element={<Analytics />} />
             <Route path="videos" element={<VideosAdmin />} />
             <Route path="videos/import" element={<ImportVideos />} />
             <Route path="videos/scrape" element={<AddFromUrl />} />
