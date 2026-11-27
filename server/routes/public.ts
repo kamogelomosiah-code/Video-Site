@@ -5,6 +5,7 @@ import { requireAdmin, hit, clientIp, tooMany } from '../auth';
 import { DEFAULT_SETTINGS, type SiteSettings } from '../../shared/types';
 import { linkOf, recordClick, similarTo, toPublic, trending, videoFilter, videoSort } from '../videos';
 import type { VideoDetail } from '../../shared/types';
+import { searchVideos, suggest } from '../search';
 
 export const publicRouter = Router();
 
@@ -35,13 +36,20 @@ publicRouter.get('/videos', async (req, res) => {
   const { category, q, sort, tag } = req.query as Record<string, string>;
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(60, Math.max(1, Number(req.query.limit) || 24));
+  // A search uses the site search (relevance, plurals, accents, categories, close matches).
+  if (q && q.trim()) return res.json(await searchVideos(q, { category, tag, page, limit, sort }));
   const filter = await videoFilter({ q, category, tag, publicOnly: true });
-  // With a search the newest match comes first unless the visitor chose another order.
   const [items, total] = await Promise.all([
     db.find('media', { filter, sort: videoSort(sort), skip: (page - 1) * limit, limit }),
     db.count('media', filter),
   ]);
   res.json({ items: items.map(toPublic), total, page, pages: Math.ceil(total / limit) });
+});
+
+publicRouter.get('/search/suggest', async (req, res) => {
+  const q = String(req.query.q || '').slice(0, 100);
+  res.setHeader('Cache-Control', 'public, max-age=30');
+  res.json(await suggest(q));
 });
 
 publicRouter.get('/trending', async (_req, res) => {
@@ -61,7 +69,7 @@ publicRouter.get('/videos/:id', async (req, res) => {
   recordClick(m.id, clientIp(req)).catch(() => {});
   const visitor = visitorOf(req.query.visitor);
   const [similar, mine, cat] = await Promise.all([
-    similarTo(m, 8),
+    similarTo(m, 20), // 8 in "Up next", the rest under "More to watch"
     visitor ? db.get('reactions', `${m.id}:${visitor}`) : null,
     m.category ? db.findOne('categories', { slug: m.category }) : null,
   ]);

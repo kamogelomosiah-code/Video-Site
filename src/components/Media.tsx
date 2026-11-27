@@ -8,13 +8,22 @@ import { formatViews } from '../lib/utils';
 import { hasAdConsent } from './ConsentBar';
 import { cx } from './ui';
 import { videoPath } from '../../shared/seo';
-import { focusStyle } from '../../shared/image';
+import { focusStyle, sharperThumb } from '../../shared/image';
 import type { Focus } from '../../shared/image';
 
-/** A thumbnail. `priority` loads it first (the big picture at the top of a page), everything else waits until it scrolls near. */
+/**
+ * A thumbnail. Asks the video site for its sharpest picture (falling back to the original if there is none),
+ * with a touch of contrast and colour so it stands out. `priority` loads it first (the big picture at the top
+ * of a page); everything else waits until it scrolls near.
+ */
 export function Thumb({ src, alt, className, focus, priority }: { src?: string; alt: string; className?: string; focus?: Focus | null; priority?: boolean }) {
+  const best = sharperThumb(src);
+  const [cur, setCur] = useState(best.src);
   const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [src]);
+  useEffect(() => {
+    setCur(sharperThumb(src).src);
+    setFailed(false);
+  }, [src]);
   if (!src || failed) {
     return (
       <div className={cx('flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900', className)}>
@@ -22,15 +31,18 @@ export function Thumb({ src, alt, className, focus, priority }: { src?: string; 
       </div>
     );
   }
+  const fallBack = () => (best.fallback && cur !== best.fallback ? setCur(best.fallback) : setFailed(true));
   return (
     <img
-      src={src}
+      src={cur}
       alt={alt}
       loading={priority ? 'eager' : 'lazy'}
       decoding="async"
       fetchPriority={priority ? 'high' : 'auto'}
-      onError={() => setFailed(true)}
-      className={cx('object-cover', className)}
+      // YouTube answers a missing HD picture with a tiny 120px placeholder instead of an error.
+      onLoad={(e) => e.currentTarget.naturalWidth <= 121 && best.fallback && cur !== best.fallback && setCur(best.fallback)}
+      onError={fallBack}
+      className={cx('object-cover contrast-[1.05] saturate-[1.12] [backface-visibility:hidden]', className)}
       style={focusStyle(focus)}
     />
   );
@@ -62,9 +74,9 @@ export function VideoCard({ item, className, style }: { item: PublicVideo; class
 /** A row you swipe sideways on phones; a normal grid on larger screens. */
 export function VideoRow({ items }: { items: PublicVideo[] }) {
   return (
-    <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-x-4 sm:gap-y-6 sm:overflow-visible sm:px-0 lg:grid-cols-4 xl:grid-cols-5" data-testid="video-row">
+    <div className="scrollbar-none -mx-4 flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-x-4 sm:gap-y-6 sm:overflow-visible sm:px-0 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6" data-testid="video-row">
       {items.map((m, i) => (
-        <VideoCard key={m.id} item={m} className={cx('w-[44%] shrink-0 snap-start sm:w-auto', i >= 5 ? 'sm:hidden' : i === 4 ? 'sm:hidden xl:block' : i === 3 ? 'sm:hidden lg:block' : '')} />
+        <VideoCard key={m.id} item={m} className={cx('w-[44%] shrink-0 snap-start sm:w-auto', i >= 6 ? 'sm:hidden' : i === 5 ? 'sm:hidden 2xl:block' : i === 4 ? 'sm:hidden xl:block' : i === 3 ? 'sm:hidden lg:block' : '')} />
       ))}
     </div>
   );
@@ -72,7 +84,7 @@ export function VideoRow({ items }: { items: PublicVideo[] }) {
 
 export function VideoGrid({ items, insert }: { items: PublicVideo[]; insert?: { at: number; node: ReactNode } }) {
   return (
-    <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 sm:gap-x-4 lg:grid-cols-4 xl:grid-cols-5">
+    <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 sm:gap-x-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
       {items.map((m, i) => (
         <Fragment key={m.id}>
           {insert && i === insert.at && insert.node}
@@ -87,7 +99,7 @@ export function VideoGrid({ items, insert }: { items: PublicVideo[]; insert?: { 
 /** Shimmering placeholders in the shape of the grid, while videos load. */
 export function GridSkeleton({ count = 10 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 sm:gap-x-4 lg:grid-cols-4 xl:grid-cols-5" aria-busy="true" aria-label="Loading videos" data-testid="grid-skeleton">
+    <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 sm:gap-x-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6" aria-busy="true" aria-label="Loading videos" data-testid="grid-skeleton">
       {Array.from({ length: count }, (_, i) => (
         <div key={i}>
           <div className="skeleton aspect-video rounded-2xl" />

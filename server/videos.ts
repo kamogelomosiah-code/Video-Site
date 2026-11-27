@@ -4,7 +4,18 @@
  */
 import { db, type Filter, type Sort } from './db';
 import { hit } from './auth';
-import { linkKey, searchTextOf, slugify, type CleanVideo } from '../shared/video';
+import { foldText, linkKey, searchTextOf, slugify, type CleanVideo } from '../shared/video';
+
+/** "goals" also matches "goal" (same rule as the public search). */
+const variantsOf = (t: string) => {
+  const out = new Set([t]);
+  if (t.length > 3) {
+    if (t.endsWith('ies')) out.add(t.slice(0, -3) + 'y');
+    else if (/(ches|shes|xes|sses|zes)$/.test(t)) out.add(t.slice(0, -2));
+    else if (t.endsWith('s') && !t.endsWith('ss')) out.add(t.slice(0, -1));
+  }
+  return [...out];
+};
 import type { PublicVideo } from '../shared/types';
 import { cleanFocus } from '../shared/image';
 
@@ -25,6 +36,7 @@ export function prepareVideo(doc: any): any {
   doc.tags = Array.isArray(doc.tags) ? doc.tags : [];
   doc.tagKeys = doc.tags.map((t: string) => String(t).toLowerCase());
   doc.searchText = searchTextOf(doc);
+  doc.searchV = 2; // version of the search text format (lets old videos be re-indexed once)
   doc.published = doc.published !== false;
   doc.featured = !!doc.featured;
   doc.views = Number(doc.views) || 0;
@@ -118,8 +130,8 @@ export async function videoFilter(o: VideoQuery): Promise<Filter> {
 
   if (o.tag) f.tagKeys = { $in: [String(o.tag).toLowerCase().slice(0, 60)] };
 
-  const terms = String(o.q || '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 6);
-  if (terms.length) f.searchText = { $regex: '^' + terms.map((t) => `(?=.*${escapeRegex(t)})`).join('') };
+  const terms = foldText(String(o.q || '')).replace(/#/g, ' ').split(' ').filter(Boolean).slice(0, 6);
+  if (terms.length) f.searchText = { $regex: '^' + terms.map((t) => `(?=.*(?:${variantsOf(t).map(escapeRegex).join('|')}))`).join('') };
   return f;
 }
 
@@ -242,7 +254,7 @@ export async function recordClick(id: string, ip: string): Promise<void> {
 /** Older videos (from the previous site) get the new search/sort fields once. */
 export async function migrateVideos(): Promise<void> {
   const all: any[] = await db.list('media');
-  const stale = all.filter((m) => m.linkKey === undefined || m.searchText === undefined || m.titleKey === undefined || !m.createdAt);
+  const stale = all.filter((m) => m.linkKey === undefined || m.searchText === undefined || m.titleKey === undefined || !m.createdAt || m.searchV !== 2);
   if (stale.length) {
     const now = Date.now();
     stale.forEach((m, i) => {

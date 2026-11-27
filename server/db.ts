@@ -123,7 +123,7 @@ export type Sort = Record<string, 1 | -1>;
 function toMongoFilter(filter: Filter): Filter {
   const out: Filter = {};
   for (const [k, cond] of Object.entries(filter)) {
-    if (k === '$or') out.$or = (cond as Filter[]).map(toMongoFilter);
+    if (k === '$or' || k === '$and') out[k] = (cond as Filter[]).map(toMongoFilter);
     else if (cond && typeof cond === 'object' && !Array.isArray(cond) && '$regex' in cond) {
       out[k] = { ...cond, $options: 'i' };
     } else out[k] = cond;
@@ -135,6 +135,10 @@ function matches(doc: any, filter: Filter): boolean {
   for (const [k, cond] of Object.entries(filter)) {
     if (k === '$or') {
       if (!(cond as Filter[]).some((f) => matches(doc, f))) return false;
+      continue;
+    }
+    if (k === '$and') {
+      if (!(cond as Filter[]).every((f) => matches(doc, f))) return false;
       continue;
     }
     const v = doc[k];

@@ -13,6 +13,7 @@ import { config } from './config';
 import { db } from './db';
 import { getSettings } from './routes/public';
 import { linkOf, similarTo, toPublic, trending, videoFilter } from './videos';
+import { clearSearchCaches, searchVideos } from './search';
 import { categoryPath, embedUrlFor, isoDuration, summary, tagPath, videoPath } from '../shared/seo';
 import type { SiteSettings } from '../shared/types';
 
@@ -73,7 +74,7 @@ async function homePage(req: Request, s: SiteSettings, origin: string): Promise<
   const cats = await activeCategories();
   const catLinks = chips(cats.map((c) => [categoryPath(c.slug), c.name]));
   if (q) {
-    const items = await latest(await videoFilter({ q, publicOnly: true }), 24);
+    const items = (await searchVideos(q, { limit: 24 })).items;
     return {
       status: 200,
       title: `${q} – search – ${s.siteName}`,
@@ -421,6 +422,7 @@ let timer: NodeJS.Timeout | null = null;
  */
 export function notifySearchEngines(paths: string[]) {
   clearSeoCache();
+  clearSearchCaches();
   clearSitemapCache();
   const origin = config.publicUrl;
   if (!origin || !config.isProd || /localhost|127\.0\.0\.1/.test(origin) || process.env.INDEXNOW === 'off') return;
