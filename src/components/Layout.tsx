@@ -6,6 +6,7 @@ import { useSettings } from '../lib/settings';
 import AgeGate from './AgeGate';
 import ConsentBar from './ConsentBar';
 import { AdSlot } from './Media';
+import SiteSearch from './SiteSearch';
 import { cx } from './ui';
 import { api } from '../lib/api';
 import { useFetch } from '../lib/utils';
@@ -21,32 +22,6 @@ export function Logo() {
       <img src="/peach-svgrepo-com.svg" alt="" className="h-8 w-8" />
       <span className="text-lg font-bold tracking-tight">{settings.siteName}</span>
     </Link>
-  );
-}
-
-function SearchBox({ onDone, autoFocus }: { onDone?: () => void; autoFocus?: boolean }) {
-  const navigate = useNavigate();
-  const loc = useLocation();
-  const [q, setQ] = useState(() => new URLSearchParams(loc.search).get('q') || '');
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    navigate(q.trim() ? `/?q=${encodeURIComponent(q.trim())}` : '/');
-    onDone?.();
-  };
-  return (
-    <form onSubmit={submit} role="search" className="relative w-full">
-      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search videos, tags, creators…"
-        aria-label="Search"
-        type="search"
-        enterKeyHint="search"
-        autoFocus={autoFocus}
-        className="h-11 w-full rounded-full border border-transparent bg-zinc-900 pl-9 pr-4 text-sm transition-colors duration-200 ease-standard placeholder:text-zinc-500 hover:bg-zinc-800/80 focus:border-brand-500/60 focus:bg-zinc-900 focus:outline-none"
-      />
-    </form>
   );
 }
 
@@ -149,7 +124,7 @@ function Footer() {
     <footer className="mt-16 border-t border-zinc-900 px-4 py-10 text-sm text-zinc-500">
       {!!cats?.length && (
         // Links to every category on every page: helps people browse and search engines find them.
-        <nav className="mx-auto mb-8 max-w-7xl" aria-label="Browse categories">
+        <nav className="mx-auto mb-8 max-w-screen-2xl" aria-label="Browse categories">
           <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">Browse</p>
           <ul className="flex flex-wrap gap-x-5 gap-y-2">
             {cats.map((c) => (
@@ -158,7 +133,7 @@ function Footer() {
           </ul>
         </nav>
       )}
-      <div className="mx-auto flex max-w-7xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mx-auto flex max-w-screen-2xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p>{settings.footerText || `© ${new Date().getFullYear()} ${settings.siteName}. All rights reserved.`}</p>
           <p className="mt-1 text-xs text-zinc-600">All models were 18 years of age or older at the time of depiction.</p>
@@ -248,7 +223,7 @@ export default function Layout() {
       <AgeGate />
       <Announcement />
       <header className="sticky top-0 z-40 border-b border-white/5 bg-zinc-950/85 backdrop-blur-xl">
-        <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4">
+        <div className="mx-auto flex h-16 max-w-screen-2xl items-center gap-4 px-4">
           <Logo />
           <nav className="hidden items-center gap-1 md:flex" aria-label="Main">
             {NAV.map((n) => (
@@ -262,8 +237,8 @@ export default function Layout() {
               </NavLink>
             ))}
           </nav>
-          <div className="mx-auto hidden w-full max-w-md md:block">
-            <SearchBox />
+          <div className="mx-auto hidden w-full max-w-xl md:block">
+            <SiteSearch />
           </div>
           <div className="ml-auto md:ml-0">
             <AccountMenu />
@@ -271,7 +246,7 @@ export default function Layout() {
         </div>
         {searchOpen && (
           <div className="flex items-center gap-2 border-t border-white/5 px-4 py-3 animate-fade-in md:hidden" data-testid="mobile-search">
-            <SearchBox autoFocus onDone={() => setSearchOpen(false)} />
+            <SiteSearch autoFocus onDone={() => setSearchOpen(false)} />
             <button type="button" onClick={() => setSearchOpen(false)} className="ripple flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-white/[.06]" aria-label="Close search">
               <X className="h-5 w-5" />
             </button>
@@ -279,7 +254,7 @@ export default function Layout() {
         )}
       </header>
       {/* Each page rises in as you arrive (keyed by the address, so search typing doesn't re-animate). */}
-      <main key={pageKey} className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 animate-page">
+      <main key={pageKey} className="mx-auto w-full max-w-screen-2xl flex-1 px-4 py-6 animate-page">
         <Outlet />
       </main>
       <div className="mx-auto w-full max-w-3xl px-4">

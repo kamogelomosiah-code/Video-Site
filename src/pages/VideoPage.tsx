@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ExternalLink, Eye, Film, Play, Share2, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { ExternalLink, Eye, Film, Play, ThumbsDown, ThumbsUp } from 'lucide-react';
 import type { PublicVideo, VideoDetail } from '../../shared/types';
 import { api } from '../lib/api';
 import { useSeo } from '../lib/seo';
@@ -12,6 +12,19 @@ import { AdSlot, Thumb, VideoGrid } from '../components/Media';
 import { Empty, cx, useToast } from '../components/ui';
 
 type Reaction = 'like' | 'dislike' | null;
+
+/** True on large screens (1024px+), where "Up next" sits beside the video. */
+function useWide() {
+  const q = '(min-width: 1024px)';
+  const [wide, setWide] = useState(() => typeof window !== 'undefined' && window.matchMedia(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia(q);
+    const on = () => setWide(m.matches);
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  }, []);
+  return wide;
+}
 type Loaded = { video: VideoDetail; similar: PublicVideo[]; mine: Reaction };
 
 /**
@@ -22,6 +35,7 @@ export default function VideoPage() {
   const { id = '' } = useParams();
   const { toast } = useToast();
   const { settings } = useSettings();
+  const wide = useWide();
   const [data, setData] = useState<Loaded | null>(null);
   const [error, setError] = useState('');
   const [more, setMore] = useState(false);
@@ -117,22 +131,10 @@ export default function VideoPage() {
     }
   };
 
-  const share = async () => {
-    const url = window.location.href;
-    try {
-      if (navigator.share) await navigator.share({ title: v.title, url });
-      else {
-        await navigator.clipboard.writeText(url);
-        toast('Link copied');
-      }
-    } catch {
-      /* cancelled */
-    }
-  };
 
   return (
     // Phones: one column. Larger screens: the video on the left, "Up next" on the right (keeps people watching).
-    <div data-testid="video-page" className="mx-auto max-w-6xl lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-8">
+    <div data-testid="video-page" className="mx-auto max-w-7xl lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-10">
       <article className="mx-auto w-full max-w-3xl lg:max-w-none">
         {/* The picture is a big "play" button that opens the video where it lives. */}
         <a
@@ -165,16 +167,18 @@ export default function VideoPage() {
           {v.creatorName && <span aria-hidden>·</span>}
           <span className="inline-flex items-center gap-1"><Eye className="h-3.5 w-3.5" /> {formatViews(v.views)} {v.views === 1 ? 'view' : 'views'}</span>
           {v.createdAt && <><span aria-hidden>·</span><span>{timeAgo(v.createdAt)}</span></>}
+          {v.source && <><span aria-hidden className="sm:hidden">·</span><span className="sm:hidden">on {v.source}</span></>}
         </p>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <div className="flex overflow-hidden rounded-full border border-zinc-800 bg-zinc-900" role="group" aria-label="Rate this video">
+        {/* One row: rate it, then watch it. Nothing else competes for the tap. */}
+        <div className="mt-4 flex items-center gap-2">
+          <div className="flex shrink-0 overflow-hidden rounded-full border border-zinc-800 bg-zinc-900" role="group" aria-label="Rate this video">
             <button
               type="button"
               onClick={() => react('like')}
               aria-pressed={mine === 'like'}
               data-testid="like"
-              className={cx('ripple flex h-11 items-center gap-2 px-4 text-sm font-semibold transition-colors duration-200 ease-standard', mine === 'like' ? 'bg-brand-500 text-zinc-950' : 'text-zinc-200 hover:bg-white/[.06]')}
+              className={cx('ripple flex h-12 items-center gap-2 px-3.5 text-sm sm:px-4 font-semibold transition-colors duration-200 ease-standard', mine === 'like' ? 'bg-brand-500 text-zinc-950' : 'text-zinc-200 hover:bg-white/[.06]')}
             >
               <ThumbsUp key={`l${mine}`} className={cx('h-4 w-4', mine === 'like' && 'fill-current animate-pop')} /> {formatViews(v.likes)}
               <span className="sr-only">likes</span>
@@ -185,36 +189,32 @@ export default function VideoPage() {
               onClick={() => react('dislike')}
               aria-pressed={mine === 'dislike'}
               data-testid="dislike"
-              className={cx('ripple flex h-11 items-center gap-2 px-4 text-sm font-semibold transition-colors duration-200 ease-standard', mine === 'dislike' ? 'bg-zinc-200 text-zinc-950' : 'text-zinc-200 hover:bg-white/[.06]')}
+              className={cx('ripple flex h-12 items-center gap-2 px-3.5 text-sm sm:px-4 font-semibold transition-colors duration-200 ease-standard', mine === 'dislike' ? 'bg-zinc-200 text-zinc-950' : 'text-zinc-200 hover:bg-white/[.06]')}
             >
               <ThumbsDown key={`d${mine}`} className={cx('h-4 w-4', mine === 'dislike' && 'fill-current animate-pop')} /> {formatViews(v.dislikes)}
               <span className="sr-only">dislikes</span>
             </button>
           </div>
-          <button type="button" onClick={share} className="ripple flex h-11 items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900 px-4 text-sm font-semibold text-zinc-200 transition-colors hover:bg-zinc-800">
-            <Share2 className="h-4 w-4" /> Share
-          </button>
+          <a
+            href={watch}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ripple flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-brand-500 px-5 text-[15px] font-bold text-zinc-950 shadow-lg shadow-brand-500/20 transition-[background-color,box-shadow,transform] duration-200 ease-standard hover:bg-brand-400 hover:shadow-xl hover:shadow-brand-500/25 active:scale-[.98] sm:flex-none sm:px-7"
+            data-testid="watch"
+          >
+            <span className="truncate"><span className="sm:hidden">Watch now</span><span className="hidden sm:inline">Watch on {site}</span></span> <ExternalLink className="h-4 w-4 shrink-0" />
+          </a>
         </div>
 
-        <a
-          href={watch}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="ripple mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-brand-500 px-6 text-base font-bold text-zinc-950 shadow-lg shadow-brand-500/20 transition-[background-color,box-shadow,transform] duration-200 ease-standard hover:bg-brand-400 hover:shadow-xl hover:shadow-brand-500/25 active:scale-[.98] sm:w-auto sm:inline-flex"
-          data-testid="watch"
-        >
-          Watch on {site} <ExternalLink className="h-4 w-4" />
-        </a>
-
         {(v.categoryName || tags.length > 0) && (
-          <div className="mt-5 flex flex-wrap gap-2" aria-label="Tags">
+          <div className="scrollbar-none -mx-4 mt-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0" aria-label="Tags">
             {v.categoryName && (
-              <Link to={categoryPath(v.category || '')} className="ripple rounded-lg bg-brand-500/15 px-3 py-1.5 text-sm font-medium text-brand-300 transition-colors hover:bg-brand-500/25">
+              <Link to={categoryPath(v.category || '')} className="ripple shrink-0 rounded-lg bg-brand-500/15 px-3 py-1.5 text-sm font-medium text-brand-300 transition-colors hover:bg-brand-500/25">
                 {v.categoryName}
               </Link>
             )}
             {tags.slice(0, 12).map((t) => (
-              <Link key={t} to={tagPath(t)} className="ripple rounded-lg border border-zinc-700/80 px-3 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/[.06] hover:text-white">
+              <Link key={t} to={tagPath(t)} className="ripple shrink-0 rounded-lg border border-zinc-700/80 px-3 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-white/[.06] hover:text-white">
                 #{t}
               </Link>
             ))}
@@ -222,29 +222,28 @@ export default function VideoPage() {
         )}
 
         {v.description && (
-          <div className="mt-5 rounded-2xl bg-zinc-900/60 p-4 text-sm leading-relaxed text-zinc-300">
-            <p className={cx('whitespace-pre-line', !more && 'line-clamp-3')}>{v.description}</p>
-            {v.description.length > 160 && (
-              <button type="button" onClick={() => setMore((m) => !m)} className="mt-2 font-semibold text-zinc-100">
+          <div className="mt-4 rounded-2xl bg-zinc-900/60 px-4 py-3 text-sm leading-relaxed text-zinc-300">
+            <p className={cx('whitespace-pre-line', !more && 'line-clamp-2')}>{v.description}</p>
+            {v.description.length > 110 && (
+              <button type="button" onClick={() => setMore((m) => !m)} className="mt-1 font-semibold text-zinc-100">
                 {more ? 'Show less' : 'Show more'}
               </button>
             )}
           </div>
         )}
-        <AdSlot slot="home_mid" className="mt-8" />
+        {wide && <AdSlot slot="home_mid" className="mt-8" />}
       </article>
 
       {similar.length > 0 && (
-        <aside aria-labelledby="similar-title" className="mt-10 lg:mt-0">
-          <h2 id="similar-title" className="mb-4 text-lg font-bold">Up next</h2>
-          {/* Phones/tablets: a grid of cards. Large screens: a compact list beside the video. */}
-          <div className="lg:hidden"><VideoGrid items={similar} /></div>
-          <ul className="hidden space-y-3 lg:block">
-            {similar.map((s) => (
+        <aside aria-labelledby="similar-title" className="mt-8 lg:mt-0">
+          <h2 id="similar-title" className="mb-3 text-lg font-bold">Up next</h2>
+          {/* A compact list: picture + title side by side, so more videos fit on every screen. */}
+          <ul className="space-y-1" data-testid="up-next">
+            {similar.slice(0, 8).map((s) => (
               <li key={s.id}>
-                <Link to={videoPath(s)} className="ripple group flex gap-3 rounded-xl p-1.5 transition-colors hover:bg-white/[.04]">
+                <Link to={videoPath(s)} className="ripple group -mx-1.5 flex gap-3 rounded-xl p-1.5 transition-colors hover:bg-white/[.04]">
                   <span className="relative shrink-0 overflow-hidden rounded-lg">
-                    <Thumb src={s.thumbnailUrl} focus={s.thumbFocus} alt="" className="h-[84px] w-[150px]" />
+                    <Thumb src={s.thumbnailUrl} focus={s.thumbFocus} alt="" className="aspect-video w-[148px] sm:w-[168px] lg:w-[150px]" />
                     {s.duration && <span className="absolute bottom-1 right-1 rounded bg-black/80 px-1 text-[11px] font-medium">{s.duration}</span>}
                   </span>
                   <span className="min-w-0 py-0.5">
@@ -256,6 +255,15 @@ export default function VideoPage() {
             ))}
           </ul>
         </aside>
+      )}
+      {/* Phones and tablets: the ad comes after "Up next", so the next videos are seen first. */}
+      {!wide && <AdSlot slot="home_mid" className="mt-8" />}
+
+      {similar.length > 8 && (
+        <section aria-labelledby="more-title" className="mt-10 lg:col-span-2">
+          <h2 id="more-title" className="mb-4 text-lg font-bold">More to watch</h2>
+          <VideoGrid items={similar.slice(8)} />
+        </section>
       )}
     </div>
   );

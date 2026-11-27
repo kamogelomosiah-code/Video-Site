@@ -34,3 +34,17 @@ export function focusStyle(f?: Focus | null): { objectPosition: string; transfor
   const shift = (v: number) => Math.round(Math.max(-lim, Math.min(lim, -(v / 100 - 0.5) * z)) * 10000) / 100;
   return { objectPosition, transformOrigin: '50% 50%', transform: `translate(${shift(g.x)}%, ${shift(g.y)}%) scale(${z})` };
 }
+
+/**
+ * The sharpest version of a thumbnail that video sites offer, plus the original to fall back on.
+ * YouTube's usual "hqdefault" is 480×360 with black bars; "maxresdefault" is a clean 1280×720.
+ * Vimeo serves any size you ask for. Unknown addresses are returned as they are.
+ */
+export function sharperThumb(url?: string): { src: string; fallback?: string } {
+  const src = String(url || '');
+  const yt = /^(https?:\/\/i\d?\.ytimg\.com\/vi(?:_webp)?\/[\w-]+\/)(?:default|mqdefault|hqdefault|sddefault|hq720)(\.jpg|\.webp)(\?.*)?$/i.exec(src);
+  if (yt) return { src: `${yt[1].replace('/vi_webp/', '/vi/')}maxresdefault.jpg`, fallback: src };
+  const vimeo = /^(https?:\/\/i\.vimeocdn\.com\/video\/[\w-]+?)(?:_\d+(?:x\d+)?)?(\.(?:jpg|webp))?(\?.*)?$/i.exec(src);
+  if (vimeo && !/_1280x720/.test(src)) return { src: `${vimeo[1]}_1280x720${vimeo[2] || '.jpg'}`, fallback: src };
+  return { src };
+}

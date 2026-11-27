@@ -8,18 +8,19 @@ import { useSeo } from '../lib/seo';
 import { categoryPath, tagPath, videoPath } from '../../shared/seo';
 import { useDebounced, useFetch } from '../lib/utils';
 import { AdSlot, GridSkeleton, Thumb, VideoGrid, VideoRow } from '../components/Media';
+import SiteSearch from '../components/SiteSearch';
 import { Alert, Button, Empty, Spinner, cx } from '../components/ui';
 
-type Page = { items: PublicVideo[]; total: number; page: number; pages: number };
+type Page = { items: PublicVideo[]; total: number; page: number; pages: number; loose?: boolean };
 type Trending = { items: PublicVideo[]; tags: string[] };
 
 const chunk = <T,>(list: T[], n: number) => Array.from({ length: Math.ceil(list.length / n) }, (_, i) => list.slice(i * n, i * n + n));
 
 function RowSkeleton() {
   return (
-    <div className="flex gap-3 overflow-hidden sm:grid sm:grid-cols-3 sm:gap-x-4 lg:grid-cols-4 xl:grid-cols-5" aria-hidden>
-      {Array.from({ length: 5 }, (_, i) => (
-        <div key={i} className={cx('w-[44%] shrink-0 sm:w-auto', i >= 3 && 'sm:hidden', i === 3 && 'lg:block', i === 4 && 'xl:block')}>
+    <div className="flex gap-3 overflow-hidden sm:grid sm:grid-cols-3 sm:gap-x-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6" aria-hidden>
+      {Array.from({ length: 6 }, (_, i) => (
+        <div key={i} className={cx('w-[44%] shrink-0 sm:w-auto', i >= 3 && 'sm:hidden', i === 3 && 'lg:block', i === 4 && 'xl:block', i === 5 && '2xl:block')}>
           <div className="skeleton aspect-video rounded-2xl" />
           <div className="skeleton mt-3 h-3.5 w-11/12 rounded-full" />
           <div className="skeleton mt-2 h-3 w-1/2 rounded-full" />
@@ -156,10 +157,7 @@ function Slides({ items, callout }: { items: PublicVideo[]; callout: string }) {
 }
 
 /** The top of the home page: rotating featured videos (if any), then the search box. */
-function Hero({ value, onSubmit, onChange, tags, slides, loading }: {
-  value: string;
-  onSubmit: (e: FormEvent) => void;
-  onChange: (v: string) => void;
+function Hero({ tags, slides, loading }: {
   tags: string[];
   slides: PublicVideo[];
   /** The featured videos are still on their way: keep their space so nothing below jumps when they arrive. */
@@ -178,23 +176,12 @@ function Hero({ value, onSubmit, onChange, tags, slides, loading }: {
         {/* With the pictures showing, the headline is for search engines and screen readers; the page stays minimal. */}
         <h1 className={cx(show ? 'sr-only' : 'text-3xl font-extrabold tracking-tight sm:text-4xl')}>{settings.heroHeadline}</h1>
         {!show && settings.heroSubtext && <p className="mx-auto mt-2 max-w-xl text-sm text-zinc-400">{settings.heroSubtext}</p>}
-        <form onSubmit={onSubmit} role="search" className={cx('relative', !show && 'mx-auto mt-6 max-w-2xl')}>
-          <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-500" />
-          <input
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder="Search videos, tags, creators…"
-            aria-label="Search videos"
-            type="search"
-            enterKeyHint="search"
-            className="h-12 w-full rounded-full border border-zinc-800 bg-zinc-900 pl-12 pr-14 text-base placeholder:text-zinc-500 transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
-          />
-          <button type="submit" aria-label="Search" className="ripple absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-brand-500 text-zinc-950 transition-colors hover:bg-brand-400">
-            <Search className="h-[18px] w-[18px]" strokeWidth={2.4} />
-          </button>
-        </form>
+        {/* The top bar has the search on larger screens; phones get it here, under the pictures. */}
+        <div className={cx(!show ? 'mx-auto mt-6 max-w-2xl text-left' : 'md:hidden')}>
+          <SiteSearch variant="hero" />
+        </div>
         {tags.length > 0 && (
-          <div className={cx('scrollbar-none -mx-4 mt-3 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0', !show && 'sm:justify-center')}>
+          <div className={cx('scrollbar-none -mx-4 mt-3 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0', !show && 'sm:justify-center', show && 'md:mt-0')}>
             {tags.map((t) => (
               <Link key={t} to={tagPath(t)} className="ripple flex h-8 shrink-0 items-center rounded-lg border border-zinc-800 px-3 text-xs text-zinc-300 transition-colors hover:bg-white/[.06] hover:text-white">
                 #{t}
@@ -219,25 +206,13 @@ export default function Home() {
   const legacyCategory = params.get('category');
   const category = route.slug || 'all';
   const tag = (route.tag || '').toLowerCase();
-  const [box, setBox] = useState(urlQ);
-  const q = useDebounced(box, 350).trim();
+  const q = urlQ.trim(); // the search box sends people to /?q=…
   const [page, setPage] = useState(1);
   const [items, setItems] = useState<PublicVideo[]>([]);
-  const [meta, setMeta] = useState({ total: 0, pages: 0 });
+  const [meta, setMeta] = useState({ total: 0, pages: 0, loose: false });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Keep the box in step with back/forward navigation (?q= in the URL).
-  useEffect(() => setBox(urlQ), [urlQ]);
-  useEffect(() => {
-    if (q !== urlQ) {
-      const next = new URLSearchParams(params);
-      if (q) next.set('q', q);
-      else next.delete('q');
-      setParams(next, { replace: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q]);
   useEffect(() => setPage(1), [q, category, tag]);
 
   const { data: categories } = useFetch(() => api.get<Category[]>('/categories'), []);
@@ -260,7 +235,7 @@ export default function Home() {
       .then((r) => {
         if (!alive) return;
         setItems((prev) => (page === 1 ? r.items : [...prev, ...r.items]));
-        setMeta({ total: r.total, pages: r.pages });
+        setMeta({ total: r.total, pages: r.pages, loose: !!r.loose });
       })
       .catch((e) => alive && setError(e.message))
       .finally(() => alive && setLoading(false));
@@ -269,11 +244,7 @@ export default function Home() {
     };
   }, [q, category, tag, page]);
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    setPage(1);
-    setParams(box.trim() ? { q: box.trim() } : {}, { replace: true });
-  };
+
 
   const cat = categories?.find((c) => c.slug === category);
   // Categories for the "More in …" rows: only ones that have videos in the list (so a row is never empty).
@@ -314,8 +285,11 @@ export default function Home() {
           <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{heading || `${category} videos`}</h1>
           {!loading && <p className="mt-1 text-sm text-zinc-400">{meta.total.toLocaleString()} video{meta.total === 1 ? '' : 's'}</p>}
         </header>
+      ) : q ? (
+        // Search results: just the search bar (already holding the words), then the results.
+        <div className="mx-auto mb-6 max-w-2xl"><SiteSearch variant="hero" /></div>
       ) : (
-        <Hero value={box} onChange={setBox} onSubmit={submit} tags={trending?.tags || []} slides={q ? [] : (trending?.items || []).filter((v) => v.thumbnailUrl).slice(0, 5)} loading={!q && !trending} />
+        <Hero tags={trending?.tags || []} slides={q ? [] : (trending?.items || []).filter((v) => v.thumbnailUrl).slice(0, 5)} loading={!q && !trending} />
       )}
       {/* Keep the Trending row's space while it loads, so the list below doesn't jump. */}
       {!q && !listing && !trending && (
@@ -364,6 +338,11 @@ export default function Home() {
       )}
       {(!categories?.length || tag) && <div className="mb-4" />}
 
+      {q && meta.loose && !loading && (
+        <p className="mb-4 rounded-xl bg-zinc-900/60 px-4 py-3 text-sm text-zinc-300" data-testid="close-matches">
+          No videos match every word of “{q}”. Here are the closest matches.
+        </p>
+      )}
       {error && <Alert>{error}</Alert>}
       {loading && page === 1 ? (
         <GridSkeleton />

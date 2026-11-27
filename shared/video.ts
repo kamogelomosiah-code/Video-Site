@@ -212,12 +212,12 @@ export function normalizeVideo(raw: unknown): NormalizeResult {
 }
 
 /** Lower-cased text used for searching. Stored on each video so searches are one simple query. */
+/** Lower case, no accents ("Café" -> "cafe"), punctuation as spaces: how search compares text. */
+export const foldText = (s: string) =>
+  String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9#]+/g, ' ').trim();
+
 export const searchTextOf = (v: { title: string; tags?: string[]; creatorName?: string; description?: string }) =>
-  [v.title, (v.tags || []).join(' '), v.creatorName, (v.description || '').slice(0, 300)]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
-    .replace(/\s+/g, ' ');
+  foldText([v.title, (v.tags || []).join(' '), v.creatorName, (v.description || '').slice(0, 600)].filter(Boolean).join(' '));
 
 /**
  * Reads a file's text as a list of videos. Accepts a JSON array, an object holding one
