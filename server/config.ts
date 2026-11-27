@@ -20,6 +20,7 @@ export function normalizeMongoUri(raw: string): string {
   return uri.replace(/^(mongodb(?:\+srv)?:\/\/[^:/@]+:)<([^>@]+)>@/, '$1$2@');
 }
 
+const pin = env('ADMIN_PIN').trim().toLowerCase();
 
 export const config = {
   port: Number(process.env.PORT) || 3000,
@@ -39,7 +40,9 @@ export const config = {
     name: process.env.ADMIN_NAME || 'Site Admin',
     // Set in .env / your host's environment — never in code (this repo is public).
     password: env('ADMIN_PASSWORD'),
-    // 6 digits to require a PIN at sign-in; "off" (or blank) for no PIN step.
-    pin: /^\d{6}$/.test(env('ADMIN_PIN').trim()) ? env('ADMIN_PIN').trim() : '',
+    // 6 digits sets the sign-in PIN. Blank keeps the saved PIN. Only "off" removes it.
+    pin: /^\d{6}$/.test(pin) ? pin : '',
+    pinOff: pin === 'off',
+    pinInvalid: pin !== '' && pin !== 'off' && !/^\d{6}$/.test(pin),
   },
 };

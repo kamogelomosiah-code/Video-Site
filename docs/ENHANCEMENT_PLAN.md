@@ -21,7 +21,7 @@ Phases are ordered so each one makes the next easier. Effort: S = under a day, M
 ## Phase 1 — Go live safely (now) · S–M
 
 1. **Deploy with real config** — `MONGODB_URI`, `ADMIN_USERNAME/PASSWORD`, SMTP (or Resend) and `APP_URL` on the host; allow the host's IP in Atlas → Network Access. *S*
-2. **Stronger admin login** — the current admin password is 6 digits; switch to a long passphrase and turn the PIN back on (`ADMIN_PIN=<6 digits>`), or add authenticator-app 2FA. *S / M*
+2. **Stronger admin login** — use a long passphrase and a new PIN (`ADMIN_PIN=<6 digits>`), or add authenticator-app 2FA. *S / M*
 3. **Email verification on sign-up** — reuse the 6-digit code mailer so accounts are tied to a real inbox. *S*
 4. **Automated tests in CI** — the browser checks used during development (admin CRUD, auth, JSON import) as a GitHub Action on every push. *M*
 5. **Error monitoring + uptime check** — e.g. Sentry (free tier) and an uptime ping on `/api/health`. *S*

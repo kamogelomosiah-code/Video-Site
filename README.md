@@ -24,7 +24,7 @@ npx tsx scripts/seal-secrets.ts --generate-key
 
 # 2. seal your settings (run this whenever you change them)
 APP_SECRET_KEY=<key> MONGODB_URI='mongodb+srv://…' MONGODB_DB=elysian \
-ADMIN_USERNAME=administer ADMIN_PASSWORD='…' ADMIN_PIN=off npm run seal
+ADMIN_USERNAME=administer ADMIN_PASSWORD='…' ADMIN_PIN='<your 6 digits>' npm run seal
 ```
 
 Any setting also present as a normal environment variable overrides the sealed value.
@@ -59,6 +59,12 @@ npm run test:api          # in another: runs the whole site through its API and 
 | Site settings | Name, home headline, announcement bar, maintenance mode, sign-ups, 18+ gate, SEO, ads, legal pages |
 | Activity log | Who changed what |
 | My account | Your name, photo, password and PIN |
+
+## Sign-in PIN and password reset
+
+Set `ADMIN_PIN` to 6 digits to require a PIN after the password. Blank keeps the PIN already saved; only `off` removes it. A value set on the host wins over `secrets.sealed`.
+
+Password reset emails a 6-digit code (15 minutes, 5 tries). Accounts with a PIN then sign in again with the new password and PIN. If `ADMIN_PASSWORD` is configured, it replaces the admin password at every restart, so update it there too.
 
 ## Importing videos
 

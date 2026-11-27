@@ -141,7 +141,7 @@ export async function logActivity(actionType: string, details: string, userId?: 
  * Credentials come only from the environment (the repo is public).
  */
 export async function ensureAdmin() {
-  const { email, username, name, password, pin } = config.admin;
+  const { email, username, name, password, pin, pinOff, pinInvalid } = config.admin;
   let admin: any =
     (await db.get('users', 'admin-user')) ||
     (await db.findOne('users', { username })) ||
@@ -170,9 +170,11 @@ export async function ensureAdmin() {
   // The configured username always wins, so changing ADMIN_USERNAME renames the login.
   const clash: any = await db.findOne('users', { username });
   if (!clash || clash.id === admin.id) admin.username = username;
-  // PIN step only when ADMIN_PIN is a 6-digit number; otherwise sign-in is username + password.
+  // The PIN is kept unless ADMIN_PIN is explicitly "off".
   if (pin) admin.pin = pin;
-  else delete admin.pin;
+  else if (pinOff) delete admin.pin;
+  if (pinInvalid) console.warn('[auth] ADMIN_PIN must be exactly 6 digits (or "off"). Ignoring it; the saved PIN is unchanged.');
+  if (!admin.pin && !pinOff) console.warn('[auth] The admin account has no PIN. Set ADMIN_PIN to 6 digits to add the PIN step.');
 
   await db.put('users', admin);
   console.log(`[auth] Admin ready — sign in as "${admin.username}" (or ${admin.email})${admin.pin ? ' + PIN' : ''}`);
