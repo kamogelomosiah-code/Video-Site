@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { api } from '../lib/api';
 import { useFetch } from '../lib/utils';
-import { Alert, Button, Empty, Field, ImageInput, Input, Modal, Select, Spinner, Textarea, Toggle, useToast } from '../components/ui';
+import { Alert, Button, Empty, Field, FocusPicker, ImageInput, Input, Modal, Select, Spinner, Textarea, Toggle, useToast } from '../components/ui';
 
 export type FieldDef =
   | { key: string; label: string; type: 'text' | 'url' | 'number' | 'date' | 'time'; hint?: ReactNode; required?: boolean; placeholder?: string; half?: boolean }
@@ -11,6 +11,7 @@ export type FieldDef =
   | { key: string; label: string; type: 'toggle'; hint?: string; /** Treat a missing value as ON (older records lack the field). */ defaultOn?: boolean }
   | { key: string; label: string; type: 'select'; options: { value: string; label: string }[]; hint?: ReactNode; half?: boolean }
   | { key: string; label: string; type: 'image'; hint?: ReactNode }
+  | { key: string; label: string; type: 'focus'; source: string; ratio: number; hint?: ReactNode }
   | { key: string; label: string; type: 'tags'; hint?: ReactNode }
   | { key: string; label: string; type: 'products' };
 
@@ -87,6 +88,12 @@ export function FormFields({ fields, draft, set }: { fields: FieldDef[]; draft: 
             return (
               <Field key={f.key} label={f.label} hint={f.hint} className={cls} group>
                 <ImageInput value={draft[f.key] || ''} onChange={(v) => set(f.key, v)} label={f.label} />
+              </Field>
+            );
+          case 'focus':
+            return (
+              <Field key={f.key} label={f.label} hint={f.hint} className={cls} group>
+                <FocusPicker src={draft[f.source] || ''} value={draft[f.key]} onChange={(v) => set(f.key, v)} ratio={f.ratio} label={f.label} />
               </Field>
             );
           case 'tags':

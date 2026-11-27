@@ -6,6 +6,7 @@ import { db, type Filter, type Sort } from './db';
 import { hit } from './auth';
 import { linkKey, searchTextOf, slugify, type CleanVideo } from '../shared/video';
 import type { PublicVideo } from '../shared/types';
+import { cleanFocus } from '../shared/image';
 
 export const linkOf = (m: any): string => m.externalUrl || m.redirectUrl || m.sourceUrl || '';
 
@@ -38,6 +39,7 @@ export function applyClean(doc: any, v: CleanVideo, categorySlug: string, presen
   doc.title = v.title;
   doc.externalUrl = v.link;
   if (has('thumbnailUrl')) doc.thumbnailUrl = v.thumbnailUrl;
+  if (has('thumbFocus')) doc.thumbFocus = v.thumbFocus ?? null;
   if (has('description')) doc.description = v.description;
   if (has('category')) doc.category = categorySlug;
   if (has('tags')) doc.tags = v.tags;
@@ -53,6 +55,7 @@ export function toPublic(m: any): PublicVideo {
     id: m.id,
     title: m.title,
     thumbnailUrl: m.thumbnailUrl || '',
+    thumbFocus: m.thumbFocus || undefined,
     category: m.category || '',
     tags: m.tags || [],
     duration: m.duration || '',
@@ -70,6 +73,7 @@ export function toAdmin(m: any) {
     title: m.title,
     externalUrl: linkOf(m),
     thumbnailUrl: m.thumbnailUrl || '',
+    thumbFocus: m.thumbFocus || undefined,
     description: m.description || '',
     category: m.category || '',
     tags: m.tags || [],

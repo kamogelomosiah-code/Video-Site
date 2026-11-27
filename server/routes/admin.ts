@@ -5,6 +5,7 @@ import { requireAdmin, hashPassword, publicUser, logActivity, isEmail } from '..
 import { checkPassword } from '../../shared/password';
 import { AD_SLOTS, DEFAULT_SETTINGS, type AdminStats } from '../../shared/types';
 import { slugify } from '../../shared/video';
+import { cleanFocus } from '../../shared/image';
 import { getSettings } from './public';
 import { adminVideos } from './adminVideos';
 import { clearTrendingCache } from '../videos';
@@ -16,7 +17,7 @@ adminRouter.use(requireAdmin);
 adminRouter.use(express.json({ limit: '10mb' }));
 adminRouter.use('/videos', adminVideos);
 
-type FieldType = 'string' | 'text' | 'number' | 'boolean' | 'tags' | 'url';
+type FieldType = 'string' | 'text' | 'number' | 'boolean' | 'tags' | 'url' | 'focus';
 type Schema = Record<string, FieldType>;
 const SAFE_URL = /^(https?:\/\/|\/api\/files\/)/i;
 
@@ -45,6 +46,9 @@ function clean(input: any, schema: Schema): Record<string, any> {
         out[key] = s;
         break;
       }
+      case 'focus':
+        out[key] = cleanFocus(v) ?? null;
+        break;
       case 'text':
         out[key] = String(v ?? '').slice(0, 20000);
         break;
@@ -84,7 +88,7 @@ const RESOURCES: Resource[] = [
     collection: 'ads',
     label: 'ad',
     schema: {
-      name: 'string', slot: 'string', type: 'string', enabled: 'boolean', imageUrl: 'url', targetUrl: 'url',
+      name: 'string', slot: 'string', type: 'string', enabled: 'boolean', imageUrl: 'url', imageFocus: 'focus', targetUrl: 'url',
       htmlSnippet: 'text', adsenseSlotId: 'string', weight: 'number', startsAt: 'string', endsAt: 'string',
     },
     defaults: () => ({ enabled: true, type: 'image', weight: 10, impressions: 0, clicks: 0 }),

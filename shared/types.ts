@@ -1,3 +1,4 @@
+import type { Focus } from './image';
 // Data shapes shared by the server and the browser.
 // Field names match the existing MongoDB collections so old data keeps working.
 
@@ -22,6 +23,8 @@ export interface Video {
   title: string;
   externalUrl: string;
   thumbnailUrl?: string;
+  /** Which part of the thumbnail shows, and how far it is zoomed. */
+  thumbFocus?: Focus;
   description?: string;
   category?: string;
   tags?: string[];
@@ -36,7 +39,7 @@ export interface Video {
 }
 
 /** What the public site is allowed to see (no outgoing link — visitors go through /go/:id). */
-export type PublicVideo = Pick<Video, 'id' | 'title' | 'thumbnailUrl' | 'category' | 'tags' | 'duration' | 'views' | 'creatorName' | 'featured' | 'createdAt'>;
+export type PublicVideo = Pick<Video, 'id' | 'title' | 'thumbnailUrl' | 'thumbFocus' | 'category' | 'tags' | 'duration' | 'views' | 'creatorName' | 'featured' | 'createdAt'>;
 
 export interface Category {
   id: string;
@@ -55,6 +58,8 @@ export interface AdUnit {
   type: 'image' | 'html' | 'adsense';
   enabled: boolean;
   imageUrl?: string;
+  /** Which part of the banner shows, and how far it is zoomed. */
+  imageFocus?: Focus;
   targetUrl?: string;
   htmlSnippet?: string;
   adsenseSlotId?: string;
