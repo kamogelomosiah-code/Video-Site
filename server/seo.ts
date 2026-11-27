@@ -16,7 +16,7 @@ import { linkOf, similarTo, toPublic, trending, videoFilter } from './videos';
 import { categoryPath, embedUrlFor, isoDuration, summary, tagPath, videoPath } from '../shared/seo';
 import type { SiteSettings } from '../shared/types';
 
-export const originOf = (req: Request) => (config.appUrl || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+export const originOf = (req: Request) => (config.publicUrl || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const abs = (origin: string, u?: string) => (!u ? '' : /^https?:\/\//i.test(u) ? u : `${origin}${u.startsWith('/') ? '' : '/'}${u}`);
@@ -422,7 +422,7 @@ let timer: NodeJS.Timeout | null = null;
 export function notifySearchEngines(paths: string[]) {
   clearSeoCache();
   clearSitemapCache();
-  const origin = config.appUrl.replace(/\/+$/, '');
+  const origin = config.publicUrl;
   if (!origin || !config.isProd || /localhost|127\.0\.0\.1/.test(origin) || process.env.INDEXNOW === 'off') return;
   for (const p of paths) pending.add(origin + p);
   if (timer) return;

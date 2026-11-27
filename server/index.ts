@@ -76,12 +76,15 @@ async function main() {
     next();
   });
   // One address per page: search engines see a single site (your own domain, https, no trailing slash).
-  const appUrl = (() => { try { return config.appUrl ? new URL(config.appUrl) : null; } catch { return null; } })();
+  const appUrl = config.publicUrl ? new URL(config.publicUrl) : null; // never a localhost address
   app.use((req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     if (config.isProd && appUrl) {
-      // e.g. yoursite.onrender.com -> yoursite.com (the health check and API keep working on any address)
-      if (req.hostname !== appUrl.hostname && !req.path.startsWith('/api/')) return res.redirect(301, appUrl.origin + req.originalUrl);
+      // Only the Render address moves to your own domain (yoursite.onrender.com -> yoursite.com).
+      // Any other address is left alone, so a wrong setting can never send visitors somewhere else.
+      if (req.hostname.endsWith('.onrender.com') && req.hostname !== appUrl.hostname && !req.path.startsWith('/api/')) {
+        return res.redirect(301, appUrl.origin + req.originalUrl);
+      }
       if (appUrl.protocol === 'https:') res.setHeader('Strict-Transport-Security', 'max-age=31536000');
     }
     if (req.path.length > 1 && req.path.endsWith('/') && !req.path.startsWith('/api/') && !req.path.startsWith('/hub')) {
