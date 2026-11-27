@@ -6,6 +6,9 @@ import { AuthProvider } from './lib/auth';
 import { SettingsProvider } from './lib/settings';
 import { ToastProvider } from './components/ui';
 import './index.css';
+import { installRipple } from './lib/ripple';
+
+installRipple();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

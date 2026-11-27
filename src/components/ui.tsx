@@ -11,11 +11,12 @@ export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Bool
 // --- Buttons ---
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
+// Material 3 buttons: filled (primary), tonal (secondary), text (ghost) and error (danger).
 const VARIANTS: Record<Variant, string> = {
-  primary: 'bg-brand-500 hover:bg-brand-400 text-zinc-950 font-semibold',
-  secondary: 'bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700',
-  ghost: 'hover:bg-zinc-800 text-zinc-300 hover:text-white',
-  danger: 'bg-red-600/90 hover:bg-red-500 text-white font-semibold',
+  primary: 'bg-brand-500 hover:bg-brand-400 text-zinc-950 font-semibold shadow-sm shadow-black/30 hover:shadow-md hover:shadow-brand-500/20',
+  secondary: 'bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700/70',
+  ghost: 'hover:bg-white/[.06] text-zinc-300 hover:text-white',
+  danger: 'bg-red-600/90 hover:bg-red-500 text-white font-semibold shadow-sm shadow-black/30',
 };
 
 export function Button({
@@ -27,7 +28,7 @@ export function Button({
       {...rest}
       disabled={disabled || loading}
       className={cx(
-        'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer',
+        'ripple inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm transition-[background-color,box-shadow,transform,color] duration-200 ease-standard active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 cursor-pointer',
         VARIANTS[variant],
         className,
       )}
@@ -195,17 +196,17 @@ export function Modal({ open, onClose, title, children, wide, sheet }: {
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className={cx('fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-black/80 backdrop-blur-sm sm:items-center sm:p-4', sheet ? 'p-0' : 'p-4')} onMouseDown={onClose}>
+    <div className={cx('fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-black/70 backdrop-blur-sm animate-scrim sm:items-center sm:p-4', sheet ? 'p-0' : 'p-4')} onMouseDown={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={cx('w-full border border-zinc-800 bg-zinc-950 shadow-2xl animate-fade-in', sheet ? 'min-h-full rounded-none sm:min-h-0 sm:my-8 sm:rounded-xl' : 'my-8 rounded-xl', wide ? 'max-w-3xl' : 'max-w-lg')}
+        className={cx('w-full border border-zinc-800/70 bg-zinc-950 shadow-2xl shadow-black/60', sheet ? 'min-h-full rounded-none animate-sheet sm:min-h-0 sm:my-8 sm:rounded-3xl sm:animate-dialog' : 'my-8 rounded-3xl animate-dialog', wide ? 'max-w-3xl' : 'max-w-lg')}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
           <h2 className="text-lg font-semibold">{title}</h2>
-          <button type="button" onClick={onClose} className="rounded-md p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white" aria-label="Close">
+          <button type="button" onClick={onClose} className="ripple -mr-2 flex h-10 w-10 items-center justify-center rounded-full text-zinc-400 hover:bg-white/[.06] hover:text-white" aria-label="Close">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -248,17 +249,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast, confirm }}>
       {children}
-      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[300] flex flex-col items-center gap-2 px-4" aria-live="polite">
+      {/* Material snackbars: a light "inverse" surface rising from the bottom, above the phone navigation bar. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(88px+env(safe-area-inset-bottom))] z-[300] flex flex-col items-center gap-2 px-4 md:bottom-6 md:items-start md:px-6" aria-live="polite">
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={cx(
-              'pointer-events-auto flex max-w-md items-center gap-2 rounded-lg border px-4 py-3 text-sm shadow-xl animate-fade-in',
-              t.kind === 'success' ? 'border-emerald-800 bg-emerald-950 text-emerald-100' : 'border-red-800 bg-red-950 text-red-100',
-            )}
+            role={t.kind === 'error' ? 'alert' : 'status'}
+            className="pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-xl bg-zinc-100 px-4 py-3.5 text-sm font-medium text-zinc-900 shadow-2xl shadow-black/50 animate-snack"
           >
-            {t.kind === 'success' ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
-            {t.text}
+            {t.kind === 'success' ? <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" /> : <AlertCircle className="h-5 w-5 shrink-0 text-red-600" />}
+            <span className="min-w-0 flex-1">{t.text}</span>
           </div>
         ))}
       </div>

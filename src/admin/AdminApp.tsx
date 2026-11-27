@@ -63,13 +63,13 @@ export default function AdminApp() {
           end={n.end}
           onClick={() => setOpen(false)}
           className={({ isActive }) =>
-            cx('flex items-center gap-3 rounded-lg px-3 py-2 text-sm', isActive ? 'bg-brand-500 font-semibold text-zinc-950' : 'text-zinc-400 hover:bg-zinc-900 hover:text-white')
+            cx('ripple flex items-center gap-3 rounded-full px-4 py-2.5 text-sm transition-colors duration-200 ease-standard', isActive ? 'bg-brand-500/20 font-semibold text-brand-200' : 'text-zinc-400 hover:bg-white/[.05] hover:text-white')
           }
         >
           <n.icon className="h-4 w-4" /> {n.label}
         </NavLink>
       ))}
-      <Link to="/" className="mt-4 flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-900 hover:text-white">
+      <Link to="/" className="ripple mt-4 flex items-center gap-3 rounded-full px-4 py-2.5 text-sm text-zinc-400 hover:bg-white/[.05] hover:text-white">
         <ExternalLink className="h-4 w-4" /> View site
       </Link>
     </nav>
@@ -86,14 +86,14 @@ export default function AdminApp() {
       </aside>
       <div className="min-w-0 flex-1">
         <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-zinc-900 bg-zinc-950/90 px-4 backdrop-blur lg:hidden">
-          <button type="button" onClick={() => setOpen((o) => !o)} className="rounded-md p-2 hover:bg-zinc-800" aria-label="Admin menu" aria-expanded={open}>
+          <button type="button" onClick={() => setOpen((o) => !o)} className="ripple flex h-10 w-10 items-center justify-center rounded-full hover:bg-white/[.06]" aria-label="Admin menu" aria-expanded={open}>
             {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
           <Logo />
           <span className="text-xs font-bold uppercase text-brand-400">Admin</span>
         </header>
-        {open && <div className="border-b border-zinc-900 bg-zinc-950 p-4 lg:hidden">{nav}</div>}
-        <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
+        {open && <div className="border-b border-zinc-900 bg-zinc-950 p-4 animate-fade-in lg:hidden">{nav}</div>}
+        <main key={loc.pathname} className="mx-auto max-w-6xl p-4 pb-28 animate-page sm:p-6 lg:p-8">
           <Routes>
             <Route index element={<Overview />} />
             <Route path="videos" element={<VideosAdmin />} />

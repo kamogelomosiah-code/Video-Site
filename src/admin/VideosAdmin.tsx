@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useSearchParams } from 'react-router-dom';
 import { CheckSquare, ChevronDown, Download, ExternalLink, FileUp, Globe, MoreHorizontal, Pencil, Plus, Search, SlidersHorizontal, Star, Trash2 } from 'lucide-react';
 import type { Category } from '../../shared/types';
@@ -356,7 +357,9 @@ export default function VideosAdmin() {
           >
             {selectMode ? 'Done' : <><CheckSquare className="h-4 w-4" /> Select</>}
           </button>
-          <Button onClick={() => setEditing({ ...EMPTY })} aria-label="Add video"><Plus className="h-4 w-4" /> <span className="hidden sm:inline">Add video</span><span className="sm:hidden">Add</span></Button>
+          <span className="hidden md:contents">
+            <Button onClick={() => setEditing({ ...EMPTY })}><Plus className="h-4 w-4" /> Add video</Button>
+          </span>
         </div>
       </div>
 
@@ -459,6 +462,19 @@ export default function VideosAdmin() {
         </div>
       )}
 
+      {/* Phones: a Material floating action button for the main job, out of the way of the select bar */}
+      {!selectMode && selectionCount === 0 && createPortal(
+        <button
+          type="button"
+          onClick={() => setEditing({ ...EMPTY })}
+          data-testid="fab-add"
+          className="ripple fixed bottom-[calc(20px+env(safe-area-inset-bottom))] right-4 z-30 flex h-14 items-center gap-2 rounded-2xl bg-brand-500 px-5 text-sm font-bold text-zinc-950 shadow-xl shadow-black/50 transition-transform duration-200 ease-emphasized animate-dialog active:scale-95 md:hidden"
+        >
+          <Plus className="h-6 w-6" strokeWidth={2.5} /> Add video
+        </button>,
+        document.body,
+      )}
+
       {data && allOnPage && !allMatching && data.total > ids.length && (
         <Alert kind="info">
           All {ids.length} on this page are selected.{' '}
@@ -502,11 +518,11 @@ export default function VideosAdmin() {
           {data.items.map((r) => {
             const on = selected.has(r.id) || allMatching;
             return (
-              <li key={r.id} className={cx('overflow-hidden rounded-xl border', on ? 'border-brand-500/60 bg-brand-500/5' : 'border-zinc-900 bg-zinc-950')} data-testid="admin-card">
+              <li key={r.id} className={cx('overflow-hidden rounded-2xl border transition-colors duration-200 ease-standard', on ? 'border-brand-500/60 bg-brand-500/10' : 'border-zinc-900 bg-zinc-950')} data-testid="admin-card">
                 <button
                   type="button"
                   onClick={() => (selectMode ? toggle(r.id) : setEditing(r))}
-                  className="flex w-full items-center gap-3 p-3 text-left active:bg-zinc-900"
+                  className="ripple flex w-full items-center gap-3 p-3 text-left"
                   aria-label={selectMode ? `Select ${r.title}` : `Edit ${r.title}`}
                 >
                   {selectMode && (
