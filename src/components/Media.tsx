@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Eye, Lock, Play } from 'lucide-react';
-import type { AdUnit, MediaItem } from '../../shared/types';
+import { Eye, Play } from 'lucide-react';
+import type { AdUnit, PublicVideo } from '../../shared/types';
 import { api } from '../lib/api';
-import { formatViews, timeAgo } from '../lib/utils';
+import { formatViews } from '../lib/utils';
 import { hasAdConsent } from './ConsentBar';
 import { cx } from './ui';
 
 export function Thumb({ src, alt, className }: { src?: string; alt: string; className?: string }) {
   const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
   if (!src || failed) {
     return (
       <div className={cx('flex items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-900', className)}>
@@ -19,40 +19,42 @@ export function Thumb({ src, alt, className }: { src?: string; alt: string; clas
   return <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} className={cx('object-cover', className)} />;
 }
 
-export function MediaCard({ item }: { item: MediaItem }) {
+/**
+ * A video. It's a normal link to /go/:id, which counts the click and sends the visitor to the
+ * original website — so it opens in a new tab and works even before the page's JavaScript loads.
+ */
+export function VideoCard({ item, className }: { item: PublicVideo; className?: string }) {
   return (
-    <Link to={`/watch/${item.id}`} className="group block" data-testid="media-card">
+    <a
+      href={`/go/${item.id}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={cx('group block', className)}
+      data-testid="video-card"
+      aria-label={`${item.title} — opens on the original site`}
+    >
       <div className="relative aspect-video overflow-hidden rounded-xl bg-zinc-900">
-        <Thumb src={item.thumbnailUrl} alt={item.title} className="h-full w-full transition-transform duration-300 group-hover:scale-105" />
-        {item.duration && (
-          <span className="absolute bottom-2 right-2 rounded bg-black/80 px-1.5 py-0.5 text-xs font-medium">{item.duration}</span>
-        )}
-        {item.isPremium && (
-          <span className="absolute left-2 top-2 flex items-center gap-1 rounded bg-brand-500 px-1.5 py-0.5 text-xs font-bold text-zinc-950">
-            <Lock className="h-3 w-3" /> Premium
+        <Thumb src={item.thumbnailUrl} alt="" className="h-full w-full transition-transform duration-300 group-hover:scale-105" />
+        <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/30 group-hover:opacity-100">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-500 text-zinc-950">
+            <Play className="h-6 w-6 fill-current" />
           </span>
-        )}
-        {item.published === false && (
-          <span className="absolute right-2 top-2 rounded bg-zinc-700 px-1.5 py-0.5 text-xs">Draft</span>
-        )}
+        </span>
+        {item.duration && <span className="absolute bottom-2 right-2 rounded bg-black/80 px-1.5 py-0.5 text-xs font-medium">{item.duration}</span>}
       </div>
-      <div className="mt-2.5">
-        <h3 className="line-clamp-2 text-sm font-semibold leading-snug group-hover:text-brand-300">{item.title}</h3>
-        <p className="mt-1 flex items-center gap-1.5 text-xs text-zinc-500">
-          {item.creatorName && <span className="min-w-0 truncate">{item.creatorName}</span>}
-          {item.creatorName && <span>·</span>}
-          <Eye className="h-3 w-3" /> {formatViews(item.views)}
-          {item.createdAt && <span>· {timeAgo(item.createdAt)}</span>}
-        </p>
-      </div>
-    </Link>
+      <h3 className="mt-2.5 line-clamp-2 text-sm font-semibold leading-snug group-hover:text-brand-300">{item.title}</h3>
+      <p className="mt-1 flex items-center gap-1.5 text-xs text-zinc-500">
+        {item.creatorName && <span className="min-w-0 truncate">{item.creatorName} ·</span>}
+        <Eye className="h-3 w-3 shrink-0" /> {formatViews(item.views)}
+      </p>
+    </a>
   );
 }
 
-export function MediaGrid({ items }: { items: MediaItem[] }) {
+export function VideoGrid({ items }: { items: PublicVideo[] }) {
   return (
-    <div className="grid grid-cols-1 gap-x-4 gap-y-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {items.map((m) => <MediaCard key={m.id} item={m} />)}
+    <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 sm:gap-x-4 lg:grid-cols-4 xl:grid-cols-5">
+      {items.map((m) => <VideoCard key={m.id} item={m} />)}
     </div>
   );
 }

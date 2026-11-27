@@ -10,7 +10,10 @@
     "dev": "tsx watch server/index.ts",
     "build": "vite build",
     "start": "tsx server/index.ts --prod",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "seal": "tsx scripts/seal-secrets.ts",
+    "check:db": "tsx scripts/check-db.ts",
+    "test:api": "tsx scripts/check-api.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

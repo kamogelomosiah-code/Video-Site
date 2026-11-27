@@ -10,39 +10,33 @@ export interface User {
   email?: string;
   role: Role;
   verified: boolean;
+  disabled?: boolean;
   avatarUrl?: string;
   bio?: string;
   createdAt?: string;
 }
 
-export interface MediaItem {
+/** A video as stored. Visitors are sent to `externalUrl` (the original site) when they click it. */
+export interface Video {
   id: string;
   title: string;
-  description?: string;
+  externalUrl: string;
   thumbnailUrl?: string;
-  /** Direct playable file (mp4/webm or /api/files/...) */
-  sourceUrl?: string;
-  /** Link to the video on another site, or an embeddable player URL */
-  externalUrl?: string;
-  redirectUrl?: string;
-  playbackMode?: 'external' | 'local';
-  mediaType?: 'video' | 'image';
+  description?: string;
   category?: string;
   tags?: string[];
   duration?: string;
-  views?: number;
-  likes?: string[];
-  dislikes?: string[];
-  isPremium?: boolean;
-  price?: number;
-  published?: boolean;
-  userId?: string;
   creatorName?: string;
-  creatorAvatar?: string;
-  uploadedAt?: string;
+  views?: number;
+  published?: boolean;
+  /** Pinned to the top of the Trending row. */
+  featured?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
+
+/** What the public site is allowed to see (no outgoing link — visitors go through /go/:id). */
+export type PublicVideo = Pick<Video, 'id' | 'title' | 'thumbnailUrl' | 'category' | 'tags' | 'duration' | 'views' | 'creatorName' | 'featured' | 'createdAt'>;
 
 export interface Category {
   id: string;
@@ -51,55 +45,6 @@ export interface Category {
   description?: string;
   order: number;
   active: boolean;
-  tags?: string[];
-}
-
-export interface TalentProduct {
-  id: string;
-  name: string;
-  description?: string;
-  price?: number;
-  imageUrl?: string;
-  contactUrl?: string;
-}
-
-export interface TalentProfile {
-  id: string;
-  userId?: string;
-  name: string;
-  title?: string;
-  bio?: string;
-  location?: string;
-  rating?: number;
-  reviewCount?: number;
-  hourlyRate?: number;
-  imageUrl?: string;
-  verified?: boolean;
-  online?: boolean;
-  tags?: string[];
-  availability?: 'Available Now' | 'This Week' | 'Booked';
-  contactUrl?: string;
-  products?: TalentProduct[];
-}
-
-export interface ScheduledEvent {
-  id: string;
-  title: string;
-  description?: string;
-  talentId?: string;
-  talentName?: string;
-  category?: string;
-  eventType?: 'livestream' | 'appearance' | 'premiere' | 'chat_session' | 'vip_party';
-  date: string; // YYYY-MM-DD
-  startTime?: string; // HH:mm
-  endTime?: string;
-  locationOrUrl?: string;
-  coverImageUrl?: string;
-  price?: number;
-  isVipOnly?: boolean;
-  isLiveNow?: boolean;
-  status?: 'scheduled' | 'live' | 'completed' | 'cancelled';
-  attendeesCount?: number;
   tags?: string[];
 }
 
@@ -118,16 +63,6 @@ export interface AdUnit {
   clicks?: number;
 }
 
-export interface Comment {
-  id: string;
-  mediaId: string;
-  userId: string;
-  userName: string;
-  userAvatar?: string;
-  text: string;
-  createdAt: string;
-}
-
 export interface ActivityLog {
   id: string;
   actionType: string;
@@ -139,10 +74,8 @@ export interface ActivityLog {
 /** Everything an admin can change in Site Settings. All of it is used by the public site. */
 export interface SiteSettings {
   siteName: string;
-  tagline: string;
   heroHeadline: string;
   heroSubtext: string;
-  featuredMediaId: string | null;
   announcementBanner: string;
   announcementLink: string;
   maintenanceMode: boolean;
@@ -163,10 +96,8 @@ export interface SiteSettings {
 
 export const DEFAULT_SETTINGS: SiteSettings = {
   siteName: 'Elysian',
-  tagline: 'Premium media & verified talent',
-  heroHeadline: '',
-  heroSubtext: '',
-  featuredMediaId: null,
+  heroHeadline: 'Find something to watch',
+  heroSubtext: 'Search the collection, then tap a video to watch it on the original site.',
   announcementBanner: '',
   announcementLink: '',
   maintenanceMode: false,
@@ -176,7 +107,7 @@ export const DEFAULT_SETTINGS: SiteSettings = {
     'This website contains age-restricted material intended for adults only. By entering you confirm you are at least 18 years old (or the age of majority where you live) and that viewing such content is legal for you.',
   allowRegistration: true,
   metaTitle: '',
-  metaDescription: 'Discover verified creators and premium exclusive media.',
+  metaDescription: 'Search and discover videos.',
   footerText: '',
   contactEmail: '',
   privacyPolicy: '',
@@ -187,19 +118,23 @@ export const DEFAULT_SETTINGS: SiteSettings = {
 };
 
 export const AD_SLOTS = [
-  { id: 'home_top', label: 'Home – top banner' },
-  { id: 'home_mid', label: 'Home – between rows' },
-  { id: 'media_sidebar', label: 'Video page – sidebar' },
-  { id: 'talent_mid', label: 'Creators page – banner' },
+  { id: 'home_top', label: 'Home – under the search box' },
+  { id: 'home_mid', label: 'Home – inside the video list' },
 ] as const;
 
 export interface AdminStats {
-  media: number;
+  videos: number;
+  published: number;
+  drafts: number;
   users: number;
-  talent: number;
-  events: number;
-  comments: number;
+  categories: number;
   totalViews: number;
-  topMedia: Array<{ id: string; title: string; views: number }>;
+  topVideos: Array<{ id: string; title: string; views: number }>;
   recentActivity: ActivityLog[];
+  system: {
+    storage: 'mongodb' | 'json';
+    database: string;
+    emailProvider: 'smtp' | 'resend' | 'sendgrid' | 'console';
+    adminPin: boolean;
+  };
 }

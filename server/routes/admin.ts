@@ -1,22 +1,27 @@
 import express, { Router } from 'express';
 import { db, newId, storageMode } from '../db';
+import { config } from '../config';
 import { requireAdmin, hashPassword, publicUser, logActivity, isEmail } from '../auth';
 import { checkPassword } from '../../shared/password';
-import { DEFAULT_SETTINGS } from '../../shared/types';
+import { DEFAULT_SETTINGS, type AdminStats } from '../../shared/types';
+import { slugify } from '../../shared/video';
 import { getSettings } from './public';
+import { adminVideos } from './adminVideos';
+import { clearTrendingCache } from '../videos';
+import { mailProvider } from '../mail/mailer.js';
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
-// Larger limit for bulk JSON imports, parsed only once we know the caller is an admin.
+// Larger limit for bulk imports, parsed only once we know the caller is an admin.
 adminRouter.use(express.json({ limit: '10mb' }));
+adminRouter.use('/videos', adminVideos);
 
-type FieldType = 'string' | 'text' | 'number' | 'boolean' | 'tags' | 'json' | 'url' | 'date' | 'time';
+type FieldType = 'string' | 'text' | 'number' | 'boolean' | 'tags' | 'url';
 type Schema = Record<string, FieldType>;
-
-const SAFE_URL = /^(https?:\/\/|\/api\/files\/|\/)/i;
+const SAFE_URL = /^(https?:\/\/|\/api\/files\/)/i;
 
 /** Coerce request fields to their declared types; unknown fields are dropped. */
-function clean(input: any, schema: Schema, partial: boolean): Record<string, any> {
+function clean(input: any, schema: Schema): Record<string, any> {
   const out: Record<string, any> = {};
   for (const [key, type] of Object.entries(schema)) {
     if (!(key in (input || {}))) continue;
@@ -34,9 +39,6 @@ function clean(input: any, schema: Schema, partial: boolean): Record<string, any
           .filter(Boolean)
           .slice(0, 50);
         break;
-      case 'json':
-        out[key] = Array.isArray(v) ? v : [];
-        break;
       case 'url': {
         const s = String(v ?? '').trim();
         if (s && !SAFE_URL.test(s)) throw new Error(`"${key}" must be a web address starting with https://`);
@@ -50,8 +52,6 @@ function clean(input: any, schema: Schema, partial: boolean): Record<string, any
         out[key] = String(v ?? '').trim().slice(0, 500);
     }
   }
-  if (!partial && 'title' in schema && !out.title) throw new Error('Title is required');
-  if (!partial && 'name' in schema && !out.name) throw new Error('Name is required');
   return out;
 }
 
@@ -60,33 +60,11 @@ interface Resource {
   collection: string;
   label: string;
   schema: Schema;
-  defaults?: () => Record<string, any>;
-  beforeSave?: (doc: any, existing: any | null, user: any) => Promise<void> | void;
+  defaults: () => Record<string, any>;
+  beforeSave?: (doc: any, existing: any | null) => Promise<void> | void;
 }
 
 const RESOURCES: Resource[] = [
-  {
-    path: 'media',
-    collection: 'media',
-    label: 'video',
-    schema: {
-      title: 'string', description: 'text', thumbnailUrl: 'url', sourceUrl: 'url', externalUrl: 'url',
-      mediaType: 'string', category: 'string', tags: 'tags', duration: 'string', isPremium: 'boolean',
-      price: 'number', published: 'boolean', creatorName: 'string', creatorAvatar: 'url', userId: 'string', views: 'number',
-    },
-    defaults: () => ({ views: 0, likes: [], dislikes: [], published: true, mediaType: 'video', tags: [] }),
-    beforeSave: (doc, existing, user) => {
-      if (!doc.sourceUrl && !doc.externalUrl) throw new Error('Add a video file URL or an external/embed link');
-      // Keep the legacy playbackMode field consistent for older clients.
-      doc.playbackMode = doc.sourceUrl ? 'local' : 'external';
-      if (!existing) {
-        doc.userId ||= user.id;
-        doc.uploadedBy = user.id;
-        doc.creatorName ||= user.name;
-        doc.uploadedAt = new Date().toISOString();
-      }
-    },
-  },
   {
     path: 'categories',
     collection: 'categories',
@@ -94,61 +72,11 @@ const RESOURCES: Resource[] = [
     schema: { name: 'string', slug: 'string', description: 'text', order: 'number', active: 'boolean', tags: 'tags' },
     defaults: () => ({ active: true, order: 0, tags: [] }),
     beforeSave: async (doc, existing) => {
-      doc.slug = String(doc.slug || doc.name || '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '');
+      if (!doc.name) throw new Error('Name is required');
+      doc.slug = slugify(String(doc.slug || doc.name));
       if (!doc.slug) throw new Error('Name is required');
       const clash: any = await db.findOne('categories', { slug: doc.slug });
       if (clash && clash.id !== existing?.id) throw new Error(`Another category already uses "${doc.slug}"`);
-    },
-  },
-  {
-    path: 'talent',
-    collection: 'talentProfiles',
-    label: 'creator profile',
-    schema: {
-      name: 'string', title: 'string', bio: 'text', location: 'string', imageUrl: 'url', userId: 'string',
-      rating: 'number', reviewCount: 'number', hourlyRate: 'number', verified: 'boolean', online: 'boolean',
-      hidden: 'boolean', tags: 'tags', availability: 'string', contactUrl: 'url', products: 'json',
-    },
-    defaults: () => ({ verified: false, online: false, tags: [], products: [], rating: 5, reviewCount: 0 }),
-    beforeSave: (doc) => {
-      doc.products = (doc.products || [])
-        .filter((p: any) => p && String(p.name || '').trim())
-        .slice(0, 50)
-        .map((p: any) => {
-          const url = String(p.contactUrl || '').trim();
-          const img = String(p.imageUrl || '').trim();
-          if ((url && !SAFE_URL.test(url)) || (img && !SAFE_URL.test(img))) {
-            throw new Error('Product links must start with https://');
-          }
-          return {
-            id: String(p.id || newId()),
-            name: String(p.name).trim().slice(0, 120),
-            description: String(p.description || '').slice(0, 1000),
-            price: Number(p.price) || 0,
-            imageUrl: img,
-            contactUrl: url,
-          };
-        });
-    },
-  },
-  {
-    path: 'events',
-    collection: 'scheduledEvents',
-    label: 'event',
-    schema: {
-      title: 'string', description: 'text', talentId: 'string', talentName: 'string', category: 'string',
-      eventType: 'string', date: 'date', startTime: 'time', endTime: 'time', locationOrUrl: 'string',
-      coverImageUrl: 'url', price: 'number', isVipOnly: 'boolean', isLiveNow: 'boolean', status: 'string', tags: 'tags',
-    },
-    defaults: () => ({ status: 'scheduled', attendeesCount: 0, eventType: 'livestream', tags: [] }),
-    beforeSave: (doc) => {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(doc.date || '')) throw new Error('Pick a date for the event');
-      if (doc.isLiveNow) doc.status = 'live';
-      else if (doc.status === 'live') doc.status = 'scheduled';
-      doc.startDate = `${doc.date}T${doc.startTime || '00:00'}:00`;
     },
   },
   {
@@ -161,6 +89,7 @@ const RESOURCES: Resource[] = [
     },
     defaults: () => ({ enabled: true, type: 'image', weight: 10, impressions: 0, clicks: 0 }),
     beforeSave: (doc) => {
+      if (!doc.name) throw new Error('Name is required');
       if (!doc.slot) throw new Error('Choose where the ad appears');
       if (doc.type === 'image' && !doc.imageUrl) throw new Error('Image ads need an image');
     },
@@ -174,12 +103,11 @@ for (const r of RESOURCES) {
 
   adminRouter.post(`/${r.path}`, async (req, res) => {
     try {
-      const user = (req as any).user;
       const now = new Date().toISOString();
-      const doc: any = { ...(r.defaults?.() || {}), ...clean(req.body, r.schema, false), id: newId(), createdAt: now, updatedAt: now };
-      await r.beforeSave?.(doc, null, user);
+      const doc: any = { ...r.defaults(), ...clean(req.body, r.schema), id: newId(), createdAt: now, updatedAt: now };
+      await r.beforeSave?.(doc, null);
       await db.put(r.collection, doc);
-      await logActivity('create', `Created ${r.label}: ${doc.title || doc.name}`, user.id);
+      await logActivity('create', `Created ${r.label}: ${doc.name}`, (req as any).user.id);
       res.status(201).json(doc);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -188,13 +116,12 @@ for (const r of RESOURCES) {
 
   adminRouter.put(`/${r.path}/:id`, async (req, res) => {
     try {
-      const user = (req as any).user;
       const existing: any = await db.get(r.collection, String(req.params.id));
       if (!existing) return res.status(404).json({ error: `That ${r.label} no longer exists` });
-      const doc: any = { ...existing, ...clean(req.body, r.schema, true), id: existing.id, updatedAt: new Date().toISOString() };
-      await r.beforeSave?.(doc, existing, user);
+      const doc: any = { ...existing, ...clean(req.body, r.schema), id: existing.id, updatedAt: new Date().toISOString() };
+      await r.beforeSave?.(doc, existing);
       await db.put(r.collection, doc);
-      await logActivity('update', `Updated ${r.label}: ${doc.title || doc.name}`, user.id);
+      await logActivity('update', `Updated ${r.label}: ${doc.name}`, (req as any).user.id);
       res.json(doc);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -202,134 +129,23 @@ for (const r of RESOURCES) {
   });
 
   adminRouter.delete(`/${r.path}/:id`, async (req, res) => {
-    const user = (req as any).user;
     const existing: any = await db.get(r.collection, String(req.params.id));
     if (!existing) return res.status(404).json({ error: 'Not found' });
     await db.remove(r.collection, existing.id);
-    if (r.collection === 'media') {
-      await db.removeWhere('comments', { mediaId: existing.id });
-      const s = await db.getSettings();
-      if (s.featuredMediaId === existing.id) await db.setSettings({ featuredMediaId: null });
-    }
-    await logActivity('delete', `Deleted ${r.label}: ${existing.title || existing.name}`, user.id);
+    await logActivity('delete', `Deleted ${r.label}: ${existing.name}`, (req as any).user.id);
     res.json({ ok: true });
   });
 }
-
-// --- Videos: bulk JSON import / export and bulk actions ---
-
-const MEDIA = RESOURCES.find((r) => r.collection === 'media')!;
-
-// Common alternative key names people use in JSON exports.
-const MEDIA_ALIASES: Record<string, string> = {
-  url: 'externalUrl', link: 'externalUrl', videoUrl: 'externalUrl', embedUrl: 'externalUrl', redirectUrl: 'externalUrl',
-  file: 'sourceUrl', fileUrl: 'sourceUrl', src: 'sourceUrl',
-  thumbnail: 'thumbnailUrl', thumb: 'thumbnailUrl', image: 'thumbnailUrl', poster: 'thumbnailUrl',
-  name: 'title', creator: 'creatorName', author: 'creatorName', premium: 'isPremium',
-};
-
-function normalizeMediaInput(raw: any): any {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Each item must be an object');
-  const out: any = {};
-  for (const [k, v] of Object.entries(raw)) {
-    const key = MEDIA_ALIASES[k] && !(MEDIA_ALIASES[k] in raw) ? MEDIA_ALIASES[k] : k;
-    out[key] = v;
-  }
-  // A plain web link in sourceUrl that isn't a video file is really an external link.
-  if (out.sourceUrl && !out.externalUrl && !/\.(mp4|webm|m4v|mov|ogg)(\?|$)/i.test(out.sourceUrl) && !String(out.sourceUrl).startsWith('/api/files/')) {
-    out.externalUrl = out.sourceUrl;
-    delete out.sourceUrl;
-  }
-  return out;
-}
-
-adminRouter.get('/media/export', async (_req, res) => {
-  const items = await db.list('media');
-  res.setHeader('Content-Disposition', `attachment; filename="videos-${new Date().toISOString().slice(0, 10)}.json"`);
-  res.json(items);
-});
-
-/**
- * Body: { items: [...], mode: "create" | "upsert", dryRun?: boolean }
- * - create: every item becomes a new video
- * - upsert: items whose "id" matches an existing video update it; others are created
- * dryRun validates everything and reports what would happen without saving.
- */
-adminRouter.post('/media/import', async (req, res) => {
-  const user = (req as any).user;
-  const { items, mode = 'create', dryRun = false } = req.body || {};
-  if (!Array.isArray(items)) return res.status(400).json({ error: 'Expected a JSON array of videos (or { "items": [...] })' });
-  if (items.length === 0) return res.status(400).json({ error: 'The list is empty' });
-  if (items.length > 2000) return res.status(400).json({ error: 'Import at most 2000 videos at a time' });
-
-  const existing = new Map((await db.list('media')).map((m: any) => [m.id, m]));
-  const result = { created: 0, updated: 0, failed: [] as { index: number; title: string; error: string }[] };
-  const now = new Date().toISOString();
-
-  for (const [index, raw] of items.entries()) {
-    try {
-      const input = normalizeMediaInput(raw);
-      const prior = mode === 'upsert' && input.id ? existing.get(String(input.id)) : null;
-      let doc: any;
-      if (prior) {
-        doc = { ...prior, ...clean(input, MEDIA.schema, true), id: prior.id, updatedAt: now };
-      } else {
-        doc = {
-          ...MEDIA.defaults!(),
-          ...clean(input, MEDIA.schema, false),
-          id: mode === 'upsert' && input.id && /^[\w-]{1,64}$/.test(String(input.id)) ? String(input.id) : newId(),
-          createdAt: input.createdAt && !isNaN(Date.parse(input.createdAt)) ? new Date(input.createdAt).toISOString() : now,
-          updatedAt: now,
-        };
-      }
-      await MEDIA.beforeSave!(doc, prior, user);
-      if (!dryRun) await db.put('media', doc);
-      existing.set(doc.id, doc);
-      prior ? result.updated++ : result.created++;
-    } catch (e: any) {
-      result.failed.push({ index, title: String(raw?.title ?? raw?.name ?? `Item ${index + 1}`).slice(0, 80), error: e.message });
-    }
-  }
-  if (!dryRun && (result.created || result.updated)) {
-    await logActivity('import', `Imported videos from JSON: ${result.created} added, ${result.updated} updated, ${result.failed.length} skipped`, user.id);
-  }
-  res.json({ ...result, dryRun: !!dryRun });
-});
-
-/** Body: { ids: string[], action: "publish" | "unpublish" | "delete" | "category", category?: string } */
-adminRouter.post('/media/bulk', async (req, res) => {
-  const user = (req as any).user;
-  const { ids, action, category } = req.body || {};
-  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'Select at least one video' });
-  if (!['publish', 'unpublish', 'delete', 'category'].includes(action)) return res.status(400).json({ error: 'Unknown action' });
-  const settings = await db.getSettings();
-  let done = 0;
-  for (const id of ids.map(String)) {
-    const m: any = await db.get('media', id);
-    if (!m) continue;
-    if (action === 'delete') {
-      await db.remove('media', id);
-      await db.removeWhere('comments', { mediaId: id });
-      if (settings.featuredMediaId === id) await db.setSettings({ featuredMediaId: null });
-    } else {
-      if (action === 'publish') m.published = true;
-      if (action === 'unpublish') m.published = false;
-      if (action === 'category') m.category = String(category || '');
-      m.updatedAt = new Date().toISOString();
-      await db.put('media', m);
-    }
-    done++;
-  }
-  await logActivity(action === 'delete' ? 'delete' : 'update', `Bulk ${action} on ${done} video(s)${action === 'category' ? ` → ${category || 'none'}` : ''}`, user.id);
-  res.json({ ok: true, count: done });
-});
 
 // --- Users ---
 
 const ROLES = ['CONSUMER', 'CREATOR', 'PROFESSIONAL', 'ADMIN'];
 
-adminRouter.get('/users', async (_req, res) => {
-  res.json((await db.list('users')).map(publicUser));
+adminRouter.get('/users', async (req, res) => {
+  const q = String(req.query.q || '').trim().toLowerCase();
+  let users: any[] = await db.list('users');
+  if (q) users = users.filter((u) => `${u.name} ${u.email} ${u.username}`.toLowerCase().includes(q));
+  res.json(users.map(publicUser));
 });
 
 adminRouter.post('/users', async (req, res) => {
@@ -347,8 +163,6 @@ adminRouter.post('/users', async (req, res) => {
     username: cleanEmail,
     role: ROLES.includes(role) ? role : 'CONSUMER',
     verified: !!verified,
-    avatarUrl: '',
-    bio: '',
     passwordHash: await hashPassword(String(password)),
     createdAt: new Date().toISOString(),
   };
@@ -363,8 +177,6 @@ adminRouter.put('/users/:id', async (req, res) => {
   if (!u) return res.status(404).json({ error: 'User not found' });
   const b = req.body || {};
   if (b.name !== undefined) u.name = String(b.name).trim() || u.name;
-  if (b.bio !== undefined) u.bio = String(b.bio).slice(0, 1000);
-  if (b.avatarUrl !== undefined) u.avatarUrl = String(b.avatarUrl);
   if (b.email !== undefined && String(b.email).trim().toLowerCase() !== u.email) {
     const e = String(b.email).trim().toLowerCase();
     if (!isEmail(e)) return res.status(400).json({ error: 'Enter a valid email address' });
@@ -395,29 +207,12 @@ adminRouter.put('/users/:id', async (req, res) => {
 
 adminRouter.delete('/users/:id', async (req, res) => {
   const actor = (req as any).user;
-  if (String(req.params.id) === actor.id) return res.status(400).json({ error: "You can't delete your own account" });
+  if (req.params.id === actor.id) return res.status(400).json({ error: "You can't delete your own account" });
   const u: any = await db.get('users', String(req.params.id));
   if (!u) return res.status(404).json({ error: 'User not found' });
   await db.remove('users', u.id);
   await db.removeWhere('sessions', { userId: u.id });
   await logActivity('delete', `Deleted user ${u.email}`, actor.id);
-  res.json({ ok: true });
-});
-
-// --- Comments moderation ---
-
-adminRouter.get('/comments', async (_req, res) => {
-  const [comments, media] = await Promise.all([db.list('comments'), db.list('media')]);
-  const titles = new Map(media.map((m: any) => [m.id, m.title]));
-  res.json(
-    comments
-      .map((c: any) => ({ ...c, mediaTitle: titles.get(c.mediaId) || '(deleted video)' }))
-      .sort((a: any, b: any) => String(b.createdAt).localeCompare(String(a.createdAt))),
-  );
-});
-
-adminRouter.delete('/comments/:id', async (req, res) => {
-  await db.remove('comments', String(req.params.id));
   res.json({ ok: true });
 });
 
@@ -432,14 +227,9 @@ adminRouter.put('/settings', async (req, res) => {
   for (const [key, def] of Object.entries(DEFAULT_SETTINGS)) {
     if (!(key in (req.body || {}))) continue;
     const v = req.body[key];
-    if (typeof def === 'boolean') patch[key] = !!v;
-    else if (key === 'featuredMediaId') patch[key] = v ? String(v) : null;
-    else patch[key] = String(v ?? '').slice(0, 50000);
+    patch[key] = typeof def === 'boolean' ? !!v : String(v ?? '').slice(0, 50000);
   }
-  if (patch.featuredMediaId && !(await db.get('media', patch.featuredMediaId))) {
-    return res.status(400).json({ error: 'The featured video no longer exists' });
-  }
-  if (patch.announcementLink && !SAFE_URL.test(patch.announcementLink)) {
+  if (patch.announcementLink && !/^(https?:\/\/|\/)/i.test(patch.announcementLink)) {
     return res.status(400).json({ error: 'Announcement link must start with https:// or /' });
   }
   await db.setSettings(patch);
@@ -450,33 +240,42 @@ adminRouter.put('/settings', async (req, res) => {
 // --- Dashboard ---
 
 adminRouter.get('/stats', async (_req, res) => {
-  const [media, users, talent, events, comments, logs] = await Promise.all([
-    db.list('media'), db.list('users'), db.list('talentProfiles'), db.list('scheduledEvents'),
-    db.list('comments'), db.list('activityLogs'),
+  const [videos, published, users, categories, totalViews, topVideos, recentActivity] = await Promise.all([
+    db.count('media'),
+    db.count('media', { published: { $ne: false } }),
+    db.count('users'),
+    db.count('categories'),
+    db.sum('media', 'views'),
+    db.find('media', { sort: { views: -1 }, limit: 5 }),
+    db.find('activityLogs', { sort: { timestamp: -1 }, limit: 10 }),
   ]);
-  res.json({
-    media: media.length,
-    users: users.length,
-    talent: talent.length,
-    events: events.length,
-    comments: comments.length,
-    totalViews: media.reduce((s: number, m: any) => s + (Number(m.views) || 0), 0),
-    topMedia: [...media]
-      .sort((a: any, b: any) => (b.views || 0) - (a.views || 0))
-      .slice(0, 5)
-      .map((m: any) => ({ id: m.id, title: m.title, views: m.views || 0 })),
-    recentActivity: logs.sort((a: any, b: any) => String(b.timestamp).localeCompare(String(a.timestamp))).slice(0, 10),
-    storage: storageMode(),
-  });
+  const stats: AdminStats = {
+    videos,
+    published,
+    drafts: videos - published,
+    users,
+    categories,
+    totalViews,
+    topVideos: topVideos.map((m: any) => ({ id: m.id, title: m.title, views: m.views || 0 })),
+    recentActivity,
+    system: {
+      storage: storageMode(),
+      database: storageMode() === 'mongodb' ? config.mongoDb : 'local file (data.json)',
+      emailProvider: mailProvider(),
+      adminPin: !!config.admin.pin,
+    },
+  };
+  res.json(stats);
 });
 
 adminRouter.get('/activity', async (_req, res) => {
-  const [logs, users] = await Promise.all([db.list('activityLogs'), db.list('users')]);
+  const [logs, users] = await Promise.all([db.find('activityLogs', { sort: { timestamp: -1 }, limit: 300 }), db.list('users')]);
   const names = new Map(users.map((u: any) => [u.id, u.name || u.email]));
-  res.json(
-    logs
-      .sort((a: any, b: any) => String(b.timestamp).localeCompare(String(a.timestamp)))
-      .slice(0, 300)
-      .map((l: any) => ({ ...l, userName: names.get(l.userId) || '' })),
-  );
+  res.json(logs.map((l: any) => ({ ...l, userName: names.get(l.userId) || '' })));
+});
+
+// Clears the cached "Trending" list (also done automatically whenever videos change).
+adminRouter.post('/refresh-trending', (_req, res) => {
+  clearTrendingCache();
+  res.json({ ok: true });
 });

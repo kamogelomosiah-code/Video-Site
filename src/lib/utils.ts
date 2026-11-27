@@ -6,6 +6,8 @@ export function formatViews(n = 0): string {
   return String(n);
 }
 
+export const formatNumber = (n = 0) => n.toLocaleString();
+
 export function timeAgo(iso?: string): string {
   const t = Date.parse(iso || '');
   if (!t) return '';
@@ -17,17 +19,6 @@ export function timeAgo(iso?: string): string {
   }
   return 'just now';
 }
-
-export function formatDate(date: string, time?: string): string {
-  const d = new Date(`${date}T${time || '00:00'}`);
-  if (isNaN(d.getTime())) return date;
-  return d.toLocaleString(undefined, {
-    weekday: 'short', month: 'short', day: 'numeric',
-    ...(time ? { hour: '2-digit', minute: '2-digit' } : {}),
-  });
-}
-
-export const formatPrice = (n?: number) => (n ? `R${Number(n).toLocaleString()}` : 'Free');
 
 /** Small data-fetching hook with loading / error / reload. */
 export function useFetch<T>(load: () => Promise<T>, deps: unknown[] = []) {
@@ -56,21 +47,12 @@ export function useFetch<T>(load: () => Promise<T>, deps: unknown[] = []) {
   return { data, error, loading, reload, setData };
 }
 
-/** Build a player for a video: direct file, embeddable page, or link-out. */
-export function playbackFor(m: { sourceUrl?: string; externalUrl?: string; redirectUrl?: string }):
-  | { kind: 'file'; url: string }
-  | { kind: 'embed'; url: string }
-  | { kind: 'link'; url: string }
-  | { kind: 'none' } {
-  const src = m.sourceUrl || '';
-  if (src && (src.startsWith('/api/files/') || /\.(mp4|webm|m4v|mov|ogg)(\?|$)/i.test(src))) return { kind: 'file', url: src };
-  const ext = m.externalUrl || m.redirectUrl || (src.startsWith('http') ? src : '');
-  if (!ext) return { kind: 'none' };
-  const yt = ext.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{6,})/);
-  if (yt) return { kind: 'embed', url: `https://www.youtube-nocookie.com/embed/${yt[1]}` };
-  const vimeo = ext.match(/vimeo\.com\/(\d+)/);
-  if (vimeo) return { kind: 'embed', url: `https://player.vimeo.com/video/${vimeo[1]}` };
-  if (/\/embed(ed)?[/?]|player\./i.test(ext)) return { kind: 'embed', url: ext };
-  if (/\.(mp4|webm|m4v|mov)(\?|$)/i.test(ext)) return { kind: 'file', url: ext };
-  return { kind: 'link', url: ext };
+/** Delays a fast-changing value (like typing) so we don't search on every keystroke. */
+export function useDebounced<T>(value: T, ms = 350): T {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return v;
 }

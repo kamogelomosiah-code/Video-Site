@@ -7,7 +7,7 @@ import { randomInt, timingSafeEqual } from 'crypto';
 import { getSettings } from './public';
 import {
   hashPassword, verifyPassword, createSession, deleteSession, bearer, publicUser, requireUser,
-  hit, lockedFor, clearLimit, tooMany, clientIp, isEmail, randomToken, sha256, logActivity,
+  hit, lockedFor, clearLimit, tooMany, clientIp, isEmail, sha256, logActivity,
 } from '../auth';
 
 export const authRouter = Router();

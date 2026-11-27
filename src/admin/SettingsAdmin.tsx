@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import type { MediaItem, SiteSettings } from '../../shared/types';
+import type { SiteSettings } from '../../shared/types';
 import { api } from '../lib/api';
 import { useSettings, usePageTitle } from '../lib/settings';
 import { useFetch } from '../lib/utils';
-import { Alert, Button, Field, Input, Select, Spinner, Textarea, Toggle, useToast } from '../components/ui';
+import { Alert, Button, Field, Input, Spinner, Textarea, Toggle, useToast } from '../components/ui';
 
 function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
@@ -20,7 +20,6 @@ export default function SettingsAdmin() {
   const { refresh } = useSettings();
   const { toast } = useToast();
   const { data, loading } = useFetch(() => api.get<SiteSettings>('/admin/settings'), []);
-  const { data: media } = useFetch(() => api.get<MediaItem[]>('/admin/media'), []);
   const [s, setS] = useState<SiteSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -69,25 +68,18 @@ export default function SettingsAdmin() {
 
       <Section title="General">
         {text('siteName', 'Site name', 'Shown in the header, browser tab and emails.')}
-        {text('tagline', 'Tagline')}
         {text('contactEmail', 'Contact email', 'Shown in the footer and legal pages.', 'hello@yoursite.com')}
         {text('footerText', 'Footer text', 'Leave blank for “© year Site name”.')}
       </Section>
 
-      <Section title="Homepage" description="The big spotlight at the top of the homepage.">
-        <Field label="Featured video" hint="Leave on “Newest video” to always feature the latest upload. You can also use the ★ button in Videos.">
-          <Select value={s.featuredMediaId || ''} onChange={(e) => set('featuredMediaId', e.target.value || null)}>
-            <option value="">Newest video</option>
-            {(media || []).map((m) => <option key={m.id} value={m.id}>{m.title}</option>)}
-          </Select>
-        </Field>
-        {text('heroHeadline', 'Spotlight headline', "Leave blank to use the video's title.")}
-        {area('heroSubtext', 'Spotlight text', "Leave blank to use the video's description.", 2)}
+      <Section title="Home page" description="The search box at the top of the home page.">
+        {text('heroHeadline', 'Headline', undefined, 'Find something to watch')}
+        {area('heroSubtext', 'Text under the headline', undefined, 2)}
       </Section>
 
       <Section title="Announcement bar" description="A strip across the top of every page. Leave blank to hide it.">
         {text('announcementBanner', 'Announcement message', undefined, 'e.g. New drops every Friday!')}
-        {text('announcementLink', 'Link (optional)', 'A page like /events or a full https:// address.')}
+        {text('announcementLink', 'Link (optional)', 'A page on this site like /login, or a full https:// address.')}
       </Section>
 
       <Section title="Access">

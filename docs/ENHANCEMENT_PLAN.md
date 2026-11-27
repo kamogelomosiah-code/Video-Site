@@ -1,5 +1,7 @@
 # Enhancement plan — first base plan
 
+> **Current state (after the simplification):** the public site is a search hero with trending videos and a grid; each video opens on its original site via `/go/:id`. Creator profiles, events, comments and the video detail page were removed to keep it simple. The sections below describe the earlier design and remain a useful roadmap for anything you want back.
+
 A page-by-page review of the site as it stands, and a prioritised list of what to build next.
 Phases are ordered so each one makes the next easier. Effort: S = under a day, M = 1–3 days, L = a week or more.
 

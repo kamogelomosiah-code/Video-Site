@@ -6,7 +6,7 @@ import { useAuth } from '../lib/auth';
 import { useSettings, usePageTitle } from '../lib/settings';
 import { checkPassword } from '../../shared/password';
 import PasswordStrength from '../components/PasswordStrength';
-import { Alert, Button, Field, Input, Spinner, cx } from '../components/ui';
+import { Alert, Button, Field, Input, cx } from '../components/ui';
 import type { User } from '../../shared/types';
 
 function Card({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children: ReactNode }) {
