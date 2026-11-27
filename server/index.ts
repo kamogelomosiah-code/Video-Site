@@ -55,6 +55,21 @@ async function main() {
   // A video click: counts it and sends the visitor to the original website.
   app.get('/go/:id', goHandler);
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
+  // API errors always come back as JSON, so the app can show a readable message.
+  app.use('/api', (err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (res.headersSent) return next(err);
+    const tooBig = err?.code === 'LIMIT_FILE_SIZE' || err?.type === 'entity.too.large';
+    const status = tooBig ? 413 : err?.code === 11000 ? 409 : Number(err?.status) || 500;
+    if (status >= 500) console.error('[api]', err);
+    const error = tooBig
+      ? 'That upload is too large.'
+      : status === 409
+        ? 'That record already exists.'
+        : err?.type === 'entity.parse.failed'
+          ? 'The request was not valid JSON.'
+          : 'Something went wrong. Please try again.';
+    res.status(status).json({ error });
+  });
 
   // --- SEO helpers ---
   const origin = (req: express.Request) => config.appUrl || `${req.protocol}://${req.get('host')}`;

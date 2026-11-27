@@ -239,7 +239,7 @@ adminRouter.put('/settings', async (req, res) => {
 
 // --- Dashboard ---
 
-adminRouter.get('/stats', async (_req, res) => {
+adminRouter.get('/stats', async (req, res) => {
   const [videos, published, users, categories, totalViews, topVideos, recentActivity] = await Promise.all([
     db.count('media'),
     db.count('media', { published: { $ne: false } }),
@@ -262,7 +262,7 @@ adminRouter.get('/stats', async (_req, res) => {
       storage: storageMode(),
       database: storageMode() === 'mongodb' ? config.mongoDb : 'local file (data.json)',
       emailProvider: mailProvider(),
-      adminPin: !!config.admin.pin,
+      adminPin: !!(req as any).user.pin, // the saved PIN, which may come from an earlier setup
     },
   };
   res.json(stats);

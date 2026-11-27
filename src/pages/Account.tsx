@@ -24,6 +24,7 @@ export function AccountForms() {
   const [profile, setProfile] = useState({ name: user?.name || '', bio: user?.bio || '', avatarUrl: user?.avatarUrl || '' });
   const [pw, setPw] = useState({ currentPassword: '', password: '', confirm: '' });
   const [pin, setPin] = useState('');
+  const [pinPassword, setPinPassword] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [pwError, setPwError] = useState<{ msg: string; failures?: string[] } | null>(null);
   if (!user) return null;
@@ -107,14 +108,17 @@ export function AccountForms() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              save('pin', { pin }, () => setPin(''));
+              save('pin', { pin, currentPassword: pinPassword }, () => { setPin(''); setPinPassword(''); });
             }}
             className="space-y-4"
           >
             <Field label="New 6-digit PIN" hint="Asked for every time you sign in as admin.">
               <Input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" className="max-w-40 font-mono tracking-widest" required />
             </Field>
-            <Button type="submit" loading={busy === 'pin'} disabled={pin.length !== 6}>Update PIN</Button>
+            <Field label="Your password" hint="Needed to change the PIN.">
+              <Input type="password" value={pinPassword} onChange={(e) => setPinPassword(e.target.value)} autoComplete="current-password" required />
+            </Field>
+            <Button type="submit" loading={busy === 'pin'} disabled={pin.length !== 6 || !pinPassword}>Update PIN</Button>
           </form>
         </Section>
       )}
