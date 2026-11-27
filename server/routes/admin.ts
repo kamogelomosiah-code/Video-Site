@@ -6,6 +6,7 @@ import { checkPassword } from '../../shared/password';
 import { AD_SLOTS, DEFAULT_SETTINGS, parseAdSizes, type AdminStats } from '../../shared/types';
 import { slugify } from '../../shared/video';
 import { cleanFocus } from '../../shared/image';
+import { analyticsReport } from '../analytics';
 import { getSettings } from './public';
 import { adminVideos } from './adminVideos';
 import { clearTrendingCache } from '../videos';
@@ -225,6 +226,13 @@ adminRouter.delete('/users/:id', async (req, res) => {
   await db.removeWhere('sessions', { userId: u.id });
   await logActivity('delete', `Deleted user ${u.email}`, actor.id);
   res.json({ ok: true });
+});
+
+// --- Analytics ---
+
+adminRouter.get('/analytics', async (req, res) => {
+  const days = [7, 14, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
+  res.json(await analyticsReport(days));
 });
 
 // --- Settings ---

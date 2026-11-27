@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowUp, Check, ChevronRight, Search, SearchX, Film, Flame, Play } from 'lucide-react';
+import { ArrowUp, Check, ChevronRight, Hash, History, Search, SearchX, Film, Flame, Play, Sparkles } from 'lucide-react';
 import type { Category, PublicVideo } from '../../shared/types';
 import { api } from '../lib/api';
 import { useSettings } from '../lib/settings';
@@ -9,6 +9,7 @@ import { categoryPath, tagPath, videoPath } from '../../shared/seo';
 import { useDebounced, useFetch } from '../lib/utils';
 import { AdSlot, GridSkeleton, Thumb, VideoGrid, VideoRow } from '../components/Media';
 import SiteSearch from '../components/SiteSearch';
+import { history, lastVisit, likedTags, type Seen } from '../lib/track';
 import { Alert, Button, Empty, Spinner, cx } from '../components/ui';
 
 type Page = { items: PublicVideo[]; total: number; page: number; pages: number; loose?: boolean };
@@ -30,30 +31,113 @@ function RowSkeleton() {
   );
 }
 
-/** "More in <category>": a swipeable row that loads only when it is about to scroll into view. */
-function CategoryRow({ cat }: { cat: Category }) {
+type Group = { kind: 'category' | 'tag'; key: string; name: string };
+
+/** "More in <category>" / "#topic": a swipeable row that loads only when it is about to scroll into view. */
+function GroupRow({ group }: { group: Group }) {
   const ref = useRef<HTMLElement>(null);
   const [items, setItems] = useState<PublicVideo[] | null>(null);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const load = () => api.get<Page>(`/videos?category=${encodeURIComponent(cat.slug)}&sort=views&limit=10`).then((r) => setItems(r.items)).catch(() => setItems([]));
+    const q = group.kind === 'category' ? `category=${encodeURIComponent(group.key)}` : `tag=${encodeURIComponent(group.key)}`;
+    const load = () => api.get<Page>(`/videos?${q}&sort=smart&limit=10`).then((r) => setItems(r.items)).catch(() => setItems([]));
     if (typeof IntersectionObserver === 'undefined') return void load();
     const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { io.disconnect(); load(); } }, { rootMargin: '600px 0px' });
     io.observe(el);
     return () => io.disconnect();
-  }, [cat.slug]);
+  }, [group.kind, group.key]);
   if (items && items.length < 3) return <div className="h-8" />;
+  const to = group.kind === 'category' ? categoryPath(group.key) : tagPath(group.key);
+  const title = group.kind === 'category' ? `More in ${group.name}` : `#${group.key}`;
   return (
-    <section ref={ref} className="my-10 rounded-3xl bg-zinc-900/40 p-4 sm:p-5" aria-label={`More in ${cat.name}`} data-testid="category-row">
+    <section ref={ref} className="my-10 rounded-3xl bg-zinc-900/40 p-4 sm:p-5" aria-label={title} data-testid="category-row">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="text-base font-bold sm:text-lg">More in {cat.name}</h2>
-        <Link to={categoryPath(cat.slug)} className="ripple flex h-9 items-center gap-1 rounded-full px-3 text-sm font-semibold text-brand-300 hover:bg-white/[.05]">
+        <h2 className="text-base font-bold sm:text-lg">{title}</h2>
+        <Link to={to} className="ripple flex h-9 items-center gap-1 rounded-full px-3 text-sm font-semibold text-brand-300 hover:bg-white/[.05]">
           See all <ChevronRight className="h-4 w-4" />
         </Link>
       </div>
       {items ? <VideoRow items={items} /> : <RowSkeleton />}
     </section>
+  );
+}
+
+type Topic = { tag: string; label: string; count: number; cover?: PublicVideo };
+
+/** Topics made from the videos' tags: picture cards you swipe through. */
+function TopicsRow({ topics }: { topics: Topic[] | undefined }) {
+  if (!topics) {
+    // Still loading: keep the row's space so the list below doesn't jump.
+    return (
+      <section className="mb-8" aria-hidden>
+        <div className="skeleton mb-3 h-6 w-40 rounded-full" />
+        <div className="flex gap-3 overflow-hidden">{Array.from({ length: 6 }, (_, i) => <div key={i} className="skeleton aspect-[4/3] w-36 shrink-0 rounded-2xl sm:w-44" />)}</div>
+      </section>
+    );
+  }
+  if (topics.length < 3) return null;
+  return (
+    <section className="mb-8" aria-labelledby="topics-title" data-testid="topics">
+      <h2 id="topics-title" className="mb-3 flex items-center gap-2 text-lg font-bold"><Hash className="h-5 w-5 text-brand-400" /> Popular topics</h2>
+      <div className="scrollbar-none -mx-4 flex snap-x scroll-px-4 gap-3 overflow-x-auto px-4 pb-1">
+        {topics.map((t) => (
+          <Link key={t.tag} to={tagPath(t.tag)} className="ripple group relative aspect-[4/3] w-36 shrink-0 snap-start overflow-hidden rounded-2xl bg-zinc-900 sm:w-44">
+            {t.cover && <Thumb src={t.cover.thumbnailUrl} focus={t.cover.thumbFocus} alt="" className="absolute inset-0 h-full w-full transition-transform duration-500 ease-emphasized group-hover:scale-105" />}
+            <span className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+            <span className="absolute inset-x-0 bottom-0 p-3">
+              <span className="block truncate text-sm font-bold">#{t.tag}</span>
+              <span className="text-xs text-zinc-300">{t.count} videos</span>
+            </span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * For returning visitors (from this browser's own history): what's new since last time,
+ * "Continue browsing" and "Because you watched …".
+ */
+function ForYou({ onShowNewest }: { onShowNewest: () => void }) {
+  const [seen] = useState<Seen[]>(() => history());
+  const [since] = useState(() => lastVisit());
+  const [fresh, setFresh] = useState(0);
+  const [because, setBecause] = useState<PublicVideo[] | null>(null);
+  const last = seen[0];
+  useEffect(() => {
+    if (since) api.get<Page>(`/videos?since=${encodeURIComponent(new Date(since).toISOString())}&limit=1`).then((r) => setFresh(r.total)).catch(() => {});
+    if (last) api.get<{ items: PublicVideo[] }>(`/videos/${encodeURIComponent(last.id)}/similar?limit=10`).then((r) => setBecause(r.items.filter((v) => !seen.some((x) => x.id === v.id)))).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <>
+      {fresh > 0 && (
+        <button type="button" onClick={onShowNewest} className="ripple mb-6 flex w-full items-center gap-3 rounded-2xl border border-brand-500/30 bg-brand-500/10 px-4 py-3 text-left text-sm" data-testid="new-since">
+          <Sparkles className="h-5 w-5 shrink-0 text-brand-300" />
+          <span className="flex-1"><b className="text-brand-200">{fresh} new video{fresh === 1 ? '' : 's'}</b> since your last visit</span>
+          <span className="font-semibold text-brand-300">Show</span>
+        </button>
+      )}
+      {seen.length >= 2 && (
+        <section className="mb-8" aria-labelledby="continue-title" data-testid="continue">
+          <h2 id="continue-title" className="mb-3 flex items-center gap-2 text-lg font-bold"><History className="h-5 w-5 text-brand-400" /> Continue browsing</h2>
+          <VideoRow items={seen.slice(0, 10) as unknown as PublicVideo[]} />
+        </section>
+      )}
+      {last && !because && (
+        <section className="mb-8" aria-hidden>
+          <div className="skeleton mb-3 h-6 w-64 rounded-full" />
+          <RowSkeleton />
+        </section>
+      )}
+      {last && because && because.length >= 3 && (
+        <section className="mb-8" aria-labelledby="because-title" data-testid="because">
+          <h2 id="because-title" className="mb-3 line-clamp-1 text-lg font-bold">Because you watched <span className="text-brand-300">{last.title}</span></h2>
+          <VideoRow items={because} />
+        </section>
+      )}
+    </>
   );
 }
 
@@ -213,10 +297,14 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => setPage(1), [q, category, tag]);
+  // Lists use the smart order (good right now + what this visitor likes); "Show newest" switches to date order.
+  const [order, setOrder] = useState<'smart' | 'newest'>('smart');
+  const [liked] = useState(() => likedTags());
+  useEffect(() => setPage(1), [q, category, tag, order]);
 
   const { data: categories } = useFetch(() => api.get<Category[]>('/categories'), []);
   const { data: trending } = useFetch(() => api.get<Trending>('/trending'), []);
+  const { data: topicList } = useFetch(() => api.get<Topic[]>('/topics'), []);
   const loc = useLocation();
   useEffect(() => {
     if (loc.hash === '#trending' && trending) document.getElementById('trending')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -230,6 +318,10 @@ export default function Home() {
     if (q) qs.set('q', q);
     if (category !== 'all') qs.set('category', category);
     if (tag) qs.set('tag', tag);
+    if (!q) {
+      qs.set('sort', order);
+      if (order === 'smart' && liked.length && category === 'all' && !tag) qs.set('for', liked.join(','));
+    }
     api
       .get<Page>(`/videos?${qs}`)
       .then((r) => {
@@ -242,14 +334,21 @@ export default function Home() {
     return () => {
       alive = false;
     };
-  }, [q, category, tag, page]);
+  }, [q, category, tag, page, order]);
 
 
 
   const cat = categories?.find((c) => c.slug === category);
   // Categories for the "More in …" rows: only ones that have videos in the list (so a row is never empty).
+  // Rows between blocks: categories that have videos in this list, and topics from the tags, taking turns.
   const inList = new Set(items.map((v) => v.category).filter(Boolean));
-  const others = (categories || []).filter((c) => c.slug !== category && inList.has(c.slug));
+  const catGroups: Group[] = (categories || []).filter((c) => c.slug !== category && inList.has(c.slug)).map((c) => ({ kind: 'category', key: c.slug, name: c.name }));
+  const tagGroups: Group[] = (topicList || []).filter((t) => t.count >= 3).map((t) => ({ kind: 'tag', key: t.tag, name: t.label }));
+  const others: Group[] = [];
+  for (let i = 0; i < Math.max(catGroups.length, tagGroups.length); i++) {
+    if (catGroups[i]) others.push(catGroups[i]);
+    if (tagGroups[i]) others.push(tagGroups[i]);
+  }
 
   // Load the next page a little before the visitor reaches the end.
   const sentinel = useRef<HTMLDivElement>(null);
@@ -306,11 +405,14 @@ export default function Home() {
           <VideoRow items={trending.items.slice(0, 10)} />
         </section>
       )}
+      {/* Returning visitors: what's new, where they left off, more like what they watched. */}
+      {!q && !listing && <ForYou onShowNewest={() => { setOrder('newest'); document.getElementById('list-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} />}
       {/* The first ad comes after something worth watching, not before it (home page only). */}
       {!q && !listing && <AdSlot slot="home_top" className="mb-8" />}
+      {!q && !listing && <TopicsRow topics={topicList ?? undefined} />}
 
-      <h2 className="mb-1 text-lg font-bold" id="list-title">
-        {q ? <>Results for “{q}” <span className="text-sm font-normal text-zinc-500">({meta.total})</span></> : listing ? 'Newest first' : 'Fresh picks'}
+      <h2 className="mb-1 scroll-mt-24 text-lg font-bold" id="list-title">
+        {q ? <>Results for “{q}” <span className="text-sm font-normal text-zinc-500">({meta.total})</span></> : order === 'newest' ? 'Newest' : listing ? 'Top picks' : liked.length ? 'Picked for you' : 'Fresh picks'}
       </h2>
       {/* The category chips stay just under the top bar while you scroll, so switching is always one tap away. */}
       {!!categories?.length && !tag && (
@@ -331,6 +433,7 @@ export default function Home() {
               >
                 {category === c.slug && <Check className="h-4 w-4 animate-pop" strokeWidth={2.6} />}
                 {c.name}
+                {(c as any).count > 0 && <span className="text-xs font-normal opacity-60">{(c as any).count}</span>}
               </Link>
             ))}
           </div>
@@ -357,12 +460,12 @@ export default function Home() {
           {/* The list in blocks of 12. Between blocks: a row from another category (on the home page) or an ad,
               so there is always something new a little further down. */}
           {chunk(items, 12).map((block, i) => {
-            const extra = !q && !listing && others.length ? others[i % others.length] : null;
+            const extra = !q && !listing && others.length ? others[(i / 2) % others.length] : null;
             return (
               <Fragment key={i}>
                 <VideoGrid items={block} insert={i === 0 && block.length > 5 ? { at: 5, node: <AdSlot key="infeed" slot="home_infeed" variant="card" /> } : undefined} />
                 {(i < chunk(items, 12).length - 1 || page >= meta.pages) && (
-                  i % 2 === 0 && extra ? <CategoryRow key={`row-${extra.slug}-${i}`} cat={extra} /> : i % 2 === 1 ? <AdSlot slot="home_mid" className="my-10" /> : <div className="h-8" />
+                  i % 2 === 0 && extra ? <GroupRow key={`row-${extra.kind}-${extra.key}-${i}`} group={extra} /> : i % 2 === 1 ? <AdSlot slot="home_mid" className="my-10" /> : <div className="h-8" />
                 )}
               </Fragment>
             );

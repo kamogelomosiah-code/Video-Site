@@ -56,6 +56,15 @@ export async function connect(): Promise<void> {
         ['media', { tagKeys: 1 }],
         ['reactions', { id: 1 }, { unique: true }],
         ['reactions', { mediaId: 1 }],
+        ['stats_daily', { id: 1 }, { unique: true }],
+        ['stats_visitors', { id: 1 }, { unique: true }],
+        ['stats_visitors', { day: 1 }],
+        ['stats_video', { id: 1 }, { unique: true }],
+        ['stats_video', { day: 1 }],
+        ['stats_search', { id: 1 }, { unique: true }],
+        ['stats_search', { day: 1 }],
+        ['stats_refs', { id: 1 }, { unique: true }],
+        ['stats_refs', { day: 1 }],
         ['dailyViews', { id: 1 }, { unique: true }],
         ['dailyViews', { day: 1 }],
         ['passwordResetCodes', { userId: 1 }],
@@ -149,6 +158,7 @@ function matches(doc: any, filter: Filter): boolean {
         if (op === '$regex' && !new RegExp(arg, 'i').test(String(v ?? ''))) return false;
         if (op === '$lt' && !(v != null && v < arg)) return false;
         if (op === '$gte' && !(v != null && v >= arg)) return false;
+        if (op === '$gt' && !(v != null && v > arg)) return false;
       }
     } else if (v !== cond) return false;
   }

@@ -7,6 +7,7 @@ import AgeGate from './AgeGate';
 import ConsentBar from './ConsentBar';
 import { AdSlot } from './Media';
 import SiteSearch from './SiteSearch';
+import { trackPage } from '../lib/track';
 import { cx } from './ui';
 import { api } from '../lib/api';
 import { useFetch } from '../lib/utils';
@@ -212,6 +213,8 @@ function BottomNav({ onSearch, searchOpen }: { onSearch: () => void; searchOpen:
 export default function Layout() {
   const [searchOpen, setSearchOpen] = useState(false);
   const loc = useLocation();
+  // Count a page view for the site's analytics (anonymous; admins' pages aren't counted).
+  useEffect(() => trackPage(loc.pathname, loc.search), [loc.pathname, loc.search]);
   const pageKey = loc.pathname.replace(/^(\/v\/[^/]+)\/.*$/, '$1'); // a video's slug fix-up is not a new page
   useEffect(() => {
     setSearchOpen(false);

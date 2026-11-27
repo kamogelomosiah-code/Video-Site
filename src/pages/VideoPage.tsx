@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ExternalLink, Eye, Film, Play, ThumbsDown, ThumbsUp } from 'lucide-react';
 import type { PublicVideo, VideoDetail } from '../../shared/types';
 import { api } from '../lib/api';
@@ -8,6 +8,9 @@ import { useSettings } from '../lib/settings';
 import { categoryPath, summary, tagPath, videoPath } from '../../shared/seo';
 import { formatViews, timeAgo } from '../lib/utils';
 import { visitorId } from '../lib/visitor';
+import { remember, trackGate } from '../lib/track';
+import { useAuth } from '../lib/auth';
+import SignupGate from '../components/SignupGate';
 import { AdSlot, Thumb, VideoGrid } from '../components/Media';
 import { Empty, cx, useToast } from '../components/ui';
 
@@ -40,6 +43,9 @@ export default function VideoPage() {
   const [error, setError] = useState('');
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [gate, setGate] = useState(false);
+  const { user } = useAuth();
+  const [params, setParams] = useSearchParams();
   const nav = useNavigate();
   const loc = useLocation();
   const dv = data?.video;
@@ -57,6 +63,16 @@ export default function VideoPage() {
         }
       : { noindex: true },
   );
+  // Arriving from a watch link (?watch=1): offer the sign-up (or a one-tap continue if already signed in).
+  useEffect(() => {
+    if (dv && params.get('watch') === '1') {
+      setGate(true);
+      if (!user) trackGate();
+      const next = new URLSearchParams(params);
+      next.delete('watch');
+      setParams(next, { replace: true });
+    }
+  }, [dv]); // eslint-disable-line react-hooks/exhaustive-deps
   // Keep the address tidy: /v/<id>/<title-words> (old /v/<id> links still work).
   useEffect(() => {
     if (dv && decodeURIComponent(loc.pathname) !== decodeURIComponent(videoPath(dv))) nav(videoPath(dv) + loc.search, { replace: true });
@@ -71,7 +87,11 @@ export default function VideoPage() {
     const v = visitorId();
     api
       .get<Loaded>(`/videos/${encodeURIComponent(id)}${v ? `?visitor=${v}` : ''}`)
-      .then((r) => alive && setData(r))
+      .then((r) => {
+        if (!alive) return;
+        setData(r);
+        remember(r.video); // for "Continue browsing" and picks for you (stays in this browser)
+      })
       .catch((e) => alive && setError(e.status === 404 ? 'gone' : e.message));
     return () => {
       alive = false;
@@ -102,6 +122,27 @@ export default function VideoPage() {
   const tags = v.tags || [];
   const watch = `/go/${encodeURIComponent(v.id)}`;
   const site = v.source || 'the original site';
+
+  /**
+   * Watch: signed-in visitors (or everyone, if sign-up isn't required) go straight to the original site
+   * in a new tab. Signed-out visitors get the free sign-up first.
+   */
+  const openWatch = async () => {
+    const tab = window.open('', '_blank'); // opened now, while the tap counts, then pointed at the video
+    try {
+      const r = await api.post<{ url: string }>(`/videos/${encodeURIComponent(v.id)}/watch`);
+      if (tab) { tab.opener = null; tab.location.href = r.url; } else window.location.href = r.url;
+      setGate(false);
+    } catch (e: any) {
+      tab?.close();
+      if (e.data?.gate) { setGate(true); trackGate(); } else toast(e.message, 'error');
+    }
+  };
+  const onWatch = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (settings.requireSignupToWatch && !user) { setGate(true); trackGate(); return; }
+    openWatch();
+  };
 
   /** Like / dislike: tap again to undo. Shown at once, then confirmed by the server. */
   const react = async (value: 'like' | 'dislike') => {
@@ -139,6 +180,7 @@ export default function VideoPage() {
         {/* The picture is a big "play" button that opens the video where it lives. */}
         <a
           href={watch}
+          onClick={onWatch}
           target="_blank"
           rel="noopener noreferrer"
           className="ripple group relative block aspect-video overflow-hidden rounded-2xl bg-zinc-900 shadow-xl shadow-black/40 sm:rounded-3xl"
@@ -197,6 +239,7 @@ export default function VideoPage() {
           </div>
           <a
             href={watch}
+          onClick={onWatch}
             target="_blank"
             rel="noopener noreferrer"
             className="ripple flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-brand-500 px-5 text-[15px] font-bold text-zinc-950 shadow-lg shadow-brand-500/20 transition-[background-color,box-shadow,transform] duration-200 ease-standard hover:bg-brand-400 hover:shadow-xl hover:shadow-brand-500/25 active:scale-[.98] sm:flex-none sm:px-7"
@@ -258,6 +301,8 @@ export default function VideoPage() {
       )}
       {/* Phones and tablets: the ad comes after "Up next", so the next videos are seen first. */}
       {!wide && <AdSlot slot="home_mid" className="mt-8" />}
+
+      <SignupGate open={gate} onClose={() => setGate(false)} video={v} site={site} onContinue={openWatch} />
 
       {similar.length > 8 && (
         <section aria-labelledby="more-title" className="mt-10 lg:col-span-2">

@@ -105,6 +105,8 @@ export interface SiteSettings {
   ageGateEnabled: boolean;
   ageGateMessage: string;
   allowRegistration: boolean;
+  /** Visitors must sign up (free) or sign in before going to a video's original website. */
+  requireSignupToWatch: boolean;
   metaTitle: string;
   metaDescription: string;
   /** The code from Google Search Console (the content="…" part of its HTML tag). */
@@ -141,6 +143,7 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   ageGateMessage:
     'This website contains age-restricted material intended for adults only. By entering you confirm you are at least 18 years old (or the age of majority where you live) and that viewing such content is legal for you.',
   allowRegistration: true,
+  requireSignupToWatch: true,
   metaTitle: '',
   metaDescription: 'Search and discover videos.',
   googleSiteVerification: '',

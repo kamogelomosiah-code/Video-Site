@@ -14,6 +14,7 @@ import { db } from './db';
 import { getSettings } from './routes/public';
 import { linkOf, similarTo, toPublic, trending, videoFilter } from './videos';
 import { clearSearchCaches, searchVideos } from './search';
+import { categoriesWithCounts, clearDiscoverCache } from './discover';
 import { categoryPath, embedUrlFor, isoDuration, summary, tagPath, videoPath } from '../shared/seo';
 import type { SiteSettings } from '../shared/types';
 
@@ -58,8 +59,9 @@ const itemList = (origin: string, items: any[]) => ({
   itemListElement: items.slice(0, 30).map((v, i) => ({ '@type': 'ListItem', position: i + 1, url: origin + videoPath(v), name: v.title })),
 });
 
+/** Categories that have videos (the same list visitors see). */
 async function activeCategories(): Promise<any[]> {
-  return (await db.list('categories')).filter((c: any) => c.active !== false && c.slug !== 'all').sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
+  return categoriesWithCounts();
 }
 async function latest(filter: any, limit = 48): Promise<any[]> {
   return db.find('media', { filter, sort: { createdAt: -1 }, limit });
@@ -423,6 +425,7 @@ let timer: NodeJS.Timeout | null = null;
 export function notifySearchEngines(paths: string[]) {
   clearSeoCache();
   clearSearchCaches();
+  clearDiscoverCache();
   clearSitemapCache();
   const origin = config.publicUrl;
   if (!origin || !config.isProd || /localhost|127\.0\.0\.1/.test(origin) || process.env.INDEXNOW === 'off') return;

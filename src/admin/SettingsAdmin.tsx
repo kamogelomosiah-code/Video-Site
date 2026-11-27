@@ -88,6 +88,7 @@ export default function SettingsAdmin() {
         <Toggle label="Maintenance mode" hint="Visitors see a “back soon” page. Admins can still use the whole site." checked={s.maintenanceMode} onChange={(v) => set('maintenanceMode', v)} />
         {area('maintenanceMessage', 'Maintenance message', undefined, 2)}
         <Toggle label="Allow new sign-ups" checked={s.allowRegistration} onChange={(v) => set('allowRegistration', v)} />
+        <Toggle label="Sign up to watch" hint="Visitors create a free account (or sign in) before going to a video's original site. Browsing stays open to everyone." checked={s.requireSignupToWatch} onChange={(v) => set('requireSignupToWatch', v)} />
         <Toggle label="18+ age confirmation" hint="Strongly recommended for adult content." checked={s.ageGateEnabled} onChange={(v) => set('ageGateEnabled', v)} />
         {area('ageGateMessage', 'Age confirmation text', undefined, 3)}
       </Section>

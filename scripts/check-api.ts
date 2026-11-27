@@ -95,8 +95,19 @@ async function main() {
   // Redirect: counts the click and sends the visitor to the original site.
   const found: any = (await api('GET', `/api/admin/videos?q=${TAG.toLowerCase()}+video+7&limit=100`, undefined, admin)).data.items;
   const target = found.find((v: any) => v.title === `${TAG} video 7`);
+  // "Sign up to watch" (on by default): a plain /go/ link opens the video page with the sign-up box;
+  // the Watch button asks /watch, which gives the address only to signed-in visitors.
+  const gateOn = (await api('GET', '/api/settings')).data.requireSignupToWatch !== false;
   const go = await api('GET', `/go/${target.id}`, undefined, undefined, 'manual');
-  check('/go/:id redirects to the original website', go.status === 302 && go.location === target.externalUrl, `${go.status} ${go.location}`);
+  if (gateOn) {
+    check('/go/:id (signed out) opens the video page with the sign-up box', go.status === 302 && /^\/v\/[^?]+\?watch=1$/.test(go.location), `${go.status} ${go.location}`);
+    const anonWatch = await api('POST', `/api/videos/${target.id}/watch`);
+    check('Watch (signed out) asks to sign up', anonWatch.status === 401 && anonWatch.data.gate === true);
+    const signedWatch = await api('POST', `/api/videos/${target.id}/watch`, undefined, admin);
+    check('Watch (signed in) gives the original website', signedWatch.status === 200 && signedWatch.data.url === target.externalUrl, signedWatch.data.url);
+  } else {
+    check('/go/:id redirects to the original website', go.status === 302 && go.location === target.externalUrl, `${go.status} ${go.location}`);
+  }
   const goBad = await api('GET', '/go/does-not-exist', undefined, undefined, 'manual');
   check('/go/ for an unknown id goes home', goBad.status === 302 && goBad.location === '/');
 
