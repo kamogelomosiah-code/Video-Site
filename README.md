@@ -14,7 +14,9 @@ Admins sign in to manage every video, category, ad, user and setting. React + Vi
 | **Tested with** | API checks (`npm run test:api`), database checks (`npm run check:db`) and browser runs of the admin (27 checks), public site (23) and phone admin (21) during development. The browser scripts are not in the repo yet |
 | **Not verified from the build environment** | Connecting to **MongoDB Atlas**, real email delivery (tested with a local mail sink; Render's free plan may block SMTP, so use Resend there), scraping real external sites |
 
-**Not connected to MasterAPI** (the shared backend): this site has its own MongoDB. Moving it over is an option, not a need.
+**Connected to MasterAPI (the shared backend), for advertising enquiries only.** The "Advertise here" boxes now lead to `/advertise`, a short enquiry form. The enquiry is sent to MasterAPI, which saves it and emails it to this site's contact address (set it on the app in the MasterAPI console). It needs `MASTERAPI_URL` and `MASTERAPI_KEY` on the server; without them the form says enquiries aren't set up. A link set in Site settings → Ads still wins. Only enquiries that are valid count toward the limit of 3 per address per hour. Tested in a browser on phone and desktop, including MasterAPI being down.
+
+**Everything else stays on this site's own MongoDB on purpose.** Videos, accounts, ads and settings already work well there (38 API checks, 28 database checks), and moving them would add risk for no gain.
 
 **Next:** deploy on Render with `APP_SECRET_KEY` set, confirm the Atlas connection from the admin Overview page, and add a first batch of real videos.
 
