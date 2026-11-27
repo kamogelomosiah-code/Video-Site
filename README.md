@@ -18,6 +18,14 @@ Admins sign in to manage every video, category, ad, user and setting. React + Vi
 
 **Next:** deploy on Render with `APP_SECRET_KEY` set, confirm the Atlas connection from the admin Overview page, and add a first batch of real videos.
 
+## Apps hub (`/hub`)
+
+`/hub` is a landing page about me with an app-store style list of all my apps. It is one static file, `hub/index.html`,
+served by this server, so it works on whatever address you deploy to (the Elysian "Open" button is just `/`). It needs no login and no database.
+
+To add or change an app, edit the `APPS` list near the top of the script in `hub/index.html` (name, description, link, tags). Nothing else needs changing.
+Links to my other apps point at their Render addresses; the Household budget link assumes GitHub Pages is switched on for the `kamo-portfolio-ai` repo.
+
 ## Run locally
 
 ```bash
