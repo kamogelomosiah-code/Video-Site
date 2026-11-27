@@ -36,8 +36,8 @@ export default function AgeGate() {
         <h1 id="age-title" className="text-2xl font-bold">Adults only (18+)</h1>
         <p className="mt-3 text-sm leading-relaxed text-zinc-400">{settings.ageGateMessage}</p>
         <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-          <Button className="flex-1" onClick={enter}>I am 18 or older — Enter</Button>
-          <Button variant="secondary" className="flex-1" onClick={() => (window.location.href = 'https://www.google.com')}>
+          <Button className="whitespace-nowrap sm:flex-[3]" onClick={enter}>I'm 18 or older, enter</Button>
+          <Button variant="secondary" className="sm:flex-[2]" onClick={() => (window.location.href = 'https://www.google.com')}>
             Leave
           </Button>
         </div>
