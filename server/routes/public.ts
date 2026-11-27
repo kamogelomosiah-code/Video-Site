@@ -66,7 +66,11 @@ export async function goHandler(req: Request, res: Response) {
 publicRouter.get('/ads/:slot', async (req, res) => {
   const settings = await getSettings();
   if (!settings.adsEnabled) return res.json(null);
-  const ads = (await db.list('ads')).filter((a: any) => a.enabled && a.slot === String(req.params.slot));
+  const today = new Date().toISOString().slice(0, 10);
+  // Running = switched on and inside its dates (if it has any).
+  const ads = (await db.list('ads')).filter(
+    (a: any) => a.enabled && a.slot === String(req.params.slot) && (!a.startsAt || a.startsAt <= today) && (!a.endsAt || a.endsAt >= today),
+  );
   if (!ads.length) return res.json(null);
   const total = ads.reduce((s: number, a: any) => s + Math.max(1, a.weight || 1), 0);
   let r = Math.random() * total;

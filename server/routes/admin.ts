@@ -3,7 +3,7 @@ import { db, newId, storageMode } from '../db';
 import { config } from '../config';
 import { requireAdmin, hashPassword, publicUser, logActivity, isEmail } from '../auth';
 import { checkPassword } from '../../shared/password';
-import { DEFAULT_SETTINGS, type AdminStats } from '../../shared/types';
+import { AD_SLOTS, DEFAULT_SETTINGS, type AdminStats } from '../../shared/types';
 import { slugify } from '../../shared/video';
 import { getSettings } from './public';
 import { adminVideos } from './adminVideos';
@@ -85,13 +85,20 @@ const RESOURCES: Resource[] = [
     label: 'ad',
     schema: {
       name: 'string', slot: 'string', type: 'string', enabled: 'boolean', imageUrl: 'url', targetUrl: 'url',
-      htmlSnippet: 'text', adsenseSlotId: 'string', weight: 'number',
+      htmlSnippet: 'text', adsenseSlotId: 'string', weight: 'number', startsAt: 'string', endsAt: 'string',
     },
     defaults: () => ({ enabled: true, type: 'image', weight: 10, impressions: 0, clicks: 0 }),
     beforeSave: (doc) => {
       if (!doc.name) throw new Error('Name is required');
-      if (!doc.slot) throw new Error('Choose where the ad appears');
+      if (!AD_SLOTS.some((s) => s.id === doc.slot)) throw new Error('Choose one of the ad spaces');
+      if (!['image', 'html', 'adsense'].includes(doc.type)) throw new Error('Choose an ad type');
       if (doc.type === 'image' && !doc.imageUrl) throw new Error('Image ads need an image');
+      if (doc.type === 'html' && !String(doc.htmlSnippet || '').trim()) throw new Error('Paste the HTML snippet for this ad');
+      if (doc.type === 'adsense' && !doc.adsenseSlotId) throw new Error('Enter the AdSense slot ID');
+      for (const k of ['startsAt', 'endsAt']) {
+        if (doc[k] && !/^\d{4}-\d{2}-\d{2}$/.test(doc[k])) throw new Error('Dates must look like 2026-12-31');
+      }
+      if (doc.startsAt && doc.endsAt && doc.endsAt < doc.startsAt) throw new Error('The end date is before the start date');
     },
   },
 ];
@@ -228,6 +235,9 @@ adminRouter.put('/settings', async (req, res) => {
     if (!(key in (req.body || {}))) continue;
     const v = req.body[key];
     patch[key] = typeof def === 'boolean' ? !!v : String(v ?? '').slice(0, 50000);
+  }
+  if (patch.adsContactLink && !/^(https?:\/\/|\/|mailto:)/i.test(patch.adsContactLink)) {
+    return res.status(400).json({ error: '"Advertise here" link must start with https://, / or mailto:' });
   }
   if (patch.announcementLink && !/^(https?:\/\/|\/)/i.test(patch.announcementLink)) {
     return res.status(400).json({ error: 'Announcement link must start with https:// or /' });

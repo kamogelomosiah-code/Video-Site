@@ -29,7 +29,7 @@ function Hero({ value, onSubmit, onChange, tags }: {
           <input
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            placeholder="Search by title, tag or creator…"
+            placeholder="Search videos…"
             aria-label="Search videos"
             className="w-full rounded-full border border-zinc-800 bg-zinc-900 py-3.5 pl-12 pr-4 text-base placeholder:text-zinc-500 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
           />
@@ -163,7 +163,7 @@ export default function Home() {
         )
       ) : (
         <>
-          <VideoGrid items={items.slice(0, 12)} />
+          <VideoGrid items={items.slice(0, 12)} insert={items.length > 5 ? { at: 5, node: <AdSlot key="infeed" slot="home_infeed" variant="card" /> } : undefined} />
           {items.length > 12 && (
             <>
               <AdSlot slot="home_mid" className="my-8" />

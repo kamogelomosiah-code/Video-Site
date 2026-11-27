@@ -3,6 +3,21 @@
 A simple video directory. Visitors search, browse and click a video to open it on its original website.
 Admins sign in to manage every video, category, ad, user and setting. React + Vite front end, Express + MongoDB back end.
 
+## Where this project is now (27 Nov 2026)
+
+**Status: feature-complete v2, ready to deploy once MongoDB and the admin login are set on the host.** Suggested GitHub name: `elysian-video-site`.
+
+| | |
+|---|---|
+| **Works and tested** | Search, Trending, video grid, click-through to the original site, 18+ gate, sign-up / sign-in, password reset by email code, four ad spaces with schedules, and an admin panel: videos (add, edit, hide, Trending, bulk actions, 1,200-row import), **Add from URL** scraper, categories, ads, users, site settings, activity log |
+| **Phone admin** | The videos list is card-based on phones (tap to edit, one-tap Shown/Hidden and Trending, select mode, full-screen editor) |
+| **Tested with** | API checks (`npm run test:api`), database checks (`npm run check:db`) and browser runs of the admin (27 checks), public site (23) and phone admin (21) during development. The browser scripts are not in the repo yet |
+| **Not verified from the build environment** | Connecting to **MongoDB Atlas**, real email delivery (tested with a local mail sink; Render's free plan may block SMTP, so use Resend there), scraping real external sites |
+
+**Not connected to MasterAPI** (the shared backend): this site has its own MongoDB. Moving it over is an option, not a need.
+
+**Next:** deploy on Render with `APP_SECRET_KEY` set, confirm the Atlas connection from the admin Overview page, and add a first batch of real videos.
+
 ## Run locally
 
 ```bash
@@ -52,9 +67,10 @@ npm run test:api          # in another: runs the whole site through its API and 
 | --- | --- |
 | Overview | Counts, most-viewed videos, system status (database, email, sign-in) |
 | Videos | Search, filter (shown / hidden / trending / category), add, edit, delete, show/hide, trending, move category — tick rows or select all matching; **Export** |
+| Add from URL | Paste up to 25 links to video pages; the title, thumbnail, description and length each page publishes are read for you to check, edit and add (pages listing several videos give one row each). Also **Fetch details** in the video form |
 | Import | Upload a JSON or JSON-lines file of any size: it's checked first with row-by-row problems, then saved in batches of 500 with a progress bar and a downloadable problem list |
 | Categories | Home-page categories, order, matching tags |
-| Ads | Home-page banners (image, HTML or AdSense) with shown and click counts |
+| Ads | Four fixed ad spaces (top banner 970×90, in-feed card 1280×720, mid banner 970×250, footer 728×90). Image, HTML or AdSense ads, optional start/end dates, shown and click counts, and a map of what's in each space. Empty spaces can show “Advertise here” |
 | Users | Roles, verified, suspend, reset password, delete |
 | Site settings | Name, home headline, announcement bar, maintenance mode, sign-ups, 18+ gate, SEO, ads, legal pages |
 | Activity log | Who changed what |

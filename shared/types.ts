@@ -61,6 +61,9 @@ export interface AdUnit {
   weight?: number;
   impressions?: number;
   clicks?: number;
+  /** Optional schedule, YYYY-MM-DD (inclusive). */
+  startsAt?: string;
+  endsAt?: string;
 }
 
 export interface ActivityLog {
@@ -92,6 +95,11 @@ export interface SiteSettings {
   adsEnabled: boolean;
   adsenseClientId: string;
   adsTxtContent: string;
+  /** Show an "Advertise here" box in ad spaces that have no ad running. */
+  adsShowPlaceholders: boolean;
+  adsPlaceholderText: string;
+  /** Where the "Advertise here" box links (a page, https:// link or mailto:). Falls back to the contact email. */
+  adsContactLink: string;
 }
 
 export const DEFAULT_SETTINGS: SiteSettings = {
@@ -115,12 +123,23 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   adsEnabled: true,
   adsenseClientId: '',
   adsTxtContent: '',
+  adsShowPlaceholders: true,
+  adsPlaceholderText: 'Advertise here',
+  adsContactLink: '',
 };
 
+/**
+ * The ad spaces on the site. Each one is a fixed box with a set shape, so the page layout
+ * never jumps and advertisers know exactly what size to supply.
+ */
 export const AD_SLOTS = [
-  { id: 'home_top', label: 'Home – under the search box' },
-  { id: 'home_mid', label: 'Home – inside the video list' },
+  { id: 'home_top', label: 'Top banner', where: 'Home page, under the search box', size: '970 × 90', width: 970, ratio: 970 / 90 },
+  { id: 'home_infeed', label: 'In-feed card', where: 'Home page, inside the video grid (looks like a video)', size: '1280 × 720', width: 1280, ratio: 16 / 9 },
+  { id: 'home_mid', label: 'Mid banner', where: 'Home page, between rows of videos', size: '970 × 250', width: 970, ratio: 970 / 250 },
+  { id: 'footer', label: 'Footer banner', where: 'Every page, above the footer', size: '728 × 90', width: 728, ratio: 728 / 90 },
 ] as const;
+
+export type AdSlotId = (typeof AD_SLOTS)[number]['id'];
 
 export interface AdminStats {
   videos: number;

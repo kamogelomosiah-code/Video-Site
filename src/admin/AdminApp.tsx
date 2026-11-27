@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
-import { Activity, ExternalLink, Film, LayoutDashboard, Megaphone, Menu, Settings, Tags, User, Users, X } from 'lucide-react';
+import { Activity, ExternalLink, FileUp, Film, Globe, LayoutDashboard, Megaphone, Menu, Settings, Tags, User, Users, X } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { usePageTitle } from '../lib/settings';
 import { Logo } from '../components/Layout';
@@ -9,6 +9,7 @@ import { AccountForms } from '../pages/Account';
 import Overview from './Overview';
 import VideosAdmin from './VideosAdmin';
 import ImportVideos from './ImportVideos';
+import AddFromUrl from './AddFromUrl';
 import { AdsAdmin, CategoriesAdmin } from './Taxonomy';
 import UsersAdmin from './UsersAdmin';
 import SettingsAdmin from './SettingsAdmin';
@@ -16,7 +17,9 @@ import ActivityAdmin from './ActivityAdmin';
 
 const NAV = [
   { to: '', label: 'Overview', icon: LayoutDashboard, end: true },
-  { to: 'videos', label: 'Videos', icon: Film },
+  { to: 'videos', label: 'Videos', icon: Film, end: true },
+  { to: 'videos/scrape', label: 'Add from URL', icon: Globe },
+  { to: 'videos/import', label: 'Import file', icon: FileUp },
   { to: 'categories', label: 'Categories', icon: Tags },
   { to: 'ads', label: 'Ads', icon: Megaphone },
   { to: 'users', label: 'Users', icon: Users },
@@ -95,6 +98,7 @@ export default function AdminApp() {
             <Route index element={<Overview />} />
             <Route path="videos" element={<VideosAdmin />} />
             <Route path="videos/import" element={<ImportVideos />} />
+            <Route path="videos/scrape" element={<AddFromUrl />} />
             <Route path="categories" element={<CategoriesAdmin />} />
             <Route path="ads" element={<AdsAdmin />} />
             <Route path="users" element={<UsersAdmin />} />

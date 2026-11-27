@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth';
 import { useSettings } from '../lib/settings';
 import AgeGate from './AgeGate';
 import ConsentBar from './ConsentBar';
+import { AdSlot } from './Media';
 import { cx } from './ui';
 
 const NAV = [{ to: '/', label: 'Videos', end: true }];
@@ -206,6 +207,9 @@ export default function Layout() {
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">
         <Outlet />
       </main>
+      <div className="mx-auto w-full max-w-3xl px-4">
+        <AdSlot slot="footer" />
+      </div>
       <Footer />
       <ConsentBar />
     </div>

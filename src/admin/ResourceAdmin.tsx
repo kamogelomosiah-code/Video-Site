@@ -34,6 +34,8 @@ interface Props<T> {
   toolbar?: ReactNode | ((reload: () => void) => ReactNode);
   /** Show row checkboxes; renders this bar when some rows are selected. */
   bulkBar?: (selectedIds: string[], done: () => void) => ReactNode;
+  /** Called whenever the list is (re)loaded — lets a page show a summary above the table. */
+  onLoaded?: (rows: T[]) => void;
 }
 
 function ProductsEditor({ value, onChange }: { value: any[]; onChange: (v: any[]) => void }) {
@@ -125,6 +127,10 @@ export default function ResourceAdmin<T extends { id: string }>(p: Props<T>) {
   const { toast, confirm } = useToast();
   const [params, setParams] = useSearchParams();
   const { data, loading, error, reload } = useFetch(() => api.get<T[]>(`/admin/${p.endpoint}`), [p.endpoint]);
+  const onLoaded = p.onLoaded;
+  useEffect(() => {
+    if (data) onLoaded?.(data);
+  }, [data, onLoaded]);
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState<T | null>(null);
   const [creating, setCreating] = useState(false);
