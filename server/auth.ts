@@ -136,39 +136,48 @@ export async function logActivity(actionType: string, details: string, userId?: 
 
 // --- Admin account bootstrap ---
 
+/**
+ * Makes sure the main admin account exists and matches ADMIN_* settings.
+ * Credentials come only from the environment (the repo is public).
+ */
 export async function ensureAdmin() {
   const { email, username, name, password, pin } = config.admin;
   let admin: any =
-    (await db.findOne('users', { email })) ||
+    (await db.get('users', 'admin-user')) ||
     (await db.findOne('users', { username })) ||
-    (await db.get('users', 'admin-user'));
+    (await db.findOne('users', { email }));
 
-  if (admin) {
-    admin.role = 'ADMIN';
-    admin.verified = true;
-    admin.email ||= email;
-    admin.username ||= username;
-    if (password) admin.passwordHash = await hashPassword(password);
-    else if (!admin.passwordHash) admin.passwordHash = await hashPassword(config.legacyAdminPassword);
-    if (pin) admin.pin = pin;
-    else if (!admin.pin) admin.pin = config.legacyAdminPin;
-  } else {
+  let generated = '';
+  if (!admin) {
+    if (!password) generated = randomBytes(9).toString('base64url');
     admin = {
       id: 'admin-user',
       name,
       email,
-      username,
       role: 'ADMIN',
       verified: true,
       avatarUrl: '',
-      passwordHash: await hashPassword(password || config.legacyAdminPassword),
-      pin: pin || config.legacyAdminPin,
+      passwordHash: await hashPassword(password || generated),
       createdAt: new Date().toISOString(),
     };
+  } else if (password) {
+    admin.passwordHash = await hashPassword(password);
   }
+  admin.role = 'ADMIN';
+  admin.verified = true;
+  admin.disabled = false;
+  admin.email ||= email;
+  // The configured username always wins, so changing ADMIN_USERNAME renames the login.
+  const clash: any = await db.findOne('users', { username });
+  if (!clash || clash.id === admin.id) admin.username = username;
+  // PIN step only when ADMIN_PIN is a 6-digit number; otherwise sign-in is username + password.
+  if (pin) admin.pin = pin;
+  else delete admin.pin;
+
   await db.put('users', admin);
-  console.log(`[auth] Admin account ready: ${admin.email} / ${admin.username}`);
-  if (!password || !pin) {
-    console.warn('[auth] ADMIN_PASSWORD and/or ADMIN_PIN not set in .env — legacy default admin credentials are active.');
+  console.log(`[auth] Admin ready — sign in as "${admin.username}" (or ${admin.email})${admin.pin ? ' + PIN' : ''}`);
+  if (generated) {
+    console.warn(`[auth] No ADMIN_PASSWORD set. Generated a one-time admin password: ${generated}`);
+    console.warn('[auth] Set ADMIN_PASSWORD in your environment to choose your own.');
   }
 }

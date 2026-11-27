@@ -1,29 +1,25 @@
 import { useState } from 'react';
 import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-router-dom';
-import {
-  Activity, CalendarDays, ExternalLink, Film, LayoutDashboard, Megaphone, Menu, MessageSquare, Settings, Tags, User, Users, UserSquare2, X,
-} from 'lucide-react';
+import { Activity, ExternalLink, Film, LayoutDashboard, Megaphone, Menu, Settings, Tags, User, Users, X } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { usePageTitle } from '../lib/settings';
 import { Logo } from '../components/Layout';
 import { cx } from '../components/ui';
 import { AccountForms } from '../pages/Account';
 import Overview from './Overview';
-import { AdsAdmin, CategoriesAdmin, EventsAdmin, MediaAdmin, TalentAdmin } from './sections';
+import VideosAdmin from './VideosAdmin';
+import ImportVideos from './ImportVideos';
+import { AdsAdmin, CategoriesAdmin } from './Taxonomy';
 import UsersAdmin from './UsersAdmin';
-import CommentsAdmin from './CommentsAdmin';
 import SettingsAdmin from './SettingsAdmin';
 import ActivityAdmin from './ActivityAdmin';
 
 const NAV = [
   { to: '', label: 'Overview', icon: LayoutDashboard, end: true },
-  { to: 'media', label: 'Videos', icon: Film },
+  { to: 'videos', label: 'Videos', icon: Film },
   { to: 'categories', label: 'Categories', icon: Tags },
-  { to: 'creators', label: 'Creators', icon: UserSquare2 },
-  { to: 'events', label: 'Events', icon: CalendarDays },
   { to: 'ads', label: 'Ads', icon: Megaphone },
   { to: 'users', label: 'Users', icon: Users },
-  { to: 'comments', label: 'Comments', icon: MessageSquare },
   { to: 'settings', label: 'Site settings', icon: Settings },
   { to: 'activity', label: 'Activity log', icon: Activity },
   { to: 'account', label: 'My account', icon: User },
@@ -59,7 +55,7 @@ export default function AdminApp() {
     <nav className="space-y-0.5" aria-label="Admin">
       {NAV.map((n) => (
         <NavLink
-          key={n.to}
+          key={n.to || 'overview'}
           to={n.to ? `/admin/${n.to}` : '/admin'}
           end={n.end}
           onClick={() => setOpen(false)}
@@ -97,13 +93,11 @@ export default function AdminApp() {
         <main className="mx-auto max-w-6xl p-4 sm:p-6 lg:p-8">
           <Routes>
             <Route index element={<Overview />} />
-            <Route path="media" element={<MediaAdmin />} />
+            <Route path="videos" element={<VideosAdmin />} />
+            <Route path="videos/import" element={<ImportVideos />} />
             <Route path="categories" element={<CategoriesAdmin />} />
-            <Route path="creators" element={<TalentAdmin />} />
-            <Route path="events" element={<EventsAdmin />} />
             <Route path="ads" element={<AdsAdmin />} />
             <Route path="users" element={<UsersAdmin />} />
-            <Route path="comments" element={<CommentsAdmin />} />
             <Route path="settings" element={<SettingsAdmin />} />
             <Route path="activity" element={<ActivityAdmin />} />
             <Route path="account" element={<AccountSection />} />

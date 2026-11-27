@@ -7,11 +7,7 @@ import AgeGate from './AgeGate';
 import ConsentBar from './ConsentBar';
 import { cx } from './ui';
 
-const NAV = [
-  { to: '/', label: 'Videos', end: true },
-  { to: '/creators', label: 'Creators' },
-  { to: '/events', label: 'Events' },
-];
+const NAV = [{ to: '/', label: 'Videos', end: true }];
 
 export function Logo() {
   const { settings } = useSettings();

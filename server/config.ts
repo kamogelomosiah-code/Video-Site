@@ -1,28 +1,45 @@
 import path from 'path';
 import dotenv from 'dotenv';
+import { loadSealedSecrets } from './secrets';
 
 dotenv.config();
 dotenv.config({ path: '.env.local', override: true });
 
+const sealed = loadSealedSecrets();
+if (sealed.note) console.log(`[secrets] ${sealed.note}`);
+/** A real environment variable (even an empty one) wins; otherwise the sealed value is used. */
+const env = (key: string, fallback = ''): string =>
+  key in process.env ? (process.env[key] as string) : sealed.values[key] ?? fallback;
+
+/**
+ * Atlas shows connection strings as `mongodb+srv://user:<db_password>@host/`.
+ * People often paste their password but keep the angle brackets — strip them.
+ */
+export function normalizeMongoUri(raw: string): string {
+  const uri = raw.trim().replace(/^["']|["']$/g, '');
+  return uri.replace(/^(mongodb(?:\+srv)?:\/\/[^:/@]+:)<([^>@]+)>@/, '$1$2@');
+}
+
+
 export const config = {
   port: Number(process.env.PORT) || 3000,
   isProd: process.env.NODE_ENV === 'production' || process.argv.includes('--prod'),
-  mongoUri: (process.env.MONGODB_URI || '').trim(),
-  mongoDb: process.env.MONGODB_DB || 'elysian',
+  mongoUri: normalizeMongoUri(env('MONGODB_URI')),
+  mongoDb: env('MONGODB_DB', 'elysian'),
   dataFile: path.join(process.cwd(), 'data.json'),
   uploadDir: path.join(process.cwd(), 'uploads'),
   sessionTtlMs: 30 * 24 * 60 * 60 * 1000,
-  resetTtlMs: 30 * 60 * 1000,
+  resetCodeTtlMs: 15 * 60 * 1000,
+  resetCodeMaxAttempts: 5,
   appUrl: process.env.APP_URL || '',
   trustProxyHops: Number(process.env.TRUST_PROXY_HOPS ?? 1),
   admin: {
-    email: (process.env.ADMIN_EMAIL || 'kamogelomosiah@gmail.com').trim().toLowerCase(),
-    username: (process.env.ADMIN_USERNAME || 'admin').trim().toLowerCase(),
-    name: process.env.ADMIN_NAME || 'Kamogelo Mosiah',
-    password: process.env.ADMIN_PASSWORD || '',
-    pin: (process.env.ADMIN_PIN || '').trim(),
+    email: env('ADMIN_EMAIL', 'admin@example.invalid').trim().toLowerCase(),
+    username: env('ADMIN_USERNAME', 'admin').trim().toLowerCase(),
+    name: process.env.ADMIN_NAME || 'Site Admin',
+    // Set in .env / your host's environment — never in code (this repo is public).
+    password: env('ADMIN_PASSWORD'),
+    // 6 digits to require a PIN at sign-in; "off" (or blank) for no PIN step.
+    pin: /^\d{6}$/.test(env('ADMIN_PIN').trim()) ? env('ADMIN_PIN').trim() : '',
   },
-  // Only used when ADMIN_PASSWORD / ADMIN_PIN are not set, so existing logins keep working.
-  legacyAdminPassword: '#Eightmillionby30$',
-  legacyAdminPin: '225533',
 };

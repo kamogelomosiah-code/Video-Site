@@ -271,3 +271,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 }
 
 export const useToast = () => useContext(ToastContext);
+
+export function Badge({ on, yes, no }: { on: boolean; yes: string; no: string }) {
+  return (
+    <span className={cx('rounded-full px-2 py-0.5 text-xs', on ? 'bg-emerald-500/15 text-emerald-300' : 'bg-zinc-800 text-zinc-400')}>
+      {on ? yes : no}
+    </span>
+  );
+}

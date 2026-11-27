@@ -4,7 +4,8 @@ import { config } from './config';
 import { connect, db, storageMode } from './db';
 import { attachUser, ensureAdmin } from './auth';
 import { authRouter } from './routes/auth';
-import { publicRouter, getSettings } from './routes/public';
+import { publicRouter, getSettings, goHandler } from './routes/public';
+import { migrateVideos } from './videos';
 import { adminRouter } from './routes/admin';
 
 const DEFAULT_CATEGORIES = [
@@ -29,11 +30,14 @@ async function seed() {
 async function main() {
   await connect();
   await seed();
+  await migrateVideos();
 
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', config.trustProxyHops);
-  app.use(express.json({ limit: '1mb' }));
+  const smallJson = express.json({ limit: '1mb' });
+  // Admin routes parse their own (larger) bodies after the admin check — see routes/admin.ts.
+  app.use((req, res, next) => (req.path.startsWith('/api/admin') ? next() : smallJson(req, res, next)));
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -48,6 +52,8 @@ async function main() {
   app.use('/api/auth', authRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api', publicRouter);
+  // A video click: counts it and sends the visitor to the original website.
+  app.get('/go/:id', goHandler);
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
   // --- SEO helpers ---
@@ -58,16 +64,10 @@ async function main() {
   app.get('/ads.txt', async (_req, res) => {
     res.type('text/plain').send((await getSettings()).adsTxtContent || '');
   });
-  app.get('/sitemap.xml', async (req, res) => {
-    const base = origin(req);
-    const media = (await db.list('media')).filter((m: any) => m.published !== false);
-    const talent = (await db.list('talentProfiles')).filter((t: any) => !t.hidden);
-    const urls = ['/', '/creators', '/events', ...media.map((m: any) => `/watch/${m.id}`), ...talent.map((t: any) => `/creators/${t.id}`)];
-    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  app.get('/sitemap.xml', (req, res) => {
+    // Videos open on their original sites, so the home page is the only page worth indexing.
     res.type('application/xml').send(
-      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls
-        .map((u) => `  <url><loc>${esc(base + u)}</loc></url>`)
-        .join('\n')}\n</urlset>\n`,
+      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${origin(req)}/</loc></url>\n</urlset>\n`,
     );
   });
 
