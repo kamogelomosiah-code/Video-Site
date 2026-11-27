@@ -92,7 +92,7 @@ async function homePage(req: Request, s: SiteSettings, origin: string): Promise<
     title,
     description,
     canonical: `${origin}/`,
-    robots: 'index,follow,max-image-preview:large',
+    robots: 'index,follow,max-snippet:-1,max-image-preview:large',
     image: abs(origin, trend.items[0]?.thumbnailUrl || items[0]?.thumbnailUrl),
     type: 'website',
     jsonld: [
@@ -175,11 +175,15 @@ async function videoPage(req: Request, id: string, s: SiteSettings, origin: stri
   const link = linkOf(m);
   const site = hostOf(link);
   const image = abs(origin, m.thumbnailUrl);
+  const tags: string[] = m.tags || [];
+  const catName: string = (cat as any)?.name || '';
+  // Without a written description, say what the video is in a full sentence (with its category and tags).
   const description = summary(
     m.description ||
-      `${m.title}${m.creatorName ? ` by ${m.creatorName}` : ''}${m.duration ? ` (${m.duration})` : ''}. Watch it on ${site || 'the original site'}, and find similar videos on ${s.siteName}.`,
+      `Watch ${m.title}${m.creatorName ? ` by ${m.creatorName}` : ''}${m.duration ? ` (${m.duration})` : ''}${catName ? `, a ${catName.toLowerCase()} video` : ''}${tags.length ? ` about ${tags.slice(0, 3).join(', ')}` : ''}. Free to browse on ${s.siteName}, then watch on ${site || 'the original site'}.`,
   );
-  const tags: string[] = m.tags || [];
+  // Short titles get their category added, which matches more searches (kept under ~65 characters).
+  const pageTitle = catName && m.title.length + catName.length + s.siteName.length < 52 ? `${m.title} – ${catName} video – ${s.siteName}` : `${m.title} – ${s.siteName}`;
   const crumbs: Array<[string, string]> = [['Home', '/']];
   if (cat) crumbs.push([(cat as any).name, categoryPath((cat as any).slug)]);
   crumbs.push([m.title, path]);
@@ -195,7 +199,9 @@ async function videoPage(req: Request, id: string, s: SiteSettings, origin: stri
     url: origin + path,
     embedUrl: embed,
     keywords: tags.length ? tags.join(', ') : undefined,
-    genre: (cat as any)?.name,
+    genre: catName || undefined,
+    publisher: { '@type': 'Organization', name: s.siteName, url: `${origin}/`, logo: { '@type': 'ImageObject', url: `${origin}/peach-svgrepo-com.svg` } },
+    isFamilyFriendly: s.ageGateEnabled ? false : undefined,
     creator: m.creatorName ? { '@type': 'Person', name: m.creatorName } : undefined,
     interactionStatistic: [
       { '@type': 'InteractionCounter', interactionType: { '@type': 'WatchAction' }, userInteractionCount: m.views || 0 },
@@ -205,10 +211,10 @@ async function videoPage(req: Request, id: string, s: SiteSettings, origin: stri
   const tagLinks: Array<[string, string]> = [...(cat ? [[categoryPath((cat as any).slug), (cat as any).name] as [string, string]] : []), ...tags.slice(0, 15).map((t): [string, string] => [tagPath(t), `#${t}`])];
   return {
     status: 200,
-    title: `${m.title} – ${s.siteName}`,
+    title: pageTitle,
     description,
     canonical: origin + path,
-    robots: 'index,follow,max-image-preview:large,max-video-preview:-1',
+    robots: 'index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1',
     image,
     type: 'video.other',
     jsonld: [video, breadcrumbs(origin, crumbs)],
@@ -244,7 +250,11 @@ async function pageFor(req: Request): Promise<Page> {
   let m: RegExpExecArray | null;
   if ((m = /^\/v\/([^/]+)(?:\/[^/]*)?$/.exec(p))) return (await videoPage(req, decodeURIComponent(m[1]), s, origin)) || { ...notFound(), title: `Video not available – ${s.siteName}`, body: `<h1>This video is no longer available</h1><p><a href="/">Browse all videos</a></p>` };
   if ((m = /^\/c\/([^/]+)$/.exec(p))) return (await categoryPage(decodeURIComponent(m[1]), s, origin)) || notFound();
-  if ((m = /^\/tag\/([^/]+)$/.exec(p))) return (await tagPage(decodeURIComponent(m[1]), s, origin)) || notFound();
+  if ((m = /^\/tag\/([^/]+)$/.exec(p))) {
+    const raw = decodeURIComponent(m[1]);
+    if (raw !== raw.toLowerCase()) return { status: 301, redirect: tagPath(raw), title: '', description: '', robots: '', jsonld: [], body: '' };
+    return (await tagPage(raw, s, origin)) || notFound();
+  }
   if (p.startsWith('/admin')) return { status: 200, title: `Admin – ${s.siteName}`, description: '', robots: 'noindex,nofollow', jsonld: [], body: '' };
   const st = STATIC[p];
   if (st) return { status: 200, title: st.title(s), description: st.description, canonical: st.index ? origin + p : undefined, robots: st.index ? 'index,follow' : 'noindex,follow', jsonld: [], body: `<h1>${esc(st.title(s).split(' – ')[0])}</h1>` };
@@ -263,10 +273,10 @@ function headTags(page: Page, s: SiteSettings, origin: string): string {
   if (page.description) t.push(`<meta name="twitter:description" content="${esc(page.description)}" />`);
   if (page.image) t.push(`<meta property="og:image" content="${esc(page.image)}" />`, `<meta name="twitter:image" content="${esc(page.image)}" />`);
   if (page.preloadImage) t.push(`<link rel="preload" as="image" href="${esc(page.preloadImage)}" fetchpriority="high" />`);
+  t.push(`<link rel="alternate" type="application/rss+xml" title="${esc(s.siteName)} – new videos" href="${esc(origin)}/feed.xml" />`);
   if (s.googleSiteVerification) t.push(`<meta name="google-site-verification" content="${esc(s.googleSiteVerification)}" />`);
   if (s.bingSiteVerification) t.push(`<meta name="msvalidate.01" content="${esc(s.bingSiteVerification)}" />`);
   for (const j of page.jsonld) t.push(`<script type="application/ld+json">${JSON.stringify(j).replace(/</g, '\\u003c')}</script>`);
-  void origin;
   return t.join('\n    ');
 }
 
@@ -436,4 +446,34 @@ export function notifySearchEngines(paths: string[]) {
     }
   }, 30_000);
   timer.unref?.();
+}
+
+// ---------- RSS feed of new videos (read by feed readers, aggregators and some search tools) ----------
+
+export async function feedHandler(req: Request, res: Response) {
+  const s = await getSettings();
+  const origin = originOf(req);
+  const items: any[] = await db.find('media', { filter: { published: { $ne: false } }, sort: { createdAt: -1 }, limit: 50 });
+  const x = (v: string) => v.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]!));
+  const body = items
+    .map((v) => {
+      const url = origin + videoPath(v);
+      const img = abs(origin, v.thumbnailUrl);
+      return `<item><title>${x(v.title || '')}</title><link>${x(url)}</link><guid isPermaLink="true">${x(url)}</guid><pubDate>${new Date(v.createdAt || Date.now()).toUTCString()}</pubDate><description>${x(summary(v.description || v.title || '', 300))}</description>${(v.tags || []).slice(0, 5).map((t: string) => `<category>${x(t)}</category>`).join('')}${img ? `<media:thumbnail url="${x(img)}" />` : ''}</item>`;
+    })
+    .join('');
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>${x(s.siteName)} – new videos</title><link>${x(origin)}/</link><description>${x(s.metaDescription || s.heroSubtext)}</description><language>en</language><atom:link href="${x(origin)}/feed.xml" rel="self" type="application/rss+xml" />${body}</channel></rss>\n`;
+  res.setHeader('Cache-Control', 'public, max-age=600');
+  sendCompressed(req, res, xml, 'application/rss+xml; charset=utf-8');
+}
+
+/** The app manifest: lets phones "add to home screen" with the right name and colours. */
+export async function manifestHandler(_req: Request, res: Response) {
+  const s = await getSettings();
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.type('application/manifest+json').send(JSON.stringify({
+    name: s.siteName, short_name: s.siteName, start_url: '/', display: 'standalone',
+    background_color: '#09090b', theme_color: '#09090b', description: s.metaDescription || s.heroSubtext,
+    icons: [{ src: '/peach-svgrepo-com.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
+  }));
 }

@@ -213,6 +213,14 @@ export default function VideosAdmin() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Nothing to select in an empty list: leave select mode.
+  useEffect(() => {
+    if (data && data.total === 0) {
+      setSelectMode(false);
+      setAllMatching(false);
+      setSelected(new Set());
+    }
+  }, [data]);
   // Clear the selection whenever the list changes meaning.
   useEffect(() => {
     setSelected(new Set());
@@ -317,8 +325,8 @@ export default function VideosAdmin() {
   const filtersActive = !!q || status !== 'all' || category !== 'all';
 
   const closeMenu = (e: React.MouseEvent<HTMLElement>) => e.currentTarget.closest('details')?.removeAttribute('open');
-  const STATUS_CHIPS = [['all', 'All'], ['published', 'Shown'], ['draft', 'Hidden'], ['pinned', 'Trending']] as const;
-  const moreFiltersActive = category !== 'all' || sort !== 'newest';
+  const moreFiltersActive = status !== 'all' || category !== 'all' || sort !== 'newest';
+  const hasVideos = !!data && data.total > 0;
 
   return (
     <div className={cx('space-y-4', selectionCount > 0 && 'pb-24 md:pb-0')}>
@@ -348,7 +356,7 @@ export default function VideosAdmin() {
               <button type="button" onClick={(e) => { closeMenu(e); exportAll(); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-3 text-left text-sm hover:bg-zinc-900"><Download className="h-4 w-4" /> Export all</button>
             </div>
           </details>
-          <button
+          {(hasVideos || selectMode) && <button
             type="button"
             onClick={() => { setSelectMode((m) => !m); setSelected(new Set()); setAllMatching(false); }}
             aria-pressed={selectMode}
@@ -356,7 +364,7 @@ export default function VideosAdmin() {
             className={cx('flex h-11 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium md:hidden', selectMode ? 'border-brand-500 bg-brand-500 text-zinc-950' : 'border-zinc-700 bg-zinc-800 text-zinc-200')}
           >
             {selectMode ? 'Done' : <><CheckSquare className="h-4 w-4" /> Select</>}
-          </button>
+          </button>}
           <span className="hidden md:contents">
             <Button onClick={() => setEditing({ ...EMPTY })}><Plus className="h-4 w-4" /> Add video</Button>
           </span>
@@ -399,22 +407,15 @@ export default function VideosAdmin() {
         </Select>
       </div>
 
-      {/* Phones: one-tap status chips (Select for bulk actions is in the header) */}
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:hidden" role="group" aria-label="Show videos">
-        {STATUS_CHIPS.map(([val, label]) => (
-          <button
-            key={val}
-            type="button"
-            onClick={() => setFilter('status', val, 'all')}
-            aria-pressed={status === val}
-            className={cx('h-10 shrink-0 rounded-full border px-4 text-sm', status === val ? 'border-brand-500 bg-brand-500/15 text-brand-300' : 'border-zinc-800 bg-zinc-950 text-zinc-300')}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* Phones: status, category and order live behind the filter button, so the list starts right under the search. */}
       {showFilters && (
-        <div className="grid grid-cols-2 gap-2 md:hidden">
+        <div className="grid grid-cols-2 gap-2 animate-fade-in md:hidden" data-testid="mobile-filters">
+          <Select value={status} onChange={(e) => setFilter('status', e.target.value, 'all')} aria-label="Filter by status" className="col-span-2">
+            <option value="all">All videos</option>
+            <option value="published">Shown on the site</option>
+            <option value="draft">Hidden</option>
+            <option value="pinned">Trending</option>
+          </Select>
           <Select value={category} onChange={(e) => setFilter('category', e.target.value, 'all')} aria-label="Filter by category">
             <option value="all">All categories</option>
             <option value="__none">No category</option>
@@ -483,7 +484,7 @@ export default function VideosAdmin() {
           </button>
         </Alert>
       )}
-      {allMatching && (
+      {allMatching && hasVideos && (
         <Alert kind="info">
           All {data?.total.toLocaleString()} matching videos are selected.{' '}
           <button type="button" className="font-semibold underline" onClick={() => setAllMatching(false)}>Undo</button>
