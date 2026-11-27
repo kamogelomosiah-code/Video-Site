@@ -13,6 +13,8 @@ const BASE = (process.env.BASE || 'http://localhost:3000').replace(/\/$/, '');
 const sealed = loadSealedSecrets().values;
 const adminUser = process.env.ADMIN_USERNAME || sealed.ADMIN_USERNAME || 'admin';
 const adminPass = process.env.ADMIN_PASSWORD || sealed.ADMIN_PASSWORD || '';
+const rawPin = process.env.ADMIN_PIN ?? sealed.ADMIN_PIN ?? '';
+const adminPin = /^\d{6}$/.test(rawPin.trim()) ? rawPin.trim() : '';
 const TAG = 'APITEST' + Date.now().toString(36).toUpperCase();
 
 let passed = 0;
@@ -44,8 +46,12 @@ async function main() {
   // --- Admin sign-in ---
   const bad = await api('POST', '/api/auth/login', { email: adminUser, password: 'definitely-wrong' });
   check('wrong admin password is rejected', bad.status === 401);
-  const login = await api('POST', '/api/auth/login', { email: adminUser, password: adminPass });
-  check('admin signs in with username and password', login.status === 200 && login.data.user?.role === 'ADMIN', `status ${login.status}`);
+  if (adminPin) {
+    const noPin = await api('POST', '/api/auth/login', { email: adminUser, password: adminPass });
+    check('admin sign-in asks for the PIN', noPin.status === 401 && noPin.data.requiresPin === true, `status ${noPin.status}`);
+  }
+  const login = await api('POST', '/api/auth/login', { email: adminUser, password: adminPass, ...(adminPin ? { pin: adminPin } : {}) });
+  check(adminPin ? 'admin signs in with username, password and PIN' : 'admin signs in with username and password', login.status === 200 && login.data.user?.role === 'ADMIN', `status ${login.status}`);
   const admin = login.data.token as string;
 
   // --- Bulk import (2,000 rows in batches of 500, like the import page) ---
